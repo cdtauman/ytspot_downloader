@@ -1,34 +1,43 @@
 """
-ui/workers/download_worker.py  –  Sequential download queue worker
-==================================================================
-Iterates a list of (card_key, DownloadRequest) jobs, runs each through the
-shared DownloadEngine, and emits granular Qt signals so the UI can update
-individual track cards, the overall progress bar, and the status bar in
-real-time without any polling.
+ui/workers/download_worker.py  –  Parallel download queue worker
+================================================================
+Downloads a list of (card_key, DownloadRequest) jobs using a
+ThreadPoolExecutor so up to 3 tracks are downloaded simultaneously,
+dramatically improving batch throughput.
 
-Also persists a DownloadRecord to HistoryDB after each successful download.
+Each job runs on its own pool thread and gets its own threading.Event for
+per-track cancellation – cancelling one job does not affect sibling jobs.
+All DownloadEngine calls are safe to make from pool threads because:
+  * yt-dlp is re-entrant (each call creates its own YoutubeDL context).
+  * HistoryDB uses a threading.Lock() for all SQL access.
+  * Qt Signals emitted from background threads are automatically queued to
+    the main thread via Qt's cross-thread signal mechanism.
 
 Signal summary
 --------------
-track_progress(int, float)   Per-track progress fraction 0.0 → 1.0.
-track_status(int, str)       Per-track status: "downloading"|"done"|"error"|"cancelled".
-track_finished(int, str)     Emitted on success with (card_key, output_path).
-overall_progress(float)      Aggregate fraction across all jobs in this batch.
-metrics(str, str)            (speed_str, eta_str) for the status bar.
-status_msg(str)              Human-readable status line for the status bar.
-job_error(int, ErrorInfo)    Per-track error with structured info.
-all_finished()               Emitted once when the entire batch is done.
+track_progress(str, float)    Per-track progress fraction 0.0 → 1.0.
+track_status(str, str)        Per-track status: "downloading"|"done"|"error"|"cancelled".
+track_finished(str, str)      (card_key, absolute output_path) on success.
+overall_progress(float)       Aggregate fraction across all jobs 0.0 → 1.0.
+metrics(str, str)             (speed_str, eta_str) for the status bar.
+status_msg(str)               Human-readable status line for the status bar.
+job_error(str, object)        (card_key, ErrorInfo) on per-track failure.
+all_finished()                Entire batch complete.
 
 Threading model
 ---------------
-One DownloadWorker is created per "Download Selected" click.  The same
-DownloadEngine instance is shared across workers (one engine per app).
-Cancellation is via engine.cancel() which sets a threading.Event that both
-the engine's inner loop and this worker's outer loop check.
+One DownloadWorker is created per "Download Selected" click.  It owns a
+temporary ThreadPoolExecutor (max 3 workers, or fewer if fewer jobs).
+The DownloadEngine instance is shared from AppWindow and handles its own
+internal locking.  Cancellation is bi-directional:
+  * cancel() on DownloadWorker → sets all per-request events + engine event
+  * engine.cancel_all()        → same effect, accessible from AppWindow
 """
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
@@ -46,18 +55,15 @@ from error_handler import classify_error, ErrorInfo
 
 class DownloadWorker(QThread):
     """
-    Sequentially downloads a list of tracks and emits Qt signals for each
-    progress event, status change, and completion.
+    Parallel download queue executor.
 
     Parameters
     ----------
-    jobs   : List of (card_key, DownloadRequest) tuples.
-             card_key is a unique string identifier for each TrackCard – used to
-             route signals back to the correct card widget without holding a reference.
-    engine : Shared DownloadEngine instance owned by AppWindow.
-    db     : Optional HistoryDB instance.  When provided, a DownloadRecord
-             is inserted after each successful download.
-    parent : Optional Qt parent object.
+    jobs    : List of (card_key, DownloadRequest) tuples.
+    engine  : Shared DownloadEngine instance owned by AppWindow.
+    db      : Optional HistoryDB for post-download record insertion.
+    max_workers : How many tracks to download in parallel (default 3).
+    parent  : Optional Qt parent.
     """
 
     # ── Signals ───────────────────────────────────────────────────────────────
@@ -65,140 +71,175 @@ class DownloadWorker(QThread):
     track_progress   = Signal(str, float)   # (card_key, fraction 0.0–1.0)
     track_status     = Signal(str, str)      # (card_key, status_str)
     track_finished   = Signal(str, str)      # (card_key, absolute output_path)
-    overall_progress = Signal(float)         # batch-level fraction 0.0–1.0
+    overall_progress = Signal(float)         # batch-level 0.0–1.0
     metrics          = Signal(str, str)      # (speed_str, eta_str)
-    status_msg       = Signal(str)           # status bar text
+    status_msg       = Signal(str)
     job_error        = Signal(str, object)   # (card_key, ErrorInfo)
-    all_finished     = Signal()              # entire batch complete
+    all_finished     = Signal()
 
-    # ── Lifecycle ──────────────────────────────────────────────────────────────
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def __init__(
         self,
-        jobs:   list[tuple[str, DownloadRequest]],
-        engine: DownloadEngine,
-        db:     Optional[HistoryDB] = None,
+        jobs:        list[tuple[str, DownloadRequest]],
+        engine:      DownloadEngine,
+        db:          Optional[HistoryDB] = None,
+        max_workers: int                 = 3,
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self._jobs   = jobs
-        self._engine = engine
-        self._db     = db
-        self._total  = len(jobs)
+        self._jobs        = jobs
+        self._engine      = engine
+        self._db          = db
+        self._max_workers = max(1, min(max_workers, 5))
+        self._total       = len(jobs)
+
+        # Per-job cancel events so individual tracks can be cancelled
+        self._cancel_events: dict[str, threading.Event] = {}
+
+        # Progress accounting (thread-safe via lock)
+        self._completed    = 0
+        self._progress_lock = threading.Lock()
+        self._job_progress: dict[str, float] = {}   # card_key → latest fraction
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    def cancel(self) -> None:
+        """
+        Cancel all in-flight downloads.
+        Sets every per-request event and the engine's global cancel event.
+        """
+        for ev in self._cancel_events.values():
+            ev.set()
+        self._engine.cancel_all()
+
+    def cancel_track(self, card_key: str) -> None:
+        """Cancel a single in-flight download by card key."""
+        ev = self._cancel_events.get(card_key)
+        if ev:
+            ev.set()
 
     # ── QThread.run ───────────────────────────────────────────────────────────
 
     def run(self) -> None:
-        """Entry point executed on the worker thread."""
+        """Entry point executed on the QThread thread."""
+        # Ensure the global cancel event is clear at the start of a new batch
+        self._engine._cancel_event.clear()  # noqa: SLF001
 
-        for job_num, (card_key, req) in enumerate(self._jobs, start=1):
+        n_workers = min(self._max_workers, self._total)
+        futures   = {}
 
-            # Respect a cancel that was set before this job started
-            if self._engine._cancel_event.is_set():  # noqa: SLF001
-                self.track_status.emit(card_key, "cancelled")
-                continue
+        with ThreadPoolExecutor(
+            max_workers=n_workers,
+            thread_name_prefix="dl-pool",
+        ) as pool:
+            for card_key, req in self._jobs:
+                # Give each job its own cancel event
+                ev = threading.Event()
+                req.cancel_event = ev
+                self._cancel_events[card_key] = ev
+                self._job_progress[card_key]  = 0.0
 
-            # ── Status update ─────────────────────────────────────────────────
-            short = (
-                req.url.split("v=")[-1] if "v=" in req.url
-                else req.url[-20:]
-            )
-            self.status_msg.emit(
-                f"⬇  Downloading  {job_num} / {self._total}  ·  {short}"
-            )
-            self.track_status.emit(card_key, "downloading")
+                future = pool.submit(self._download_one, card_key, req)
+                futures[future] = card_key
 
-            # ── Closure factories (capture loop vars) ─────────────────────────
+            # Wait for every job; surface exceptions that escaped _download_one
+            for future in as_completed(futures):
+                card_key = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:  # noqa: BLE001
+                    err = classify_error(exc)
+                    self.track_status.emit(card_key, "error")
+                    self.job_error.emit(card_key, err)
 
-            def make_on_progress(ck: str = card_key, jn: int = job_num):
-                update_counter = [0]  # Throttle to every Nth update
-                
-                def _cb(p: DownloadProgress) -> None:
-                    # Throttle emissions: only emit every 10th callback to reduce
-                    # signal spam that can saturate the Qt main thread
-                    update_counter[0] += 1
-                    if update_counter[0] % 10 != 0:
-                        return
-
-                    self.track_progress.emit(ck, p.fraction)
-
-                    overall = (jn - 1 + p.fraction) / self._total
-                    self.overall_progress.emit(min(overall, 1.0))
-
-                    speed_str = ""
-                    eta_str   = ""
-                    if p.speed_bps:
-                        kb = p.speed_bps / 1024
-                        speed_str = (
-                            f"{kb:.0f} KB/s"
-                            if kb < 1024
-                            else f"{kb / 1024:.1f} MB/s"
-                        )
-                    if p.eta_seconds:
-                        s = int(p.eta_seconds)
-                        eta_str = (
-                            f"ETA {s // 60}m{s % 60:02d}s"
-                            if s >= 60
-                            else f"ETA {s}s"
-                        )
-                    self.metrics.emit(speed_str, eta_str)
-
-                return _cb
-
-            def make_on_finished(ck: str = card_key, r: DownloadRequest = req):
-                def _cb(p: DownloadProgress) -> None:
-                    self.track_status.emit(ck, "done")
-                    self.track_progress.emit(ck, 1.0)
-                    self.track_finished.emit(ck, p.output_path or "")
-                    # Persist to history (best-effort; never raises)
-                    if self._db is not None:
-                        self._persist_record(r, p)
-
-                return _cb
-
-            def make_on_error(ck: str = card_key):
-                def _cb(p: DownloadProgress) -> None:
-                    err: ErrorInfo = classify_error(
-                        Exception(p.error_message or "Unknown download error")
-                    )
-                    self.track_status.emit(ck, "error")
-                    self.job_error.emit(ck, err)
-
-                return _cb
-
-            # Inject callbacks into the request (safe – request is not shared)
-            req.on_progress = make_on_progress()
-            req.on_finished = make_on_finished()
-            req.on_error    = make_on_error()
-
-            # Blocking download – returns when the track is done (or errors)
-            self._engine.download(req)
-
-        # ── Batch complete ────────────────────────────────────────────────────
+        # ── Batch finalisation ─────────────────────────────────────────────────
         cancelled = self._engine._cancel_event.is_set()  # noqa: SLF001
+        self.overall_progress.emit(1.0)
+        self.metrics.emit("", "")
         self.status_msg.emit(
-            "🚫  Cancelled." if cancelled
+            "🚫  Cancelled."
+            if cancelled
             else (
                 f"✅  Done — {self._total} track"
                 f"{'s' if self._total != 1 else ''} downloaded."
             )
         )
-        self.overall_progress.emit(1.0)
-        self.metrics.emit("", "")
         self.all_finished.emit()
+
+    # ── Per-job runner (called on pool thread) ────────────────────────────────
+
+    def _download_one(self, card_key: str, req: DownloadRequest) -> None:
+        """
+        Download a single track and emit signals for every progress event.
+        Runs on a pool thread; all signal emissions are cross-thread safe.
+        """
+        cancel_ev = self._cancel_events[card_key]
+
+        # Skip if already cancelled before we even start
+        if cancel_ev.is_set() or self._engine._cancel_event.is_set():  # noqa: SLF001
+            self.track_status.emit(card_key, "cancelled")
+            return
+
+        self.track_status.emit(card_key, "downloading")
+
+        update_counter = [0]
+
+        def on_progress(p: DownloadProgress) -> None:
+            update_counter[0] += 1
+            # Throttle: only emit every 10th update to avoid Qt signal saturation
+            if update_counter[0] % 10 != 0:
+                return
+
+            with self._progress_lock:
+                self._job_progress[card_key] = p.fraction
+                overall = sum(self._job_progress.values()) / self._total
+            self.track_progress.emit(card_key, p.fraction)
+            self.overall_progress.emit(min(overall, 1.0))
+
+            speed_str = ""
+            eta_str   = ""
+            if p.speed_bps:
+                kb = p.speed_bps / 1024
+                speed_str = (
+                    f"{kb:.0f} KB/s" if kb < 1024 else f"{kb / 1024:.1f} MB/s"
+                )
+            if p.eta_seconds:
+                s = int(p.eta_seconds)
+                eta_str = (
+                    f"ETA {s // 60}m{s % 60:02d}s" if s >= 60 else f"ETA {s}s"
+                )
+            self.metrics.emit(speed_str, eta_str)
+
+        def on_finished(p: DownloadProgress) -> None:
+            with self._progress_lock:
+                self._job_progress[card_key] = 1.0
+                self._completed += 1
+                overall = sum(self._job_progress.values()) / self._total
+            self.track_status.emit(card_key, "done")
+            self.track_progress.emit(card_key, 1.0)
+            self.track_finished.emit(card_key, p.output_path or "")
+            self.overall_progress.emit(min(overall, 1.0))
+            if self._db is not None:
+                self._persist_record(req, p)
+
+        def on_error(p: DownloadProgress) -> None:
+            err = classify_error(
+                Exception(p.error_message or "Unknown download error")
+            )
+            self.track_status.emit(card_key, "error")
+            self.job_error.emit(card_key, err)
+
+        req.on_progress = on_progress
+        req.on_finished = on_finished
+        req.on_error    = on_error
+
+        self._engine.download(req)
 
     # ── History persistence ────────────────────────────────────────────────────
 
-    def _persist_record(
-        self,
-        req:  DownloadRequest,
-        prog: DownloadProgress,
-    ) -> None:
-        """
-        Build a DownloadRecord from the completed request + progress snapshot
-        and insert it into HistoryDB.  Catches all exceptions internally so a
-        DB write failure can never crash the download thread.
-        """
+    def _persist_record(self, req: DownloadRequest, prog: DownloadProgress) -> None:
+        """Insert a DownloadRecord on success.  Never raises."""
         try:
             output_path  = prog.output_path or ""
             file_size_mb: Optional[float] = None
@@ -208,7 +249,6 @@ class DownloadWorker(QThread):
                 if p.exists():
                     file_size_mb = round(p.stat().st_size / (1024 * 1024), 2)
 
-            # Derive platform label from URL
             url_lower = req.url.lower()
             if "spotify" in url_lower:
                 platform = "spotify"
@@ -224,14 +264,11 @@ class DownloadWorker(QThread):
                 artist=req.forced_artist or "",
                 url=req.url,
                 output_path=output_path,
-                media_type=(
-                    "audio" if req.media_type == MediaType.AUDIO else "video"
-                ),
+                media_type="audio" if req.media_type == MediaType.AUDIO else "video",
                 file_size_mb=file_size_mb,
                 platform=platform,
-                thumbnail_url="",   # not available at this stage; set by UI if needed
+                thumbnail_url="",
             )
             self._db.insert(record)
-
         except Exception:  # noqa: BLE001
             pass

@@ -40,29 +40,34 @@ from PySide6.QtGui import (
     QColor, QDrag, QFont, QImage, QPixmap,
 )
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QFrame, QHBoxLayout,
-    QLabel, QProgressBar, QSizePolicy, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QFrame, QGraphicsDropShadowEffect,
+    QHBoxLayout, QLabel, QProgressBar, QSizePolicy, QVBoxLayout, QWidget,
 )
 from qfluentwidgets import BodyLabel, CaptionLabel, ToolButton
 
-from ui.theme_manager import ACCENT_COLOR
+from ui.theme_manager import (
+    ACCENT_COLOR,
+    BG_DARK, SURFACE_DARK, SURFACE2_DARK, BORDER_DARK,
+    TEXT_DARK, TEXT2_DARK, TEXT3_DARK,
+    SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, PROCESSING_COLOR,
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Design tokens  (local, so components stay self-contained)
+# Design tokens  (deep, premium palette – v2)
 # ──────────────────────────────────────────────────────────────────────────────
 
-_BG_NORMAL   = "#18181b"
-_BG_HOVER    = "#2a2a32"
-_BG_DRAG     = "#1f1f28"
-_BORDER      = "#2e2e35"
-_TEXT        = "#f0f0f0"
-_TEXT_2      = "#9090a0"
-_TEXT_3      = "#55555f"
-_SUCCESS     = "#34d399"
-_ERROR       = "#f87171"
-_WARNING     = "#fbbf24"
-_RADIUS      = 8
+_BG_NORMAL   = SURFACE_DARK       # "#16161f"
+_BG_HOVER    = SURFACE2_DARK      # "#1e1e2a"
+_BG_DRAG     = "#1a1a26"
+_BORDER      = BORDER_DARK        # "#252533"
+_TEXT        = TEXT_DARK          # "#eeeef5"
+_TEXT_2      = TEXT2_DARK         # "#8888a8"
+_TEXT_3      = TEXT3_DARK         # "#4a4a66"
+_SUCCESS     = SUCCESS_COLOR      # "#10b981"
+_ERROR       = ERROR_COLOR        # "#ef4444"
+_WARNING     = WARNING_COLOR      # "#f59e0b"
+_RADIUS      = 10
 _THUMB_W     = 96
 _THUMB_H     = 54
 
@@ -70,7 +75,7 @@ _THUMB_H     = 54
 _STATUS_COLORS: dict[str, str] = {
     "queued":      _TEXT_3,
     "downloading": ACCENT_COLOR,
-    "processing":  ACCENT_COLOR,
+    "processing":  PROCESSING_COLOR,  # purple for FFmpeg stage
     "done":        _SUCCESS,
     "error":       _ERROR,
     "cancelled":   _WARNING,
@@ -78,10 +83,10 @@ _STATUS_COLORS: dict[str, str] = {
 
 # Platform badge colours  (bg, fg)
 _PLATFORM_COLORS: dict[str, tuple[str, str]] = {
-    "youtube":  ("#ff4444", "#ffffff"),
-    "ytmusic":  ("#ff4444", "#ffffff"),
-    "spotify":  ("#1db954", "#ffffff"),
-    "default":  ("#2e2e35", _TEXT_2),
+    "youtube":  ("#cc2200", "#ffffff"),   # deeper YouTube red
+    "ytmusic":  ("#cc2200", "#ffffff"),
+    "spotify":  ("#1aa34a", "#ffffff"),   # richer Spotify green
+    "default":  (_BORDER, _TEXT_2),
 }
 
 
@@ -148,6 +153,13 @@ class TrackCard(QFrame):
         self._build(title, artist, duration, platform)
         self._apply_base_style()
         self._install_hover()
+
+        # Subtle depth shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(14)
+        shadow.setOffset(0, 3)
+        shadow.setColor(QColor(0, 0, 0, 100))
+        self.setGraphicsEffect(shadow)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 

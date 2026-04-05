@@ -46,6 +46,8 @@ except ImportError:
 
 from utils.impersonate import ImpersonateTarget as _ImpersonateTarget, CURL_CFFI_AVAILABLE as _CURL_CFFI_AVAILABLE
 from utils.time_format import seconds_to_str as _seconds_to_str
+from utils.logger import SilentLogger as _SilentLogger
+from utils.yt_dlp_opts import build_parse_ydl_opts as _build_parse_ydl_opts
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -328,38 +330,9 @@ class PlaylistParser:
 
         self._notify(on_progress, f"Analysing URL… ({platform.name})")
 
-        # ── Spotify Fallback ──────────────────────────────────────────────────
+        # ── Spotify resolution ────────────────────────────────────────────────
         if platform == SourcePlatform.SPOTIFY:
-            try:
-                from utils.spotify_resolver import SpotifyResolver
-                items = SpotifyResolver.resolve(url)
-                
-                result.total_count = len(items)
-                if len(items) > 1:
-                    result.playlist_title = f"Spotify Playlist/Album ({len(items)} tracks)"
-                elif items:
-                    result.playlist_title = items[0]["title"]
-
-                for idx, track_data in enumerate(items, start=1):
-                    track = TrackMeta(
-                        index=idx,
-                        url=track_data["url"],
-                        title=track_data["title"],
-                        artist=track_data["artist"],
-                        duration_sec=track_data.get("duration_sec"),
-                        platform=SourcePlatform.SPOTIFY,
-                        selected=True
-                    )
-                    result.tracks.append(track)
-                    if on_item:
-                        on_item(track, idx, result.total_count)
-                
-                self._notify(on_progress, f"Resolved {len(items)} tracks from Spotify.")
-                return result
-
-            except Exception as exc:
-                result.error = f"Failed to resolve Spotify link: {exc}"
-                return result
+            return self._parse_spotify(url, result, kind, on_item, on_progress, on_error)
 
         logger = _SilentLogger()
         ydl_opts = self._build_opts(cookies_file, logger)
@@ -435,51 +408,80 @@ class PlaylistParser:
 
     @staticmethod
     def _build_opts(cookies_file: Optional[str], logger: Optional[_SilentLogger] = None) -> dict:
-        opts: dict = {
-            # ── Runtimes ──────────────────────────────────────────────────────
-            # Ensure yt-dlp can find a JS runtime (NodeJS/QuickJS etc.) for bot protection
-            "js_runtimes": {
-                "node": {},
-                "quickjs": {},
-                "deno": {},
-                "bun": {}
-            },
+        """Build yt-dlp options using the shared builder (DRY)."""
+        return _build_parse_ydl_opts(
+            cookies_file=cookies_file,
+            logger=logger or _SilentLogger(),
+        )
 
-            # ── Never download anything ───────────────────────────────────────
-            "skip_download":        True,
-            "extract_flat":         "in_playlist",  # lightweight: only fetch
-                                                    # full info for single items
-            # ── Playlist ─────────────────────────────────────────────────────
-            "ignoreerrors":         True,   # skip private/geo-blocked entries
-            "playlistend":          None,   # no artificial cap
+    # ── Spotify-specific parsing ───────────────────────────────────────────────
 
-            # ── Network ───────────────────────────────────────────────────────
-            "retries":              5,
-            "fragment_retries":     5,
-            "nocheckcertificate":   False,
+    def _parse_spotify(
+        self,
+        url:         str,
+        result:      ParseResult,
+        kind:        UrlKind,
+        on_item:     Optional[Callable],
+        on_progress: Optional[Callable],
+        on_error:    Optional[Callable],
+    ) -> ParseResult:
+        """
+        Resolve a Spotify URL via SpotifyResolver and populate ParseResult.
+        Supports progressive on_item callbacks so the UI updates as tracks arrive.
+        """
+        from utils.spotify_resolver import SpotifyResolver
 
-            # ── Output suppression ────────────────────────────────────────────
-            "quiet":                True,
-            "no_warnings":          False,
-            "logger":               logger if logger is not None else _SilentLogger(),
+        idx_counter = [0]   # mutable cell for the closure
 
-            # ── Cookies ───────────────────────────────────────────────────────
-            **({"cookiefile": cookies_file} if cookies_file else {}),
-            
-            # ── Matching Cloudflare Bypass Headers ────────────────────────────
-            "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-            },
+        def _on_spotify_item(track_data: dict) -> None:
+            if self._cancel.is_set():
+                return
+            idx_counter[0] += 1
+            idx = idx_counter[0]
+            track = TrackMeta(
+                index=idx,
+                url=track_data["url"],
+                title=track_data["title"],
+                artist=track_data["artist"],
+                duration_sec=track_data.get("duration_sec"),
+                thumbnail_url=track_data.get("thumbnail_url", ""),
+                platform=SourcePlatform.SPOTIFY,
+                selected=True,
+            )
+            result.tracks.append(track)
+            # total_count may not be known yet for artists; pass None
+            if on_item:
+                try:
+                    on_item(track, idx, None)
+                except Exception:  # noqa: BLE001
+                    pass
 
-            # ── Age gate bypass ───────────────────────────────────────────────
-            "age_limit": 18,
+        try:
+            self._notify(on_progress, "Resolving Spotify link…")
+            items = SpotifyResolver.resolve(url, on_item=_on_spotify_item)
 
-            # ── TLS browser impersonation (curl_cffi) ─────────────────────────
-            **({"impersonate": _ImpersonateTarget("chrome")} if _CURL_CFFI_AVAILABLE else {}),
-        }
-        return opts
+            # Update summary fields after full resolution
+            result.total_count = len(result.tracks)
+            if kind == UrlKind.ARTIST:
+                result.playlist_title = f"Artist Discography ({result.total_count} tracks)"
+            elif result.total_count == 1 and result.tracks:
+                result.playlist_title = result.tracks[0].title
+            else:
+                result.playlist_title = f"Spotify ({result.total_count} tracks)"
+
+            self._notify(
+                on_progress,
+                f"Resolved {result.total_count} tracks from Spotify."
+            )
+        except Exception as exc:
+            result.error = str(exc)
+            if on_error:
+                try:
+                    on_error(str(exc))
+                except Exception:  # noqa: BLE001
+                    pass
+
+        return result
 
     # ── Processing helpers ─────────────────────────────────────────────────────
 
@@ -578,27 +580,6 @@ class PlaylistParser:
                 callback(message)
             except Exception:  # noqa: BLE001
                 pass
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Silent yt-dlp logger  (suppresses console noise while still storing warnings)
-# ──────────────────────────────────────────────────────────────────────────────
-
-class _SilentLogger:
-    """Plugs into yt-dlp's `logger` option to suppress stdout/stderr noise."""
-
-    def __init__(self) -> None:
-        self.warnings: list[str] = []
-        self.errors:   list[str] = []
-
-    def debug(self, msg: str)   -> None: pass
-    def info(self, msg: str)    -> None: pass
-
-    def warning(self, msg: str) -> None:
-        self.warnings.append(msg)
-
-    def error(self, msg: str)   -> None:
-        self.errors.append(msg)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

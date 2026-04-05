@@ -51,7 +51,7 @@ from downloader import (
     AudioQuality, DownloadEngine, DownloadRequest, MediaType, VideoQuality,
 )
 from error_handler import classify_error, ErrorInfo, ErrorSeverity, probe_connectivity
-from playlist_parser import ParseResult, SourcePlatform, classify_url
+from playlist_parser import ParseResult, SourcePlatform, UrlKind, classify_url
 
 # ── Workers ────────────────────────────────────────────────────────────────────
 from ui.workers.fetch_worker     import FetchWorker
@@ -241,6 +241,10 @@ class AppWindow(FluentWindow):
         self._key_to_card:   dict[str, TrackCard] = {}   # str(id(card)) → card
         self._card_progress: dict[str, float] = {}       # throttle progress updates
 
+        # ── Last fetch metadata (for playlist sub-folder routing) ─────────────
+        self._last_playlist_title: str             = ""
+        self._last_url_kind:       Optional[UrlKind] = None
+
         # ── Build panels ──────────────────────────────────────────────────────
         self._build_panels()
 
@@ -394,6 +398,7 @@ class AppWindow(FluentWindow):
         self._search_panel.add_to_queue_requested.connect(
             self._on_add_search_result_to_queue
         )
+        self._search_panel.drill_down_requested.connect(self._on_search_drill_down)
 
         # ── History panel ─────────────────────────────────────────────────────
         self._history_panel.redownload_requested.connect(self._on_redownload)
@@ -562,6 +567,10 @@ class AppWindow(FluentWindow):
         self._status_bar.stop_indeterminate()
         self._status_bar.set_cancel_visible(False)
 
+        # Store playlist metadata for dynamic sub-folder creation at download time
+        self._last_playlist_title = result.playlist_title or ""
+        self._last_url_kind       = result.kind
+
         if result.cancelled:
             self._status_bar.set_status(t("fetch_cancelled"))
         elif result.error:
@@ -689,6 +698,14 @@ class AppWindow(FluentWindow):
             ).exec()
             return
 
+        # Determine playlist sub-folder (PLAYLIST / ALBUM / ARTIST → sub-folder)
+        _multi_kinds = {UrlKind.PLAYLIST, UrlKind.ALBUM, UrlKind.ARTIST}
+        playlist_name: Optional[str] = (
+            self._last_playlist_title or None
+            if self._last_url_kind in _multi_kinds
+            else None
+        )
+
         # Build job list
         jobs: list[tuple[int, DownloadRequest]] = []
         self._key_to_card.clear()
@@ -707,6 +724,7 @@ class AppWindow(FluentWindow):
                 forced_artist=card.artist,
                 forced_index=card.queue_index,
                 cookies_file=self._cfg.cookies_file or None,
+                playlist_name=playlist_name,
             )
             key = str(id(card))
             self._key_to_card[key] = card
@@ -725,7 +743,11 @@ class AppWindow(FluentWindow):
         )
 
         self._dl_worker = DownloadWorker(
-            jobs=jobs, engine=self._engine, db=self._db, parent=self
+            jobs=jobs,
+            engine=self._engine,
+            db=self._db,
+            max_workers=self._cfg.max_parallel_downloads,
+            parent=self,
         )
         self._dl_worker.track_progress.connect(self._on_track_progress)
         self._dl_worker.track_status.connect(self._on_track_status)
@@ -945,6 +967,8 @@ class AppWindow(FluentWindow):
             platform=platform,
             max_results=self._cfg.search_max_results,
             cookies_file=self._cfg.cookies_file or None,
+            spotify_client_id=self._cfg.spotify_client_id,
+            spotify_client_secret=self._cfg.spotify_client_secret,
             parent=self,
         )
         self._search_worker.result_ready.connect(self._on_search_result)
@@ -1010,6 +1034,19 @@ class AppWindow(FluentWindow):
         # Switch to Queue tab
         self.switchTo(self._queue_wrapper)
         self._status_bar.set_status(t("added_to_queue", title=result.title[:60]))
+
+    def _on_search_drill_down(self, result: SearchResult) -> None:
+        """
+        Called when the user clicks "Browse" on an Album / Playlist / Artist /
+        Channel card in the search panel.  Switches to the Queue tab and starts
+        a FetchWorker for that result's URL so all the tracks load.
+        """
+        url = result.url
+        if not url:
+            return
+        self._url_bar.set_url(url)
+        self.switchTo(self._queue_wrapper)
+        self._on_fetch(url)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Clipboard monitor

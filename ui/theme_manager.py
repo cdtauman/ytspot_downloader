@@ -3,40 +3,42 @@ ui/theme_manager.py  –  Application-wide theme engine
 ======================================================
 Responsibilities
 ----------------
-* Apply Dark / Light / OLED themes by coordinating between QFluentWidgets'
-  built-in theme system and a supplementary QSS layer for OLED-black
-  background overrides.
-* Expose a single apply(theme_name) method that is safe to call at any time
-  (startup, settings save, or theme-cycle button click) without restarting
-  the app.
+* Apply Dark / Light / OLED themes by coordinating QFluentWidgets' built-in
+  theme system with a supplementary QSS layer for rich, vibrant styling.
+* Expose a single apply(theme_name) method safe to call at any time.
 * Persist the chosen theme back to AppConfig on every change.
-* Provide the amber accent colour (#F5A623) that matches the existing brand
-  identity established in the original CustomTkinter UI.
-* Expose a cycle() method that rotates dark → light → oled → dark so a
-  single toolbar button can act as a three-way toggle.
+* Provide the amber accent colour (#F5A623) that matches the brand identity.
+* Expose cycle() to rotate dark → light → oled → dark.
 
-Design decisions
-----------------
-* Single source of truth: ThemeManager owns the theme state; AppConfig is
-  only written here, never read for theme decisions after __init__.
-* QFluentWidgets setTheme() + setThemeColor() cover ~95% of all surfaces.
-  The remaining 5% (pure Qt native widgets used inside Fluent containers)
-  are handled by a targeted QSS override injected via
-  QApplication.setStyleSheet(), which is additive and does not clobber
-  Fluent's own QSS.
-* OLED mode reuses Theme.DARK from Fluent and then overrides every
-  background token to #000000 via QSS.  This keeps Fluent's animation
-  and border logic intact while achieving true-black for OLED screens.
-* The accent colour is set once and never overridden by theme switching,
-  so the amber brand colour persists across dark/light/oled transitions.
+Design Tokens (v2 – deep, premium palette)
+------------------------------------------
+Dark mode moves from plain flat grays to rich, cool-purple-tinted surfaces
+that evoke a professional music player (Spotify / Apple Music aesthetic):
 
-Usage
------
->>> mgr = ThemeManager(config)
->>> mgr.apply("dark")     # on startup
->>> mgr.apply("light")    # after settings save
->>> new_theme = mgr.cycle()  # amber button in toolbar
->>> print(mgr.current)    # "light" / "dark" / "oled"
+    _BG       = #0d0d12   – deep, cool near-black (was #111114)
+    _SURFACE  = #16161f   – rich card surface with purple tint (was #1c1c21)
+    _SURFACE2 = #1e1e2a   – elevated / hover surface
+    _BORDER   = #252533   – subtle borders (was #313139)
+    _TEXT     = #eeeef5   – cooler white
+    _TEXT_2   = #8888a8   – purple-tinted secondary text
+    _TEXT_3   = #4a4a66   – deep muted / disabled text
+    _ACCENT   = #F5A623   – amber brand colour (UNCHANGED)
+    _SUCCESS  = #10b981   – vibrant emerald
+    _ERROR    = #ef4444   – vivid red
+    _WARNING  = #f59e0b   – warm amber-yellow
+
+Cards gain:
+  * Proper drop shadows via QGraphicsDropShadowEffect in component code
+  * Amber-glow borders on hover (thick 2px, semi-opaque)
+  * Rich dark scrollbars matching the surface colour
+
+Light mode gains:
+  * Cleaner, crisper white surfaces
+  * Amber accent preserved
+
+OLED mode:
+  * True-black (#000000) for every major surface
+  * Micro-contrast cards (#0a0a0a) for legibility
 """
 
 from __future__ import annotations
@@ -49,76 +51,373 @@ from config import AppConfig
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Brand constants  (single definition used everywhere in the UI layer)
+# Brand constants
 # ──────────────────────────────────────────────────────────────────────────────
 
-ACCENT_COLOR: str = "#F5A623"          # Amber – matches the original Tk palette
-ACCENT_COLOR_DIM: str = "#C47D0E"      # Dimmed amber for hover states
+ACCENT_COLOR:     str = "#F5A623"   # Amber – unchanged brand colour
+ACCENT_COLOR_DIM: str = "#C47D0E"   # Dimmed amber for hover states
+
+# Vibrant semantic colours used across all dark-variant components
+SUCCESS_COLOR:    str = "#10b981"   # Emerald green (downloads done)
+ERROR_COLOR:      str = "#ef4444"   # Vivid red (failed downloads)
+WARNING_COLOR:    str = "#f59e0b"   # Amber-yellow (cancelled)
+PROCESSING_COLOR: str = "#8b5cf6"   # Purple (FFmpeg processing)
+
+# Full design-token exports so component files can import individual tokens
+# without importing from theme_manager (no circular dependency risk)
+BG_DARK:       str = "#0d0d12"
+SURFACE_DARK:  str = "#16161f"
+SURFACE2_DARK: str = "#1e1e2a"
+BORDER_DARK:   str = "#252533"
+TEXT_DARK:     str = "#eeeef5"
+TEXT2_DARK:    str = "#8888a8"
+TEXT3_DARK:    str = "#4a4a66"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-# QSS overlay fragments
+# QSS overlays
 # ──────────────────────────────────────────────────────────────────────────────
 
-# ── Updated design tokens (modern dark palette) ────────────────────────────
-# _BG      = #111114   — slightly warm near-black
-# _SURFACE = #1c1c21   — card / panel surfaces
-# _BORDER  = #313139   — borders and dividers
-# _TEXT    = #f2f2f5   — primary text
-# _TEXT_2  = #94949e   — secondary / caption text
-# _TEXT_3  = #5a5a66   — muted / disabled text
-
-# Applied on top of Fluent's own QSS in DARK mode.
-# Keeps Fluent's border, radius, and animation rules; only targets backgrounds
-# that Fluent leaves as system-default (typically raw QWidget / QFrame).
 _DARK_QSS_OVERLAY: str = """
-/* ── YTSpot Dark overlay ─────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   YTSpot Dark Theme Overlay – v2  (deep, purple-tinted premium palette)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Global reset ──────────────────────────────────────────────────────── */
 QWidget {
-    background-color: #111114;
-    color: #f2f2f5;
+    background-color: #0d0d12;
+    color: #eeeef5;
+    selection-background-color: #F5A623;
+    selection-color: #000000;
 }
-QScrollArea, QScrollArea > QWidget > QWidget {
-    background-color: #111114;
+
+/* ── Scroll areas ──────────────────────────────────────────────────────── */
+QScrollArea,
+QScrollArea > QWidget > QWidget,
+QAbstractScrollArea {
+    background-color: #0d0d12;
+    border: none;
 }
+
+/* ── Thin, modern scrollbars ───────────────────────────────────────────── */
+QScrollBar:vertical {
+    background: #0d0d12;
+    width: 6px;
+    border-radius: 3px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #252533;
+    border-radius: 3px;
+    min-height: 28px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #F5A623;
+}
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical { background: transparent; }
+
+QScrollBar:horizontal {
+    background: #0d0d12;
+    height: 6px;
+    border-radius: 3px;
+    margin: 0;
+}
+QScrollBar::handle:horizontal {
+    background: #252533;
+    border-radius: 3px;
+    min-width: 28px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #F5A623;
+}
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal { width: 0; }
+
+/* ── Tooltips ───────────────────────────────────────────────────────────── */
 QToolTip {
-    background-color: #232329;
-    color: #f2f2f5;
-    border: 1px solid #313139;
+    background-color: #1e1e2a;
+    color: #eeeef5;
+    border: 1px solid #F5A623;
     border-radius: 6px;
     padding: 5px 10px;
     font-size: 12px;
 }
+
+/* ── Dividers / separators ──────────────────────────────────────────────── */
+QFrame[frameShape="4"],
+QFrame[frameShape="HLine"] {
+    background-color: #252533;
+    border: none;
+    max-height: 1px;
+}
+QFrame[frameShape="5"],
+QFrame[frameShape="VLine"] {
+    background-color: #252533;
+    border: none;
+    max-width: 1px;
+}
+
+/* ── Menu & context menu ────────────────────────────────────────────────── */
+QMenu {
+    background-color: #16161f;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    border-radius: 8px;
+    padding: 4px;
+}
+QMenu::item {
+    padding: 6px 20px;
+    border-radius: 4px;
+}
+QMenu::item:selected {
+    background-color: #1e1e2a;
+    color: #F5A623;
+}
+QMenu::separator {
+    background-color: #252533;
+    height: 1px;
+    margin: 4px 8px;
+}
+
+/* ── Input fields ───────────────────────────────────────────────────────── */
+QLineEdit, QTextEdit, QPlainTextEdit {
+    background-color: #16161f;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    border-radius: 6px;
+    padding: 5px 8px;
+    selection-background-color: #F5A623;
+    selection-color: #000000;
+}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
+    border-color: #F5A623;
+    background-color: #1e1e2a;
+}
+QLineEdit:disabled {
+    color: #4a4a66;
+    background-color: #13131a;
+}
+
+/* ── ComboBox ────────────────────────────────────────────────────────────── */
+QComboBox {
+    background-color: #16161f;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    border-radius: 6px;
+    padding: 5px 8px;
+    min-height: 26px;
+}
+QComboBox:hover { border-color: #F5A623; }
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+QComboBox QAbstractItemView {
+    background-color: #16161f;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    border-radius: 6px;
+    selection-background-color: #F5A623;
+    selection-color: #000000;
+    padding: 2px;
+}
+
+/* ── Checkboxes ─────────────────────────────────────────────────────────── */
+QCheckBox {
+    color: #eeeef5;
+    spacing: 6px;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #252533;
+    border-radius: 3px;
+    background: #16161f;
+}
+QCheckBox::indicator:checked {
+    background: #F5A623;
+    border-color: #F5A623;
+}
+QCheckBox::indicator:hover {
+    border-color: #F5A623;
+}
+
+/* ── Progress bars ───────────────────────────────────────────────────────── */
+QProgressBar {
+    background-color: #252533;
+    border: none;
+    border-radius: 3px;
+    text-align: center;
+    color: transparent;
+}
+QProgressBar::chunk {
+    background-color: #F5A623;
+    border-radius: 3px;
+}
+
+/* ── Tab widgets ─────────────────────────────────────────────────────────── */
+QTabWidget::pane {
+    background-color: #0d0d12;
+    border: 1px solid #252533;
+    border-radius: 8px;
+}
+QTabBar::tab {
+    background: #16161f;
+    color: #8888a8;
+    border: 1px solid #252533;
+    border-bottom: none;
+    padding: 6px 16px;
+    border-radius: 6px 6px 0 0;
+}
+QTabBar::tab:selected {
+    background: #F5A623;
+    color: #000000;
+    font-weight: bold;
+}
+QTabBar::tab:hover:!selected { color: #eeeef5; }
+
+/* ── Group boxes ─────────────────────────────────────────────────────────── */
+QGroupBox {
+    background-color: #16161f;
+    border: 1px solid #252533;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding-top: 8px;
+    color: #eeeef5;
+    font-weight: bold;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    color: #8888a8;
+}
+
+/* ── List / tree / table views ───────────────────────────────────────────── */
+QListView, QTreeView, QTableView {
+    background-color: #0d0d12;
+    alternate-background-color: #13131a;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    border-radius: 6px;
+    gridline-color: #252533;
+}
+QHeaderView::section {
+    background-color: #16161f;
+    color: #8888a8;
+    border: none;
+    border-bottom: 1px solid #252533;
+    padding: 5px 8px;
+    font-weight: bold;
+    font-size: 11px;
+}
+QListView::item:selected, QTreeView::item:selected {
+    background-color: #1e1e2a;
+    color: #F5A623;
+    border-radius: 4px;
+}
+QListView::item:hover, QTreeView::item:hover {
+    background-color: #16161f;
+}
+
+/* ── Spin boxes ──────────────────────────────────────────────────────────── */
+QSpinBox, QDoubleSpinBox {
+    background-color: #16161f;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    border-radius: 6px;
+    padding: 4px 8px;
+}
+QSpinBox:focus, QDoubleSpinBox:focus { border-color: #F5A623; }
+
+/* ── Slider ───────────────────────────────────────────────────────────────── */
+QSlider::groove:horizontal {
+    background: #252533;
+    height: 4px;
+    border-radius: 2px;
+}
+QSlider::handle:horizontal {
+    background: #F5A623;
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+QSlider::sub-page:horizontal {
+    background: #F5A623;
+    border-radius: 2px;
+}
+
+/* ── Status bar / label strips ───────────────────────────────────────────── */
+QStatusBar {
+    background-color: #0d0d12;
+    color: #8888a8;
+    border-top: 1px solid #252533;
+}
+"""
+
+_LIGHT_QSS_OVERLAY: str = """
+/* ══════════════════════════════════════════════════════════════════════════
+   YTSpot Light Theme Overlay
+   ══════════════════════════════════════════════════════════════════════════ */
+
+QToolTip {
+    background-color: #ffffff;
+    color: #1a1a1a;
+    border: 1px solid #F5A623;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+}
+
 QScrollBar:vertical {
-    background: #111114;
+    background: #f0f0f5;
     width: 6px;
     border-radius: 3px;
 }
 QScrollBar::handle:vertical {
-    background: #313139;
+    background: #c0c0cc;
     border-radius: 3px;
     min-height: 24px;
 }
-QScrollBar::handle:vertical:hover { background: #3e3e47; }
+QScrollBar::handle:vertical:hover { background: #F5A623; }
 QScrollBar::add-line:vertical,
 QScrollBar::sub-line:vertical { height: 0; }
-"""
 
-# LIGHT mode overlay – minimal; Fluent handles almost everything natively.
-_LIGHT_QSS_OVERLAY: str = """
-/* ── YTSpot Light overlay ────────────────────────────────────────────────── */
-QToolTip {
-    background-color: #ffffff;
-    color: #1a1a1a;
-    border: 1px solid #d0d0d8;
-    border-radius: 6px;
-    padding: 5px 10px;
-    font-size: 12px;
+QScrollBar:horizontal {
+    background: #f0f0f5;
+    height: 6px;
+    border-radius: 3px;
+}
+QScrollBar::handle:horizontal {
+    background: #c0c0cc;
+    border-radius: 3px;
+    min-width: 24px;
+}
+QScrollBar::handle:horizontal:hover { background: #F5A623; }
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal { width: 0; }
+
+QProgressBar {
+    background-color: #e0e0e8;
+    border: none;
+    border-radius: 3px;
+    color: transparent;
+}
+QProgressBar::chunk {
+    background-color: #F5A623;
+    border-radius: 3px;
 }
 """
 
-# OLED mode: true-black (#000000) backgrounds for every major surface.
-# Builds on top of _DARK_QSS_OVERLAY (both are applied together in OLED mode).
 _OLED_QSS_OVERLAY: str = """
-/* ── YTSpot OLED overlay (true-black) ───────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   YTSpot OLED Overlay – true-black backgrounds for OLED screens
+   ══════════════════════════════════════════════════════════════════════════ */
+
 QWidget,
 QFrame,
 QScrollArea,
@@ -131,7 +430,8 @@ QTabWidget,
 QTabWidget::pane {
     background-color: #000000;
 }
-/* Keep card surfaces subtly off-black so text is still legible */
+
+/* Keep card surfaces a hair off-black for legibility */
 QGroupBox,
 QListWidget,
 QListView,
@@ -139,34 +439,55 @@ QTreeView,
 QTableView,
 QTableWidget {
     background-color: #0a0a0a;
-    border: 1px solid #1a1a1a;
+    border-color: #1a1a1a;
 }
-/* Fluent NavigationPanel uses its own surface colour; override via object name */
+
 #navigationPanel,
 #navigationWidget {
     background-color: #000000;
 }
-QToolTip {
-    background-color: #111111;
-    color: #f2f2f5;
-    border: 1px solid #2a2a2a;
-    border-radius: 6px;
-    padding: 5px 10px;
-    font-size: 12px;
+
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+    background-color: #0a0a0a;
+    border-color: #1e1e1e;
 }
-QScrollBar:vertical,
-QScrollBar:horizontal {
+
+QScrollBar:vertical, QScrollBar:horizontal {
     background-color: #000000;
 }
-QScrollBar::handle:vertical,
-QScrollBar::handle:horizontal {
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
     background-color: #2a2a2a;
     border-radius: 3px;
-    min-height: 24px;
 }
-QScrollBar::handle:vertical:hover,
-QScrollBar::handle:horizontal:hover {
-    background-color: #3a3a3a;
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
+    background-color: #F5A623;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; height: 0; }
+
+QMenu {
+    background-color: #0a0a0a;
+    border-color: #1e1e1e;
+}
+QMenu::item:selected { background-color: #141414; }
+
+QToolTip {
+    background-color: #111111;
+    color: #eeeef5;
+    border: 1px solid #F5A623;
+    border-radius: 6px;
+    padding: 5px 10px;
+}
+
+QProgressBar {
+    background-color: #1a1a1a;
+    border: none;
+    border-radius: 3px;
+    color: transparent;
+}
+QProgressBar::chunk {
+    background-color: #F5A623;
+    border-radius: 3px;
 }
 """
 
@@ -190,257 +511,72 @@ class ThemeManager:
     config : AppConfig
         The live application config instance.  ThemeManager reads the initial
         theme from config.theme and writes back on every change.
-
-    Example
-    -------
-    >>> mgr = ThemeManager(config)
-    >>> mgr.apply(config.theme)          # restore saved theme at startup
-    >>> new_theme = mgr.cycle()          # user clicks the theme button
-    >>> print(mgr.current)               # "light"
     """
 
     def __init__(self, config: AppConfig) -> None:
         self._config  = config
-        self._current = config.theme     # "dark" | "light" | "oled"
-        # Apply the accent colour once; it survives all subsequent apply() calls
+        self._current = config.theme
         self._set_accent()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
     @property
     def current(self) -> str:
-        """The name of the currently active theme: 'dark' | 'light' | 'oled'."""
         return self._current
 
     def apply(self, theme_name: str) -> None:
-        """
-        Switch the application to `theme_name` immediately.
-
-        Safe to call from the main thread at any time – QFluentWidgets
-        re-polishes all live widgets synchronously when setTheme() is called.
-
-        Parameters
-        ----------
-        theme_name : "dark" | "light" | "oled"
-            Any other value is silently treated as "dark".
-        """
+        """Switch to theme_name immediately and persist."""
         if theme_name not in ("dark", "light", "oled"):
             theme_name = "dark"
 
         self._current = theme_name
 
-        # 1. Tell QFluentWidgets which base theme to use
-        #    OLED uses Theme.DARK as its base; our QSS layer does the rest.
-        fluent_theme = (
-            Theme.LIGHT if theme_name == "light" else Theme.DARK
-        )
+        fluent_theme = Theme.LIGHT if theme_name == "light" else Theme.DARK
         setTheme(fluent_theme)
-
-        # 2. Re-apply accent colour (setTheme() may reset it internally)
         self._set_accent()
-
-        # 3. Inject our QSS overlay for the selected theme
         self._apply_qss(theme_name)
 
-        # 4. Persist the choice
         self._config.theme = theme_name
         self._config.save()
 
     def cycle(self) -> str:
-        """
-        Advance to the next theme in the rotation (dark → light → oled → dark)
-        and apply it immediately.
-
-        Returns
-        -------
-        str
-            The name of the newly active theme.
-        """
-        current_index = _CYCLE_ORDER.index(self._current) \
-            if self._current in _CYCLE_ORDER else 0
-        next_index = (current_index + 1) % len(_CYCLE_ORDER)
-        next_theme = _CYCLE_ORDER[next_index]
+        """Advance to the next theme (dark → light → oled → dark) and apply."""
+        idx  = _CYCLE_ORDER.index(self._current) if self._current in _CYCLE_ORDER else 0
+        next_theme = _CYCLE_ORDER[(idx + 1) % len(_CYCLE_ORDER)]
         self.apply(next_theme)
         return next_theme
 
     def theme_display_label(self) -> str:
-        """
-        Return a short, emoji-prefixed label for the current theme suitable
-        for display on a toolbar button or settings card.
-
-        Returns e.g. "🌙 Dark", "☀️ Light", "⚫ OLED".
-        """
-        return {
-            "dark":  "🌙  Dark",
-            "light": "☀️  Light",
-            "oled":  "⚫  OLED",
-        }.get(self._current, "🌙  Dark")
+        return {"dark": "🌙  Dark", "light": "☀️  Light", "oled": "⚫  OLED"}.get(
+            self._current, "🌙  Dark"
+        )
 
     def next_theme_label(self) -> str:
-        """
-        Return the display label for the NEXT theme in the rotation,
-        useful for setting tooltip text on a cycle button.
-        """
-        current_index = _CYCLE_ORDER.index(self._current) \
-            if self._current in _CYCLE_ORDER else 0
-        next_index = (current_index + 1) % len(_CYCLE_ORDER)
-        next_theme = _CYCLE_ORDER[next_index]
-        return {
-            "dark":  "🌙  Dark",
-            "light": "☀️  Light",
-            "oled":  "⚫  OLED",
-        }.get(next_theme, "🌙  Dark")
+        idx  = _CYCLE_ORDER.index(self._current) if self._current in _CYCLE_ORDER else 0
+        next_theme = _CYCLE_ORDER[(idx + 1) % len(_CYCLE_ORDER)]
+        return {"dark": "🌙  Dark", "light": "☀️  Light", "oled": "⚫  OLED"}.get(
+            next_theme, "🌙  Dark"
+        )
 
     def is_dark_variant(self) -> bool:
-        """
-        Return True for themes that use a dark background ("dark" and "oled").
-        Useful for conditional icon selection (white vs. dark icons).
-        """
         return self._current in ("dark", "oled")
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
     def _set_accent(self) -> None:
-        """Set the global Fluent accent colour to the YTSpot amber brand colour."""
         setThemeColor(ACCENT_COLOR)
 
     @staticmethod
     def _apply_qss(theme_name: str) -> None:
-        """
-        Compose and inject the correct QSS overlay for the given theme.
-
-        The overlay is additive: it appends to (or replaces) any previously
-        set application-level stylesheet without touching Fluent's internal
-        per-widget QSS.  We replace the whole sheet each call so there is no
-        accumulation of stale rules across successive theme switches.
-        """
         app = QApplication.instance()
         if app is None:
             return
 
         if theme_name == "oled":
-            # OLED = Dark overlay + OLED true-black override
             qss = _DARK_QSS_OVERLAY + _OLED_QSS_OVERLAY
         elif theme_name == "light":
             qss = _LIGHT_QSS_OVERLAY
         else:
-            # "dark" (default)
             qss = _DARK_QSS_OVERLAY
 
         app.setStyleSheet(qss)
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Smoke-test  (python -m ui.theme_manager)
-# ──────────────────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    import sys
-    from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
-    from PySide6.QtCore import QTimer
-
-    # Minimal AppConfig stub so we can test without a real config file
-    class _StubConfig:
-        theme: str = "dark"
-        def save(self) -> None:
-            print(f"  [config.save()]  theme persisted as: {self.theme!r}")
-
-    print("=" * 60)
-    print("ThemeManager  –  smoke-test (visual)")
-    print("=" * 60)
-    print()
-
-    app = QApplication(sys.argv)
-    cfg = _StubConfig()
-    mgr = ThemeManager(cfg)  # type: ignore[arg-type]
-
-    # ── Offline assertions (no window required) ───────────────────────────────
-    print("── 1. cycle() rotation ──")
-    assert mgr.current == "dark",  f"Expected 'dark', got {mgr.current!r}"
-
-    n1 = mgr.cycle()
-    assert n1 == "light",  f"dark → expected 'light', got {n1!r}"
-    assert cfg.theme == "light", "Config not updated after cycle()"
-    print(f"  dark  → cycle() → {n1!r}  ✅")
-
-    n2 = mgr.cycle()
-    assert n2 == "oled",  f"light → expected 'oled', got {n2!r}"
-    print(f"  light → cycle() → {n2!r}  ✅")
-
-    n3 = mgr.cycle()
-    assert n3 == "dark",  f"oled → expected 'dark', got {n3!r}"
-    print(f"  oled  → cycle() → {n3!r}  ✅")
-    print()
-
-    print("── 2. apply() with invalid name defaults to 'dark' ──")
-    mgr.apply("nonsense")
-    assert mgr.current == "dark", f"Expected 'dark', got {mgr.current!r}"
-    print("  apply('nonsense') → 'dark'  ✅")
-    print()
-
-    print("── 3. is_dark_variant() ──")
-    mgr.apply("dark")
-    assert mgr.is_dark_variant() is True
-    mgr.apply("oled")
-    assert mgr.is_dark_variant() is True
-    mgr.apply("light")
-    assert mgr.is_dark_variant() is False
-    print("  dark → True, oled → True, light → False  ✅")
-    print()
-
-    print("── 4. theme_display_label() / next_theme_label() ──")
-    mgr.apply("dark")
-    label = mgr.theme_display_label()
-    next_label = mgr.next_theme_label()
-    print(f"  current label : {label!r}")
-    print(f"  next label    : {next_label!r}")
-    assert "Dark"  in label,       "Expected 'Dark' in current label"
-    assert "Light" in next_label,  "Expected 'Light' in next label"
-    print("  ✅")
-    print()
-
-    print("── 5. Visual window (cycles through themes automatically) ──")
-
-    # Build a minimal Fluent window so we can see the QSS changes live
-    window = QWidget()
-    window.setWindowTitle("ThemeManager visual test")
-    window.setMinimumSize(480, 200)
-    layout = QVBoxLayout(window)
-
-    info_label = QLabel()
-    info_label.setWordWrap(True)
-    layout.addWidget(info_label)
-
-    theme_order = ["dark", "light", "oled"]
-    _idx = [0]
-
-    def _switch_theme() -> None:
-        theme = theme_order[_idx[0] % len(theme_order)]
-        mgr.apply(theme)
-        info_label.setText(
-            f"Active theme : {mgr.theme_display_label()}\n"
-            f"Next theme   : {mgr.next_theme_label()}\n"
-            f"Dark variant : {mgr.is_dark_variant()}\n\n"
-            f"(Window will auto-cycle through all three themes)"
-        )
-        window.setWindowTitle(f"ThemeManager – {mgr.theme_display_label()}")
-        _idx[0] += 1
-
-    _switch_theme()   # apply immediately
-    window.show()
-
-    # Auto-cycle every 1.5 s so each theme is visible for inspection
-    timer = QTimer()
-    timer.setInterval(1500)
-    timer.timeout.connect(_switch_theme)
-    timer.start()
-
-    # Close after three full cycles (9 switches × 1.5 s = 13.5 s)
-    QTimer.singleShot(13_500, app.quit)
-
-    print("  Window opened – cycling Dark → Light → OLED every 1.5 s.")
-    print("  Window will close automatically after 3 full cycles.")
-    print()
-    print("All offline assertions passed ✅")
-
-    sys.exit(app.exec())

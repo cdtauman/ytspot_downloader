@@ -119,6 +119,23 @@ _DEFAULTS: dict[str, Any] = {
     # Valid values: "" (disabled), "chrome", "firefox", "edge", "brave", "safari"
     "cookies_browser":      "",
 
+    # ── Spotify API credentials (v3 – Spotify Web API) ────────────────────────
+    # Register a free app at https://developer.spotify.com/dashboard to obtain
+    # a Client ID and Client Secret.  When both are set, SpotifyResolver uses
+    # the official Web API (client_credentials flow) which gives access to:
+    #   - Full track metadata (artist, album, duration, thumbnail)
+    #   - Album/playlist pagination with no rate-limit concerns
+    #   - Artist discography (all albums + all tracks)
+    # When either field is empty, the app falls back to the embed API (no auth)
+    # which still works for basic track/album/playlist resolution.
+    "spotify_client_id":     "",
+    "spotify_client_secret": "",
+
+    # ── Parallel download concurrency ─────────────────────────────────────────
+    # Number of tracks downloaded simultaneously (1 = sequential, max = 5).
+    # Higher values consume more CPU/bandwidth but complete batches faster.
+    "max_parallel_downloads": 3,
+
 }
 
 
@@ -537,6 +554,47 @@ class AppConfig:
     @cookies_browser.setter
     def cookies_browser(self, value: str) -> None:
         self._data["cookies_browser"] = value.lower().strip()
+
+    # ── Spotify API credentials ────────────────────────────────────────────────
+
+    @property
+    def spotify_client_id(self) -> str:
+        """
+        Spotify Developer App Client ID.
+        Register at https://developer.spotify.com/dashboard (free account).
+        When non-empty (together with spotify_client_secret), SpotifyResolver
+        uses the official Web API instead of the embed API fallback.
+        """
+        return str(self._data.get("spotify_client_id", ""))
+
+    @spotify_client_id.setter
+    def spotify_client_id(self, value: str) -> None:
+        self._data["spotify_client_id"] = str(value).strip()
+
+    @property
+    def spotify_client_secret(self) -> str:
+        """Spotify Developer App Client Secret (paired with spotify_client_id)."""
+        return str(self._data.get("spotify_client_secret", ""))
+
+    @spotify_client_secret.setter
+    def spotify_client_secret(self, value: str) -> None:
+        self._data["spotify_client_secret"] = str(value).strip()
+
+    # ── Parallel download concurrency ─────────────────────────────────────────
+
+    @property
+    def max_parallel_downloads(self) -> int:
+        """Number of simultaneous downloads (clamped 1–5)."""
+        raw = self._data.get("max_parallel_downloads", 3)
+        try:
+            val = int(raw)
+        except (TypeError, ValueError):
+            val = 3
+        return max(1, min(5, val))
+
+    @max_parallel_downloads.setter
+    def max_parallel_downloads(self, value: int) -> None:
+        self._data["max_parallel_downloads"] = max(1, min(5, int(value)))
 
     # ──
 

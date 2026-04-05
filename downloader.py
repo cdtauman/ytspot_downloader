@@ -38,6 +38,7 @@ except ImportError:
     pass
 
 from utils.impersonate import ImpersonateTarget as _ImpersonateTarget, CURL_CFFI_AVAILABLE as _CURL_CFFI_AVAILABLE
+from utils.yt_dlp_opts import build_base_ydl_opts as _build_base_opts
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -138,6 +139,18 @@ class DownloadRequest:
     forced_artist: Optional[str] = None
     forced_index:  Optional[int] = None
 
+    # ── Dynamic sub-folder (playlist / album downloads) ───────────────────────
+    # When set, the engine creates output_dir/<sanitized_playlist_name>/ and
+    # saves all files there.  Single tracks leave this as None → saved directly
+    # in output_dir.
+    playlist_name: Optional[str] = None
+
+    # ── Per-request cancellation (parallel download support) ──────────────────
+    # Each parallel job gets its own threading.Event so a single cancelled track
+    # does not affect sibling jobs.  When None the engine uses its own shared
+    # _cancel_event (backward-compatible for sequential callers).
+    cancel_event: Optional[threading.Event] = field(default=None, repr=False)
+
     # Callbacks – set by the caller, never touched by the engine internals
     on_progress: Optional[Callable[[DownloadProgress], None]] = field(
         default=None, repr=False
@@ -157,6 +170,31 @@ class DownloadRequest:
 def _sanitize_filename(name: str) -> str:
     """Remove / replace characters that are illegal on Windows & macOS."""
     return re.sub(r'[\\/:*?"<>|]', "_", name).strip()
+
+
+def _sanitize_folder_name(name: str) -> str:
+    """
+    Return a filesystem-safe folder name for use as a playlist sub-directory.
+
+    Strips:
+      * Characters illegal on Windows/macOS/Linux: \\ / : * ? " < > |
+      * Leading and trailing whitespace and dots (Windows restriction)
+      * Control characters (0x00–0x1F)
+      * Consecutive spaces → single space, then spaces → underscores
+    Truncates to 200 characters to stay well within path-length limits.
+    Falls back to "Playlist" if the result would be empty.
+    """
+    # Remove control characters
+    cleaned = re.sub(r'[\x00-\x1f]', '', name)
+    # Replace illegal filesystem chars with underscore
+    cleaned = re.sub(r'[\\/:*?"<>|]', '_', cleaned)
+    # Collapse multiple spaces/underscores
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    # Strip leading/trailing dots (Windows hides files starting with '.')
+    cleaned = cleaned.strip('.')
+    # Final trim and length cap
+    cleaned = cleaned.strip()[:200]
+    return cleaned if cleaned else "Playlist"
 
 
 def _bytes_to_mb(b: Optional[int]) -> Optional[float]:
@@ -193,6 +231,10 @@ class DownloadEngine:
         self._cancel_event = threading.Event()
         self._lock = threading.Lock()
 
+    def cancel_all(self) -> None:
+        """Cancel ALL in-progress downloads (including parallel jobs)."""
+        self._cancel_event.set()
+
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def download(self, request: DownloadRequest) -> None:
@@ -221,10 +263,20 @@ class DownloadEngine:
             self._fire(request, prog, error=True)
             return
         
-        self._cancel_event.clear()
-        
-        # Validate output directory
-        out_dir = Path(request.output_dir).expanduser().resolve()
+        # Resolve the effective cancel event for this request.
+        # Per-request event (parallel jobs) takes precedence over the shared one.
+        active_cancel = request.cancel_event or self._cancel_event
+        active_cancel.clear()
+
+        # ── Determine output directory ────────────────────────────────────────
+        # For playlists/albums: output_dir / sanitized_playlist_name /
+        # For singles: output_dir directly (no sub-folder)
+        base_dir = Path(request.output_dir).expanduser().resolve()
+        if request.playlist_name:
+            out_dir = base_dir / _sanitize_folder_name(request.playlist_name)
+        else:
+            out_dir = base_dir
+
         try:
             out_dir.mkdir(parents=True, exist_ok=True)
         except (PermissionError, OSError) as exc:
@@ -365,85 +417,45 @@ class DownloadEngine:
             # %(playlist_index)s is empty for non-playlist downloads – that's fine.
             outtmpl = str(out_dir / "%(playlist_index)s%(title)s.%(ext)s")
 
-        opts: dict[str, Any] = {
-            # ── I/O ───────────────────────────────────────────────────────────
-            "outtmpl":         outtmpl,
-            "restrictfilenames": True,      # ASCII-safe filenames
-            "windowsfilenames":  True,      # colon/asterisk safety on Windows
-            
-            # ── Full Chrome 136 browser fingerprint headers ───────────────────
-            "http_headers": {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/136.0.0.0 Safari/537.36"
-                ),
-                "Accept": (
-                    "text/html,application/xhtml+xml,application/xml;"
-                    "q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
-                ),
-                "Accept-Language":  "en-US,en;q=0.9",
-                "Accept-Encoding":  "gzip, deflate, br",
-                "Sec-Fetch-Dest":   "document",
-                "Sec-Fetch-Mode":   "navigate",
-                "Sec-Fetch-Site":   "none",
-                "Sec-Fetch-User":   "?1",
-                "Sec-CH-UA":        '"Chromium";v="136", "Google Chrome";v="136", "Not-A.Brand";v="99"',
-                "Sec-CH-UA-Mobile": "?0",
-                "Sec-CH-UA-Platform": '"Windows"',
-                "Upgrade-Insecure-Requests": "1",
-                "Connection":       "keep-alive",
-            },
+        # ── Start from shared base options (headers, impersonation, cookies) ──
+        opts: dict[str, Any] = _build_base_opts(
+            cookies_file=req.cookies_file or None,
+            cookies_browser=req.cookies_browser or None,
+            quiet=True,
+            retries=10,
+        )
 
-            # ── Age gate bypass ───────────────────────────────────────────────
-            "age_limit": 18,
+        # ── I/O ───────────────────────────────────────────────────────────────
+        opts["outtmpl"]           = outtmpl
+        opts["restrictfilenames"] = True
+        opts["windowsfilenames"]  = True
+        opts["ignoreerrors"]      = False   # surface errors to our handler
 
-            # ── Network ───────────────────────────────────────────────────────
-            "retries":         10,
-            "fragment_retries": 10,
-            "ignoreerrors":    False,       # surface errors to our handler
-            "nocheckcertificate": False,
+        # ── Playlist ──────────────────────────────────────────────────────────
+        opts["playliststart"] = req.playlist_start
+        if req.playlist_end:
+            opts["playlistend"] = req.playlist_end
 
-            # ── Playlist ──────────────────────────────────────────────────────
-            "playliststart":   req.playlist_start,
-            **({"playlistend": req.playlist_end} if req.playlist_end else {}),
-
-            # ── Cookies: manual file > browser extraction > none ─────────────
-            # Browser extraction reads from a real logged-in browser session,
-            # bypassing CAPTCHA checks and age-verification walls.
-            **({"cookiefile": req.cookies_file} if req.cookies_file
-               else {"cookiesfrombrowser": (req.cookies_browser, None, None, None)}
-               if req.cookies_browser else {}),
-
-            # ── TLS browser impersonation (curl_cffi) ─────────────────────────
-            **({"impersonate": _ImpersonateTarget("chrome")} if _CURL_CFFI_AVAILABLE else {}),
-            
-            # ── YouTube extractor options ──────────────────────────────────── 
-            "extractor_args": {
-                "youtube": {
-                    # Skip problematic stream types that cause bot detection
-                    "skip": ["webpage"],
-                }
-            },
-
-            # ── Progress & cancel hooks ───────────────────────────────────────
-            "progress_hooks":  [self._make_progress_hook(req)],
-            "postprocessor_hooks": [self._make_pp_hook(req)],
-
-            # ── Verbosity ────────────────────────────────────────────────────
-            "quiet":           True,
-            "no_warnings":     False,
-
-            # ── Abort flag ────────────────────────────────────────────────────
-            "abort_on_unavailable_fragment": False,
+        # ── YouTube extractor options ─────────────────────────────────────────
+        opts["extractor_args"] = {
+            "youtube": {
+                "skip": ["webpage"],
+            }
         }
 
+        # ── Progress & cancel hooks ───────────────────────────────────────────
+        opts["progress_hooks"]      = [self._make_progress_hook(req)]
+        opts["postprocessor_hooks"] = [self._make_pp_hook(req)]
+        opts["no_warnings"]         = False
+
         # ── Cancel support ────────────────────────────────────────────────────
-        # yt-dlp checks this callable each iteration.
-        cancel_ev = self._cancel_event
+        # Use per-request event when available (parallel downloads), otherwise
+        # fall back to the shared engine-level event (sequential legacy mode).
+        cancel_ev       = req.cancel_event or self._cancel_event
+        global_cancel   = self._cancel_event
 
         def _abort_hook(_info: dict) -> None:  # noqa: ANN001
-            if cancel_ev.is_set():
+            if cancel_ev.is_set() or global_cancel.is_set():
                 raise yt_dlp.utils.DownloadCancelled()
 
         opts["progress_hooks"].append(_abort_hook)
