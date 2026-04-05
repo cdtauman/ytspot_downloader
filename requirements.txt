@@ -1,7 +1,7 @@
 # ── Core downloading engine ──────────────────────────────────────────────────
 yt-dlp[default]>=2026.3.13  # The heart of the downloading engine (plus JS solvers)
 yt-dlp-ejs                 # Required for YouTube JS player logic (bundled in default)
-curl_cffi>=0.14.4,<0.15.0  # Compat with yt-dlp (v0.15+ is currently unsupported by yt-dlp)
+curl_cffi>=0.14.0,<0.14.9  # Compat with yt-dlp (v0.15+ is currently unsupported by yt-dlp)
 
 # ── Audio & Video post-processing ─────────────────────────────────────────────
 ffmpeg-python>=0.2.0       # Python bindings for media probing

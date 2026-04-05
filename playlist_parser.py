@@ -44,12 +44,8 @@ try:
 except ImportError:
     pass
 
-try:
-    from yt_dlp.networking.impersonate import ImpersonateTarget as _ImpersonateTarget
-    _CURL_CFFI_AVAILABLE = True
-except ImportError:
-    _ImpersonateTarget = None  # type: ignore[assignment,misc]
-    _CURL_CFFI_AVAILABLE = False
+from utils.impersonate import ImpersonateTarget as _ImpersonateTarget, CURL_CFFI_AVAILABLE as _CURL_CFFI_AVAILABLE
+from utils.time_format import seconds_to_str as _seconds_to_str
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -103,14 +99,7 @@ class TrackMeta:
     @staticmethod
     def format_duration(seconds: Optional[int]) -> str:
         """Convert raw seconds to MM:SS or HH:MM:SS string."""
-        if seconds is None:
-            return "Live"
-        seconds = int(seconds)
-        h, remainder = divmod(seconds, 3600)
-        m, s         = divmod(remainder, 60)
-        if h:
-            return f"{h}:{m:02d}:{s:02d}"
-        return f"{m}:{s:02d}"
+        return _seconds_to_str(seconds, live_label="Live")
 
     def __post_init__(self) -> None:
         # Auto-fill duration_str when duration_sec is provided

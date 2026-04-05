@@ -111,7 +111,7 @@ _DEFAULTS: dict[str, Any] = {
     # URL to your Spotify proxy server (without trailing slash).
     # The app sends search requests to this server instead of Spotify directly.
     # Example: "http://your-future-server.com" or "http://localhost:5000"
-    "proxy_server_url":     "http://your-future-server.com",
+    "proxy_server_url":     "http://localhost:8000",
 
     # ── Browser cookies source ────────────────────────────────────────────────
     # When set, yt-dlp extracts cookies from the named browser so the app can
@@ -537,7 +537,6 @@ class AppConfig:
     @cookies_browser.setter
     def cookies_browser(self, value: str) -> None:
         self._data["cookies_browser"] = value.lower().strip()
-        self.save()
 
     # ──
 

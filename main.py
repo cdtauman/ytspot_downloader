@@ -15,8 +15,12 @@ from __future__ import annotations
 
 import sys
 import os
+import logging
 
 def main() -> int:
+    # Set up basic logging so we can see debug statements
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
     # 1. High-DPI policy must be set before QApplication is constructed
     os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
 
@@ -39,6 +43,17 @@ def main() -> int:
 
     # 4. Now that QApplication is alive, safely import backend & UI singletons
     from config import AppConfig
+    
+    # Ensure our search engine and related modules log at DEBUG level
+    import core.search_engine
+    core.search_engine.logger.setLevel(logging.DEBUG)
+    
+    import ui.workers.search_worker
+    ui.workers.search_worker.logger.setLevel(logging.DEBUG)
+    
+    import ui.panels.search_panel
+    ui.panels.search_panel.logger.setLevel(logging.DEBUG)
+
     from core.history_db import HistoryDB
     from ui.theme_manager import ThemeManager
     from ui.app_window import AppWindow

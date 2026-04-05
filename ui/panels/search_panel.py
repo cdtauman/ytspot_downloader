@@ -16,6 +16,8 @@ add_to_queue_requested(SearchResult)
 
 from __future__ import annotations
 
+import logging
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QMenu,
@@ -41,6 +43,7 @@ _TEXT     = "#f2f2f5"
 _TEXT_2   = "#94949e"
 _TEXT_3   = "#5a5a66"
 
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SearchPanel
@@ -94,6 +97,7 @@ class SearchPanel(QWidget):
         Add one SearchResultCard to the results list.
         Called incrementally by AppWindow as SearchWorker emits result_ready.
         """
+        logger.debug("[SearchPanel] Adding result to UI: %s", result.title)
         self._empty_widget.setVisible(False)
         card = SearchResultCard(result, parent=self._results_container)
         card.add_to_queue.connect(self.add_to_queue_requested)
@@ -293,6 +297,7 @@ class SearchPanel(QWidget):
     def _on_search(self, query: str) -> None:
         """Called by SearchLineEdit.searchSignal (user clicked the search icon)."""
         query = query.strip()
+        logger.debug("[SearchPanel] Search requested via click icon: %r (Platform: %s)", query, self._current_platform)
         if query and not self._searching:
             self.clear_results()
             self.save_state()
@@ -311,6 +316,7 @@ class SearchPanel(QWidget):
     def _on_search_return(self) -> None:
         """Called when the user presses Enter in the search box."""
         query = self._search_box.text().strip()
+        logger.debug("[SearchPanel] Search requested via Enter key: %r (Platform: %s)", query, self._current_platform)
         if query and not self._searching:
             self.clear_results()
             self.save_state()

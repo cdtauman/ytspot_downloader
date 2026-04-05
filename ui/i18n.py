@@ -125,6 +125,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "search_group": "Search",
         "max_search_results": "Max Search Results",
         "max_search_results_desc": "Maximum number of results to fetch per search query (1 – 50)",
+        "spotify_proxy": "Spotify Proxy Server URL",
+        "spotify_proxy_desc": "URL to your Spotify proxy server (e.g. http://localhost:8000)",
 
         "authentication": "Authentication",
         "cookies_file": "Cookies File",
@@ -318,6 +320,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "search_group": "חיפוש",
         "max_search_results": "מקסימום תוצאות חיפוש",
         "max_search_results_desc": "מספר מקסימלי של תוצאות לשאילתת חיפוש (1 – 50)",
+        "spotify_proxy": "כתובת שרת פרוקסי ל-Spotify",
+        "spotify_proxy_desc": "כתובת ה-URL של שרת הפרוקסי ל-Spotify (למשל http://localhost:8000)",
 
         "authentication": "אימות",
         "cookies_file": "קובץ עוגיות",

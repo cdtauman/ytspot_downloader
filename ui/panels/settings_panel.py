@@ -111,6 +111,10 @@ class SettingsPanel(QScrollArea):
             self._browser_card.setValue(self._cfg.cookies_browser)
         except Exception:
             pass
+        try:
+            self._spotify_proxy_card.setText(self._cfg.proxy_server_url)
+        except Exception:
+            pass
 
     # ── Build ──────────────────────────────────────────────────────────────────
 
@@ -267,6 +271,18 @@ class SettingsPanel(QScrollArea):
             lambda v: self._persist("search_max_results", v)
         )
         search_grp.addSettingCard(self._results_card)
+
+        self._spotify_proxy_card = _TextSettingCard(
+            icon=FluentIcon.LINK,
+            title=t("spotify_proxy"),
+            content=t("spotify_proxy_desc"),
+            value=self._cfg.proxy_server_url,
+            parent=search_grp,
+        )
+        self._spotify_proxy_card.value_changed.connect(
+            lambda v: self._persist("proxy_server_url", v)
+        )
+        search_grp.addSettingCard(self._spotify_proxy_card)
 
         layout.addWidget(search_grp)
 
@@ -562,3 +578,77 @@ class _LanguageSettingCard(QFrame):
         # fallback: set first option
         if self._combo.count() > 0:
             self._combo.setCurrentIndex(0)
+
+
+class _TextSettingCard(QFrame):
+    """A setting card with a LineEdit for text input."""
+
+    from PySide6.QtCore import Signal as _S
+    value_changed = _S(str)
+
+    def __init__(
+        self,
+        icon,
+        title: str,
+        content: str,
+        value: str,
+        parent: QWidget = None,
+    ) -> None:
+        super().__init__(parent)
+        self._value = value
+        self._build(icon, title, content)
+
+    def _build(self, icon, title: str, content: str) -> None:
+        from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
+        from qfluentwidgets import IconWidget, LineEdit
+
+        self.setFixedHeight(76)
+        self.setStyleSheet(f"""
+            _TextSettingCard {{
+                background: {_SURFACE};
+                border: 1px solid {_BORDER};
+                border-radius: 8px;
+            }}
+        """)
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(16, 0, 16, 0)
+        row.setSpacing(12)
+
+        # Icon
+        icon_lbl = IconWidget(icon, self)
+        icon_lbl.setFixedSize(20, 20)
+        row.addWidget(icon_lbl)
+
+        # Text
+        text_col = QVBoxLayout()
+        text_col.setSpacing(2)
+        text_col.setContentsMargins(0, 0, 0, 0)
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet(
+            f"color: {_TEXT}; font-size: 13px; background: transparent;"
+        )
+        sub_lbl = QLabel(content)
+        sub_lbl.setStyleSheet(
+            f"color: {_TEXT_2}; font-size: 11px; background: transparent;"
+        )
+        text_col.addWidget(title_lbl)
+        text_col.addWidget(sub_lbl)
+        row.addLayout(text_col, stretch=1)
+
+        # LineEdit
+        self._line_edit = LineEdit(self)
+        self._line_edit.setText(self._value)
+        self._line_edit.setFixedWidth(250)
+        self._line_edit.editingFinished.connect(self._on_editing_finished)
+        row.addWidget(self._line_edit)
+
+    def _on_editing_finished(self) -> None:
+        new_value = self._line_edit.text()
+        if new_value != self._value:
+            self._value = new_value
+            self.value_changed.emit(new_value)
+
+    def setText(self, value: str) -> None:
+        self._value = value
+        self._line_edit.setText(value)

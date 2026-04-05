@@ -366,10 +366,8 @@ class SearchEngine:
         
         # Remove trailing slash if present
         proxy_url = proxy_url.rstrip("/")
-        search_endpoint = f"{proxy_url}/search"
-        
-        print(f"[SpotifyProxy] Searching: query={query!r}, endpoint={search_endpoint}")
-        
+        search_endpoint = f"{proxy_url}/api/v1/search"
+
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -377,42 +375,36 @@ class SearchEngine:
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
             "Accept": "application/json",
+            "X-App-Token": "c6ffadbe3f5cb7146a72d91364c0a3cd981a90d67c167fc6acf44db4f3cbf8ad",
         }
-        
-        params = {"q": query, "max_results": max_results}
-        
+
+        params = {"query": query, "limit": max_results}
+
         try:
             with httpx.Client(timeout=15.0) as client:
                 response = client.get(search_endpoint, headers=headers, params=params)
                 response.raise_for_status()
                 data = response.json()
-                print(f"[SpotifyProxy] Response status: {response.status_code}")
         except httpx.HTTPStatusError as exc:
-            print(f"[SpotifyProxy] HTTP Error {exc.response.status_code}")
             raise SearchError(
                 f"Proxy server returned HTTP {exc.response.status_code}. "
                 f"Is the server running at {proxy_url}?"
             ) from exc
         except httpx.RequestError as exc:
-            print(f"[SpotifyProxy] Network error: {exc}")
             raise SearchError(
                 f"Cannot reach proxy server at {proxy_url}. "
                 f"Check your connection and Settings.\n\nError: {exc}"
             ) from exc
         except Exception as exc:
-            print(f"[SpotifyProxy] Unexpected error: {exc}")
             raise SearchError(f"Proxy error: {exc}") from exc
-        
+
         # Parse results from proxy response
         try:
-            raw_results = data.get("results", [])
-            print(f"[SpotifyProxy] Parsed {len(raw_results)} results from proxy")
+            raw_results = data.get("data", [])
         except (KeyError, TypeError) as exc:
-            print(f"[SpotifyProxy] Response format error: {exc}")
             raise SearchError(
                 "Proxy returned unexpected format. Check server logs."
-            ) from exc
-        
+            ) from exc        
         # Convert each result to SearchResult
         for raw_index, item in enumerate(raw_results[:max_results], start=1):
             if self._cancel.is_set():
@@ -441,7 +433,6 @@ class SearchEngine:
                     upload_date="",
                 )
                 results.append(result)
-                print(f"[SpotifyProxy] Result {raw_index}: {title} - {artist}")
                 
                 if on_result:
                     try:
@@ -450,10 +441,8 @@ class SearchEngine:
                         pass
                         
             except Exception as exc:
-                print(f"[SpotifyProxy] Error parsing result {raw_index}: {exc}")
                 continue
         
-        print(f"[SpotifyProxy] Completed search - returning {len(results)} results")
         return results
 
 

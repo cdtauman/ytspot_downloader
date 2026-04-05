@@ -37,12 +37,7 @@ try:
 except ImportError:
     pass
 
-try:
-    from yt_dlp.networking.impersonate import ImpersonateTarget as _ImpersonateTarget
-    _CURL_CFFI_AVAILABLE = True
-except ImportError:
-    _ImpersonateTarget = None  # type: ignore[assignment,misc]
-    _CURL_CFFI_AVAILABLE = False
+from utils.impersonate import ImpersonateTarget as _ImpersonateTarget, CURL_CFFI_AVAILABLE as _CURL_CFFI_AVAILABLE
 
 
 # ──────────────────────────────────────────────────────────────────────────────

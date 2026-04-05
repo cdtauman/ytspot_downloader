@@ -24,12 +24,14 @@ results so the thread exits cleanly after the current network call.
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from PySide6.QtCore import QThread, Signal
 
 from core.search_engine import SearchEngine, SearchError, SearchResult
 
+logger = logging.getLogger(__name__)
 
 class SearchWorker(QThread):
     """
@@ -66,6 +68,7 @@ class SearchWorker(QThread):
         self._platform    = platform
         self._max_results = max(1, min(50, max_results))
         self._engine      = SearchEngine(cookies_file=cookies_file)
+        logger.debug("[SearchWorker] Initialized with query=%r, platform=%s, max_results=%d", self._query, self._platform, self._max_results)
 
     def cancel(self) -> None:
         """
@@ -73,13 +76,16 @@ class SearchWorker(QThread):
         Delegates to SearchEngine.cancel() which sets a threading.Event
         checked between results in the search loop.
         """
+        logger.debug("[SearchWorker] Cancel requested.")
         self._engine.cancel()
 
     # ── QThread.run ───────────────────────────────────────────────────────────
 
     def run(self) -> None:
         """Entry point executed on the worker thread."""
+        logger.debug("[SearchWorker] Starting run for query=%r, platform=%s", self._query, self._platform)
         if not self._query:
+            logger.debug("[SearchWorker] Query is empty, aborting.")
             self.error.emit("Search query is empty.")
             return
 
@@ -94,6 +100,7 @@ class SearchWorker(QThread):
             # Handle all three platforms: youtube, spotify, or both
             if self._platform == "both":
                 # Search both platforms
+                logger.debug("[SearchWorker] Platform is 'both'. Starting YouTube search...")
                 self.status_msg.emit(f"🔍  Searching YouTube for \"{self._query}\" …")
                 try:
                     self._engine.search_youtube(
@@ -102,8 +109,9 @@ class SearchWorker(QThread):
                         on_result=on_result,
                     )
                 except Exception as e:
-                    print(f"YouTube search error: {e}")
+                    logger.debug("[SearchWorker] YouTube search error: %s", e, exc_info=True)
                 
+                logger.debug("[SearchWorker] Platform is 'both'. Starting Spotify search...")
                 self.status_msg.emit(f"🔍  Searching Spotify for \"{self._query}\" …")
                 try:
                     self._engine.search_spotify(
@@ -112,10 +120,11 @@ class SearchWorker(QThread):
                         on_result=on_result,
                     )
                 except Exception as e:
-                    print(f"Spotify search error: {e}")
+                    logger.debug("[SearchWorker] Spotify search error: %s", e, exc_info=True)
                 platform_label = "YouTube + Spotify"
                 
             elif self._platform == "spotify":
+                logger.debug("[SearchWorker] Platform is 'spotify'. Starting Spotify search...")
                 self.status_msg.emit(f"🔍  Searching Spotify for \"{self._query}\" …")
                 self._engine.search_spotify(
                     self._query,
@@ -124,6 +133,7 @@ class SearchWorker(QThread):
                 )
                 platform_label = "Spotify"
             else:  # youtube
+                logger.debug("[SearchWorker] Platform is 'youtube'. Starting YouTube search...")
                 self.status_msg.emit(f"🔍  Searching YouTube for \"{self._query}\" …")
                 self._engine.search_youtube(
                     self._query,
@@ -134,6 +144,7 @@ class SearchWorker(QThread):
 
             # Emit a meaningful completion message
             count = len(collected)
+            logger.debug("[SearchWorker] Search completed. Collected %d results.", count)
             if count == 0:
                 self.status_msg.emit(
                     f"⚠  No results found for \"{self._query}\" on {platform_label}."
@@ -147,7 +158,9 @@ class SearchWorker(QThread):
             self.finished.emit(count)
 
         except SearchError as exc:
+            logger.debug("[SearchWorker] SearchError caught: %s", exc)
             self.error.emit(str(exc))
 
         except Exception as exc:  # noqa: BLE001
+            logger.debug("[SearchWorker] Unexpected error: %s", exc, exc_info=True)
             self.error.emit(f"Unexpected search error: {exc}")

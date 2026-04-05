@@ -39,6 +39,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from utils.time_format import seconds_to_str as _seconds_to_str
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Public data-class
@@ -83,14 +85,7 @@ class DownloadRecord:
 
     def duration_str(self) -> str:
         """Return a human-readable duration string, e.g. '3:45' or '1:02:30'."""
-        if self.duration_sec is None:
-            return "—"
-        s = int(self.duration_sec)
-        h, remainder = divmod(s, 3600)
-        m, sec       = divmod(remainder, 60)
-        if h:
-            return f"{h}:{m:02d}:{sec:02d}"
-        return f"{m}:{sec:02d}"
+        return _seconds_to_str(self.duration_sec, live_label="—")
 
     def file_size_str(self) -> str:
         """Return a human-readable file-size string, e.g. '8.3 MB'."""
