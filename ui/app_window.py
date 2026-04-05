@@ -555,6 +555,9 @@ class AppWindow(FluentWindow):
             card.set_thumbnail(raw)
 
     def _on_fetch_finished(self, result: ParseResult) -> None:
+        # Skip normal handling in batch-scrape mode
+        if getattr(self, "_batch_mode", False):
+            return
         self._url_bar.set_fetching(False)
         self._status_bar.stop_indeterminate()
         self._status_bar.set_cancel_visible(False)
@@ -857,26 +860,51 @@ class AppWindow(FluentWindow):
     def _on_scrape_finished(self, count: int) -> None:
         self._status_bar.stop_indeterminate()
         self._status_bar.set_cancel_visible(False)
+
         urls = getattr(self, "_scraped_urls", [])
         self._scraped_urls = []
-        if urls:
-            # Load first URL into the bar and report the rest
-            self._url_bar.set_url(urls[0])
-            if count > 1:
-                self._status_bar.set_status(
-                    t("scrape_multi_found", count=count)
+
+        # Filter: keep only real video page URLs, discard CDN thumbnails
+        video_urls = [u for u in urls if self._is_real_video_url(u)]
+
+        if not video_urls:
+            self._status_bar.set_status("❌ 0 downloadable videos found (Blocked?)")
+            # Show bypass dialog if we had raw URLs but they were all CDN thumbnails
+            if urls:
+                from error_handler import ErrorInfo, ErrorSeverity
+                err_info = ErrorInfo(
+                    severity=ErrorSeverity.ERROR,
+                    headline="Access denied (403)",
+                    detail=(
+                        "The scanner found links on this page, but the target server "
+                        "blocked yt-dlp from processing them. You may need to bypass "
+                        "bot protection."
+                    ),
                 )
-            else:
-                self._on_fetch(urls[0])
-        else:
-            self._status_bar.set_status("❌ 0 media links extracted (Blocked?)")
-            err_info = ErrorInfo(
-                severity=ErrorSeverity.ERROR,
-                headline="Access denied (403)",
-                detail="The scanner found links on this page, but the target server blocked yt-dlp from processing them. You may need to bypass bot protection.",
-                raw="bot challenge triggered"
-            )
-            self._show_error_or_bypass(err_info)
+                self._show_error_or_bypass(err_info)
+            return
+
+        # Show the first URL in the bar for reference
+        self._url_bar.set_url(video_urls[0])
+
+        # Auto-fetch ALL video URLs into the download queue sequentially
+        total = len(video_urls)
+        self._status_bar.set_status(
+            f"🔍  Found {total} video{'s' if total != 1 else ''} — fetching metadata…"
+        )
+
+        # Clear queue and start a sequential batch fetch
+        self._index_to_card.clear()
+        self._key_to_card.clear()
+        self._queue_panel.clear()
+        self._dl_bar.set_count(0, 0)
+
+        self._batch_fetch_queue: list = list(video_urls)
+        self._batch_fetch_total: int  = total
+        self._batch_fetch_done:  int  = 0
+        self._batch_mode:        bool = True
+
+        self._fetch_next_in_batch()
 
     def _on_scrape_error(self, message: str) -> None:
         self._status_bar.stop_indeterminate()

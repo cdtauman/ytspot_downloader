@@ -548,6 +548,23 @@ class PageScraper:
         """Clear the cancel flag so the scraper can be reused."""
         self._cancel.clear()
 
+
+    @staticmethod
+    def _is_thumbnail_cdn(url: str) -> bool:
+        """Return True if the URL is a CDN thumbnail preview clip, not a real video page."""
+        try:
+            host = urllib.parse.urlparse(url).netloc.lower()
+            cdn_hints = ("xhcdn.com", "xhvideo.com")
+            if any(h in host for h in cdn_hints):
+                return True
+            path = urllib.parse.urlparse(url).path.lower()
+            if ".t.webm" in path or ".t.mp4" in path or ".t.av1" in path:
+                return True
+        except Exception:
+            pass
+        return False
+
+
     def scrape(
         self,
         page_url: str,
@@ -602,6 +619,18 @@ class PageScraper:
                 except Exception:
                     pass
 
+        # ── SPECIAL CASE: xhamster user channel ─────────────────────────────
+        if re.search(r'xhamster\.com/users/[^/?#]+/videos', page_url):
+            return self._scrape_xhamster_channel(
+                page_url, seen, validated, _emit, on_status, cookies_file, timeout
+            )
+
+        # xhamster channel: dedicated paginator
+        if re.search(r'xhamster\.com/users/[^/?#]+/videos', page_url):
+            return self._scrape_xhamster_channel(
+                page_url, seen, validated, _emit, on_status, cookies_file, timeout
+            )
+
         # Phase 1: yt-dlp on the page itself (handles most known sites natively)
         print("[DEBUG Scraper] Phase 1: Trying _try_ytdlp_extract on base URL...")
         if on_status:
@@ -641,7 +670,11 @@ class PageScraper:
                 break
             
             # Simple whitelist to avoid emitting /login, /password-recovery, etc.
-            is_valid = any(hint in url for hint in valid_media_hints) or url.endswith((".mp4", ".webm", ".m3u8"))
+            is_valid = any(hint in url for hint in valid_media_hints)
+            if not is_valid and url.lower().endswith((".mp4", ".webm", ".m3u8")):
+                lower = url.lower()
+                if not any(x in lower for x in ("/thumb", "526x298", ".t.mp4", ".t.webm", ".t.av1", "preview")):
+                    is_valid = True
             if is_valid:
                 _emit(url)
 
@@ -715,15 +748,20 @@ class PageScraper:
             "ignoreerrors":   True,
             "socket_timeout": timeout,
             "age_limit":      18,
+            # ── FIXED: Use same Chrome 136 UA everywhere ──────────────────────────
             "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "en-US,en;q=0.5",
-            }
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Sec-CH-UA": '"Chromium";v="136", "Google Chrome";v="136", "Not-A.Brand";v="99"',
+                "Sec-CH-UA-Mobile": "?0",
+                "Sec-CH-UA-Platform": '"Windows"',
+            },
+            # ── FIXED: Always pass cookies to yt-dlp ─────────────────────────────
+            **({"cookiefile": cookies_file} if cookies_file else {}),
         }
         print(f"[DEBUG yt-dlp] Invoking yt-dlp on {url} with cookies_file={cookies_file}")
-        if cookies_file:
-            opts["cookiefile"] = cookies_file
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -792,6 +830,9 @@ class PageScraper:
             # If it explicitly contains the word video/watch but isn't just a category
             if any(hint in path for hint in ("/video/", "/watch", "/clip/", "/movie/", "/episode/")):
                 is_video = True
+            # xhamster individual video pages
+            elif "xhamster.com" in abs_url and re.search(r'/videos/[^/]+-\d+$', path):
+                is_video = True
             elif path.endswith((".mp4", ".webm", ".m3u8", ".ts", ".avi", ".mkv")):
                 is_video = True
             
@@ -817,7 +858,9 @@ class PageScraper:
             try:
                 with open(url_file, 'r', encoding='utf-8') as f:
                     bypass_url = f.read().strip()
-                if bypass_url == url:
+                # Normalize URLs for comparison (strip trailing slash, ignore query params diff)
+                def _norm(u): return u.rstrip("/").split("?")[0]
+                if _norm(bypass_url) == _norm(url):
                     print("[DEBUG Fetch] SUCCESS! Intercepted exact URL from WebEngine bypass HTML payload! Skipping curl_cffi.")
                     with open(html_file, 'r', encoding='utf-8') as f:
                         cached_html = f.read()
@@ -849,7 +892,7 @@ class PageScraper:
                 
         headers = {
             "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
             ),
             "Accept":           "text/html,application/xhtml+xml,*/*;q=0.8",
             "Accept-Language":  "en-US,en;q=0.9",
@@ -866,12 +909,12 @@ class PageScraper:
             from curl_cffi import requests as _cffi_req
             resp = _cffi_req.get(
                 url,
-                impersonate="chrome",
+                impersonate="chrome136",   # ← שנה מ-"chrome" ל-"chrome136" 
                 headers=headers,
                 cookies=cookies_dict,
                 timeout=timeout,
                 allow_redirects=True,
-                verify=False,  # Some sites have expired or problematic certs
+                verify=False,
             )
             print(f"[DEBUG Fetch] curl_cffi status: {resp.status_code}")
             resp.raise_for_status()
