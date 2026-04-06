@@ -138,17 +138,26 @@ def _artist_score(
     Artist presence score (0 – max_pts).
     Checks if the artist name appears in the YT title or channel name.
     """
-    artist_lower = spotify_artist.lower().strip()
+    artist_lower   = spotify_artist.lower().strip()
+    artist_nospace = artist_lower.replace(" ", "")
     if not artist_lower:
         return 0.0
-    in_title   = artist_lower in youtube_title.lower()
-    in_channel = artist_lower in channel.lower()
+
+    yt_title_lower = youtube_title.lower()
+    chan_lower     = channel.lower()
+    chan_nospace   = chan_lower.replace(" ", "")
+
+    in_title   = artist_lower in yt_title_lower
+    in_channel = artist_lower in chan_lower or (len(artist_nospace) > 3 and artist_nospace in chan_nospace)
+
     if in_title and in_channel:
         return max_pts
     if in_title or in_channel:
-        return max_pts * 0.7
-    # Partial: check if first word of artist appears (handles "Daft Punk" vs "DaftPunk")
-    first_word = artist_lower.split()[0] if artist_lower else ""
+        return max_pts * 0.8  # Increased from 0.7 for better "perfect match" score
+
+    # Partial: check if first word of artist appears
+    words = artist_lower.split()
+    first_word = words[0] if words else ""
     if first_word and len(first_word) > 2:
         if first_word in youtube_title.lower() or first_word in channel.lower():
             return max_pts * 0.3
@@ -187,7 +196,19 @@ def score_candidate(
 
     Returns (total_score, breakdown_dict).
     """
-    t = _title_score(spotify_title, yt_title)
+    # ── Precision Title Score ─────────────────────────────────────────
+    # If the YT title starts with "Artist - ", strip it for a better match
+    yt_title_clean = yt_title
+    artist_prefix = f"{spotify_artist} -"
+    if yt_title.lower().startswith(artist_prefix.lower()):
+        yt_title_clean = yt_title[len(artist_prefix):].strip()
+    elif " - " in yt_title:
+        # Check if the title is "Title - Artist"
+        parts = yt_title.split(" - ")
+        if spotify_artist.lower() in parts[1].lower():
+            yt_title_clean = parts[0].strip()
+
+    t = _title_score(spotify_title, yt_title_clean)
     d = _duration_score(spotify_dur, yt_dur)
     a = _artist_score(spotify_artist, yt_title, yt_channel)
     c = _channel_score(yt_channel, spotify_artist)

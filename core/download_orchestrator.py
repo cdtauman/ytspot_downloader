@@ -144,21 +144,29 @@ class DownloadOrchestrator:
     def run_batch(self, jobs: list[tuple[str, DownloadRequest]]) -> BatchResult:
         """
         Execute a batch of downloads with bounded parallelism.
-
-        Parameters
-        ----------
-        jobs : List of (key, DownloadRequest) tuples.
-
-        Returns
-        -------
-        BatchResult with completion stats.
         """
+        if not jobs:
+            logger.debug("[Orchestrator] Empty batch — skipping")
+            self._safe_cb("on_overall_progress", 1.0)
+            self._safe_cb("on_batch_finished")
+            return BatchResult(total=0, completed=0, failed=0, cancelled=False)
+
+        # Check for pre-cancellation
+        if self._engine._cancel_event.is_set():
+            logger.info("[Orchestrator] run_batch() — started in cancelled state")
+            # Mark all as cancelled
+            for key, _ in jobs:
+                self._safe_cb("on_track_status", key, "cancelled")
+            self._safe_cb("on_batch_finished")
+            return BatchResult(total=len(jobs), completed=0, failed=0, cancelled=True)
+
         self._total     = len(jobs)
         self._completed = 0
         self._failed    = 0
         self._job_progress.clear()
         self._cancel_events.clear()
-        self._engine._cancel_event.clear()  # noqa: SLF001
+        # We DON'T clear engine._cancel_event here anymore to respect pre-cancellation.
+        # The UI/Worker should clear it when starting a FRESH download session.
 
         n_workers = min(self._max_workers, self._total)
         futures: dict = {}

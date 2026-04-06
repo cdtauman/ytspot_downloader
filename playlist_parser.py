@@ -17,4 +17,5 @@ from core.playlist_parser import (          # explicit re-exports for type check
     SourcePlatform,
     UrlKind,
     classify_url,
+    _best_thumbnail,
 )

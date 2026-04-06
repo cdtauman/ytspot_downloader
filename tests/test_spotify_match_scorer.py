@@ -77,7 +77,7 @@ class TestArtistScore:
 
     def test_in_title_only(self):
         s = _artist_score("Daft Punk", "Daft Punk - Get Lucky", "SomeChannel")
-        assert s == 14.0  # 70%
+        assert s == 16.0  # 80% (updated from 70% to boost accuracy)
 
     def test_not_present(self):
         s = _artist_score("Daft Punk", "Get Lucky", "SomeChannel")

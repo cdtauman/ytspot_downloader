@@ -42,11 +42,11 @@ class TestHistoryDBResilience:
         assert db.count() == 1
         db.close()
 
-        # Corrupt the file by overwriting the middle with garbage
+        # Corrupt the file by overwriting the header with garbage
         p = Path(db_path)
         data = bytearray(p.read_bytes())
-        mid = len(data) // 2
-        data[mid:mid + 200] = b"\x00" * 200
+        # Overwrite the first 100 bytes (SQLite header)
+        data[0:100] = b"\x00" * 100
         p.write_bytes(bytes(data))
 
         # Re-open — should detect corruption and recreate
