@@ -1,12 +1,13 @@
 """
 main.py  –  YTSpot Downloader  entry point
 ==========================================
-Bootstraps the Qt application, loads persistent config and the history
-database, applies the saved theme, constructs the main window, and
+Bootstraps the Qt application, loads persistent config, creates the
+service container, applies the theme, constructs the main window, and
 hands control to the Qt event loop.
 
 Run with:
     python main.py
+    python main.py --debug      # verbose console logging
 or, after packaging:
     ytspot
 """
@@ -17,7 +18,18 @@ import sys
 import os
 import logging
 
+# ── Logging MUST be initialised before any other project import ───────────
+from utils.logging_config import setup_logging
+
+_debug_mode = "--debug" in sys.argv
+setup_logging(debug=_debug_mode)
+
+logger = logging.getLogger(__name__)
+
+
 def main() -> int:
+    logger.info("Starting YTSpot Downloader (debug=%s)", _debug_mode)
+
     # 1. High-DPI policy must be set before QApplication is constructed
     os.environ.setdefault("QT_ENABLE_HIGHDPI_SCALING", "1")
 
@@ -30,8 +42,6 @@ def main() -> int:
     )
 
     # 3. Construct the global QApplication object IMMEDIATELY
-    #    Every subsequent import that touches Qt widgets (including
-    #    the FluentWindow machinery) will find an app already alive.
     app = QApplication(sys.argv)
     app.setApplicationName("YTSpot Downloader")
     app.setApplicationDisplayName("YTSpot Downloader")
@@ -40,16 +50,17 @@ def main() -> int:
 
     # 4. Now that QApplication is alive, safely import backend & UI singletons
     from config import AppConfig
-
-    from core.history_db import HistoryDB
+    from core.services import ServiceContainer
     from ui.theme_manager import ThemeManager
     from ui.app_window import AppWindow
 
     cfg = AppConfig()
-    db  = HistoryDB(cfg.resolved_history_db_path())
+    logger.info("Config loaded from %s", cfg._path)
 
-    # Set UI language and application layout direction early so widgets
-    # are constructed with the correct direction and texts.
+    # 5. Service container — owns all shared backend singletons
+    svc = ServiceContainer.create_default(cfg)
+
+    # Set UI language and layout direction
     from ui.i18n import set_language
     set_language(cfg.language)
     if cfg.language == "he":
@@ -57,26 +68,29 @@ def main() -> int:
     else:
         app.setLayoutDirection(Qt.LeftToRight)
 
-    # 5. Theme (applied before the window is constructed so the first paint
-    #    uses the correct palette — avoids a white flash on startup)
+    # 6. Theme (before window construction to avoid white flash)
     theme_mgr = ThemeManager(cfg)
     theme_mgr.apply(cfg.theme)
 
-    # 6. Main window
+    # 7. Main window — receives services via DI
     try:
-        window = AppWindow(config=cfg, db=db)
+        window = AppWindow(config=cfg, services=svc)
         window.show()
-    except Exception as e:
-        print(f"CRITICAL STARTUP ERROR: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.info("Main window shown")
+    except Exception:
+        logger.critical("Failed to create main window", exc_info=True)
+        svc.close()
         return 1
 
-    # 7. Event loop
-    return app.exec()
+    # 8. Event loop
+    exit_code = app.exec()
+
+    # 9. Cleanup (AppWindow.closeEvent handles most of this,
+    #    but svc.close() is a safety net for abnormal exits)
+    svc.close()
+    logger.info("Application exiting with code %d", exit_code)
+    return exit_code
 
 
 if __name__ == "__main__":
-    # Protected by __main__ guard to avoid accidental GUI initialization
-    # if main.py is imported by another module (e.g. tests or docs).
     sys.exit(main())
