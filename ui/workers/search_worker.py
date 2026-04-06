@@ -122,6 +122,10 @@ class SearchWorker(QThread):
                 self._run_spotify(on_result)
                 platform_label = "Spotify"
 
+            elif self._platform == "ytmusic":
+                self._run_ytmusic(on_result)
+                platform_label = "YouTube Music"
+
             else:  # youtube (default)
                 self._run_youtube(on_result)
                 platform_label = "YouTube"
@@ -169,6 +173,18 @@ class SearchWorker(QThread):
                 )
         except Exception as exc:
             logger.debug("[SearchWorker] YouTube search error: %s", exc, exc_info=True)
+
+    def _run_ytmusic(self, on_result) -> None:
+        """Run YouTube Music categorized search (ytmusicapi)."""
+        self.status_msg.emit(f"🔍  Searching YouTube Music for \"{self._query}\" …")
+        try:
+            self._engine.search_youtube_music(
+                self._query,
+                max_results=self._youtube_max_results,
+                on_result=on_result,
+            )
+        except Exception as exc:
+            logger.debug("[SearchWorker] YouTube Music search error: %s", exc, exc_info=True)
 
     def _run_spotify(self, on_result) -> None:
         """Run Spotify categorized search."""

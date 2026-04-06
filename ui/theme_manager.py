@@ -1,49 +1,42 @@
 """
-ui/theme_manager.py  –  Application-wide theme engine
-======================================================
-Responsibilities
-----------------
-* Apply Dark / Light / OLED themes by coordinating QFluentWidgets' built-in
-  theme system with a supplementary QSS layer for rich, vibrant styling.
-* Expose a single apply(theme_name) method safe to call at any time.
-* Persist the chosen theme back to AppConfig on every change.
-* Provide the amber accent colour (#F5A623) that matches the brand identity.
-* Expose cycle() to rotate dark → light → oled → dark.
+ui/theme_manager.py  –  Application-wide theme engine  (v3)
+============================================================
+Changelog v3
+------------
+* Vibrant Light Theme: completely redesigned with soft gradient surfaces,
+  colorful pastel cards, and rich accent-driven highlights — no more gray.
+* Custom Accent Colors: ThemeManager.set_accent(name_or_hex) lets the user
+  choose from a curated palette (Amber, Emerald, Violet, Rose, Ocean) or
+  supply any hex code.  All QSS overlays are rebuilt dynamically on change.
+* Accent palette is exported as ACCENT_PALETTE (name → hex) so the Settings
+  panel can render a swatch picker without hard-coding colors.
+* ThemeManager.apply() signature unchanged — no callers need updating.
+* Dead code removed.  Strict type hints.  Modular QSS builders.
 
-Design Tokens (v2 – deep, premium palette)
+Design Token Summary
+--------------------
+Dark  : deep cool-purple near-black surfaces + accent-driven highlights
+Light : warm ivory/lavender base, colorful gradient cards, vivid accents
+OLED  : true-black (#000) for OLED screens
+
+Light Theme Palette (default Amber accent)
 ------------------------------------------
-Dark mode moves from plain flat grays to rich, cool-purple-tinted surfaces
-that evoke a professional music player (Spotify / Apple Music aesthetic):
-
-    _BG       = #0d0d12   – deep, cool near-black (was #111114)
-    _SURFACE  = #16161f   – rich card surface with purple tint (was #1c1c21)
-    _SURFACE2 = #1e1e2a   – elevated / hover surface
-    _BORDER   = #252533   – subtle borders (was #313139)
-    _TEXT     = #eeeef5   – cooler white
-    _TEXT_2   = #8888a8   – purple-tinted secondary text
-    _TEXT_3   = #4a4a66   – deep muted / disabled text
-    _ACCENT   = #F5A623   – amber brand colour (UNCHANGED)
-    _SUCCESS  = #10b981   – vibrant emerald
-    _ERROR    = #ef4444   – vivid red
-    _WARNING  = #f59e0b   – warm amber-yellow
-
-Cards gain:
-  * Proper drop shadows via QGraphicsDropShadowEffect in component code
-  * Amber-glow borders on hover (thick 2px, semi-opaque)
-  * Rich dark scrollbars matching the surface colour
-
-Light mode gains:
-  * Cleaner, crisper white surfaces
-  * Amber accent preserved
-
-OLED mode:
-  * True-black (#000000) for every major surface
-  * Micro-contrast cards (#0a0a0a) for legibility
+  _L_BG        = #faf9ff  – warm ivory-lavender base
+  _L_SURFACE   = #ffffff  – pure-white card surface
+  _L_SURFACE2  = #f0eeff  – soft lavender hover / elevated
+  _L_BORDER    = #e2ddf8  – delicate periwinkle border
+  _L_TEXT      = #1a1830  – deep indigo-black primary text
+  _L_TEXT2     = #6b65a0  – medium muted purple-gray
+  _L_TEXT3     = #b5b0d4  – light disabled text
+  _L_ACCENT    = (dynamic) – user-chosen accent
+  _L_GRAD_A    = #ede9ff  – gradient card start (soft violet)
+  _L_GRAD_B    = #fff4e6  – gradient card end   (warm peach)
 """
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor
+from typing import Final
+
 from PySide6.QtWidgets import QApplication
 from qfluentwidgets import setTheme, setThemeColor, Theme
 
@@ -51,20 +44,31 @@ from config import AppConfig
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Brand constants
+# Accent palette  (name → hex)
 # ──────────────────────────────────────────────────────────────────────────────
 
-ACCENT_COLOR:     str = "#F5A623"   # Amber – unchanged brand colour
-ACCENT_COLOR_DIM: str = "#C47D0E"   # Dimmed amber for hover states
+ACCENT_PALETTE: Final[dict[str, str]] = {
+    "Amber":  "#F5A623",   # original brand colour
+    "Emerald": "#10b981",
+    "Violet":  "#7c3aed",
+    "Rose":    "#f43f5e",
+    "Ocean":   "#0ea5e9",
+    "Coral":   "#ff6b6b",
+    "Mint":    "#06d6a0",
+    "Gold":    "#f59e0b",
+}
 
-# Vibrant semantic colours used across all dark-variant components
-SUCCESS_COLOR:    str = "#10b981"   # Emerald green (downloads done)
-ERROR_COLOR:      str = "#ef4444"   # Vivid red (failed downloads)
-WARNING_COLOR:    str = "#f59e0b"   # Amber-yellow (cancelled)
-PROCESSING_COLOR: str = "#8b5cf6"   # Purple (FFmpeg processing)
+# Default accent (brand colour)
+ACCENT_COLOR:     str = ACCENT_PALETTE["Amber"]
+ACCENT_COLOR_DIM: str = "#C47D0E"   # dimmed variant – recomputed on accent change
 
-# Full design-token exports so component files can import individual tokens
-# without importing from theme_manager (no circular dependency risk)
+# Semantic colours (theme-independent)
+SUCCESS_COLOR:    str = "#10b981"
+ERROR_COLOR:      str = "#ef4444"
+WARNING_COLOR:    str = "#f59e0b"
+PROCESSING_COLOR: str = "#8b5cf6"
+
+# Dark-mode design token exports (consumed by component files)
 BG_DARK:       str = "#0d0d12"
 SURFACE_DARK:  str = "#16161f"
 SURFACE2_DARK: str = "#1e1e2a"
@@ -73,429 +77,591 @@ TEXT_DARK:     str = "#eeeef5"
 TEXT2_DARK:    str = "#8888a8"
 TEXT3_DARK:    str = "#4a4a66"
 
+# Light-mode design token exports
+BG_LIGHT:       str = "#faf9ff"
+SURFACE_LIGHT:  str = "#ffffff"
+SURFACE2_LIGHT: str = "#f0eeff"
+BORDER_LIGHT:   str = "#e2ddf8"
+TEXT_LIGHT:     str = "#1a1830"
+TEXT2_LIGHT:    str = "#6b65a0"
+TEXT3_LIGHT:    str = "#b5b0d4"
+
+_CYCLE_ORDER: list[str] = ["dark", "light", "oled"]
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-# QSS overlays
+# Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
-_DARK_QSS_OVERLAY: str = """
+def _dim_hex(hex_color: str, factor: float = 0.75) -> str:
+    """Return a darkened version of a hex color (for hover/dim states)."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    r2 = max(0, int(r * factor))
+    g2 = max(0, int(g * factor))
+    b2 = max(0, int(b * factor))
+    return f"#{r2:02x}{g2:02x}{b2:02x}"
+
+
+def _lighten_hex(hex_color: str, alpha_hex: str = "22") -> str:
+    """Return color + alpha suffix for rgba simulation via QSS hex8."""
+    return f"{hex_color}{alpha_hex}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# QSS builders  (dynamic – rebuilt when accent changes)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _build_dark_qss(accent: str) -> str:
+    dim = _dim_hex(accent)
+    return f"""
 /* ══════════════════════════════════════════════════════════════════════════
-   YTSpot Dark Theme Overlay – v2  (deep, purple-tinted premium palette)
+   YTSpot Dark Theme  v3  (deep purple-tinted premium palette)
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Global reset ──────────────────────────────────────────────────────── */
-QWidget {
+QWidget {{
     background-color: #0d0d12;
     color: #eeeef5;
-    selection-background-color: #F5A623;
+    selection-background-color: {accent};
     selection-color: #000000;
-}
+}}
 
-/* ── Scroll areas ──────────────────────────────────────────────────────── */
-QScrollArea,
-QScrollArea > QWidget > QWidget,
-QAbstractScrollArea {
+QScrollArea, QScrollArea > QWidget > QWidget, QAbstractScrollArea {{
     background-color: #0d0d12;
     border: none;
-}
+}}
 
-/* ── Thin, modern scrollbars ───────────────────────────────────────────── */
-QScrollBar:vertical {
-    background: #0d0d12;
-    width: 6px;
-    border-radius: 3px;
-    margin: 0;
-}
-QScrollBar::handle:vertical {
-    background: #252533;
-    border-radius: 3px;
-    min-height: 28px;
-}
-QScrollBar::handle:vertical:hover {
-    background: #F5A623;
-}
-QScrollBar::add-line:vertical,
-QScrollBar::sub-line:vertical { height: 0; }
-QScrollBar::add-page:vertical,
-QScrollBar::sub-page:vertical { background: transparent; }
+/* Thin modern scrollbars */
+QScrollBar:vertical {{
+    background: #0d0d12; width: 6px; border-radius: 3px; margin: 0;
+}}
+QScrollBar::handle:vertical {{
+    background: #252533; border-radius: 3px; min-height: 28px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {accent}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
 
-QScrollBar:horizontal {
-    background: #0d0d12;
-    height: 6px;
-    border-radius: 3px;
-    margin: 0;
-}
-QScrollBar::handle:horizontal {
-    background: #252533;
-    border-radius: 3px;
-    min-width: 28px;
-}
-QScrollBar::handle:horizontal:hover {
-    background: #F5A623;
-}
-QScrollBar::add-line:horizontal,
-QScrollBar::sub-line:horizontal { width: 0; }
+QScrollBar:horizontal {{
+    background: #0d0d12; height: 6px; border-radius: 3px; margin: 0;
+}}
+QScrollBar::handle:horizontal {{
+    background: #252533; border-radius: 3px; min-width: 28px;
+}}
+QScrollBar::handle:horizontal:hover {{ background: {accent}; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
 
-/* ── Tooltips ───────────────────────────────────────────────────────────── */
-QToolTip {
+QToolTip {{
     background-color: #1e1e2a;
     color: #eeeef5;
-    border: 1px solid #F5A623;
+    border: 1px solid {accent};
     border-radius: 6px;
     padding: 5px 10px;
     font-size: 12px;
-}
+}}
 
-/* ── Dividers / separators ──────────────────────────────────────────────── */
-QFrame[frameShape="4"],
-QFrame[frameShape="HLine"] {
-    background-color: #252533;
-    border: none;
-    max-height: 1px;
-}
-QFrame[frameShape="5"],
-QFrame[frameShape="VLine"] {
-    background-color: #252533;
-    border: none;
-    max-width: 1px;
-}
+QLineEdit, QTextEdit, QPlainTextEdit {{
+    background-color: #16161f;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    border-radius: 7px;
+    padding: 6px 10px;
+    selection-background-color: {accent};
+}}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
+    border-color: {accent};
+}}
 
-/* ── Menu & context menu ────────────────────────────────────────────────── */
-QMenu {
+QComboBox {{
+    background-color: #16161f;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    border-radius: 7px;
+    padding: 5px 10px;
+}}
+QComboBox:focus {{ border-color: {accent}; }}
+QComboBox QAbstractItemView {{
+    background-color: #16161f;
+    color: #eeeef5;
+    border: 1px solid #252533;
+    selection-background-color: {accent};
+    selection-color: #000000;
+}}
+
+QCheckBox {{ color: #eeeef5; spacing: 8px; }}
+QCheckBox::indicator {{
+    width: 16px; height: 16px;
+    border: 2px solid #252533;
+    border-radius: 4px;
+    background: #16161f;
+}}
+QCheckBox::indicator:checked {{
+    background-color: {accent};
+    border-color: {accent};
+}}
+
+QGroupBox {{
+    border: 1px solid #252533;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding-top: 8px;
+    color: #8888a8;
+    font-size: 11px;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 8px;
+    color: {accent};
+}}
+
+QProgressBar {{
+    background-color: #1e1e2a;
+    border: none;
+    border-radius: 3px;
+    color: transparent;
+    height: 6px;
+}}
+QProgressBar::chunk {{
+    background-color: {accent};
+    border-radius: 3px;
+}}
+
+QStatusBar {{
+    background-color: #0d0d12;
+    color: #8888a8;
+    border-top: 1px solid #252533;
+}}
+
+QMenu {{
     background-color: #16161f;
     color: #eeeef5;
     border: 1px solid #252533;
     border-radius: 8px;
     padding: 4px;
-}
-QMenu::item {
-    padding: 6px 20px;
-    border-radius: 4px;
-}
-QMenu::item:selected {
-    background-color: #1e1e2a;
-    color: #F5A623;
-}
-QMenu::separator {
-    background-color: #252533;
-    height: 1px;
-    margin: 4px 8px;
-}
+}}
+QMenu::item {{ padding: 6px 20px; border-radius: 4px; }}
+QMenu::item:selected {{ background-color: #1e1e2a; color: {accent}; }}
+QMenu::separator {{ background-color: #252533; height: 1px; margin: 4px 8px; }}
 
-/* ── Input fields ───────────────────────────────────────────────────────── */
-QLineEdit, QTextEdit, QPlainTextEdit {
-    background-color: #16161f;
-    color: #eeeef5;
-    border: 1px solid #252533;
-    border-radius: 6px;
-    padding: 5px 8px;
-    selection-background-color: #F5A623;
-    selection-color: #000000;
-}
-QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
-    border-color: #F5A623;
-    background-color: #1e1e2a;
-}
-QLineEdit:disabled {
-    color: #4a4a66;
-    background-color: #13131a;
-}
-
-/* ── ComboBox ────────────────────────────────────────────────────────────── */
-QComboBox {
-    background-color: #16161f;
-    color: #eeeef5;
-    border: 1px solid #252533;
-    border-radius: 6px;
-    padding: 5px 8px;
-    min-height: 26px;
-}
-QComboBox:hover { border-color: #F5A623; }
-QComboBox::drop-down {
-    border: none;
-    width: 22px;
-}
-QComboBox QAbstractItemView {
-    background-color: #16161f;
-    color: #eeeef5;
-    border: 1px solid #252533;
-    border-radius: 6px;
-    selection-background-color: #F5A623;
-    selection-color: #000000;
-    padding: 2px;
-}
-
-/* ── Checkboxes ─────────────────────────────────────────────────────────── */
-QCheckBox {
-    color: #eeeef5;
-    spacing: 6px;
-}
-QCheckBox::indicator {
-    width: 16px;
-    height: 16px;
-    border: 1px solid #252533;
-    border-radius: 3px;
-    background: #16161f;
-}
-QCheckBox::indicator:checked {
-    background: #F5A623;
-    border-color: #F5A623;
-}
-QCheckBox::indicator:hover {
-    border-color: #F5A623;
-}
-
-/* ── Progress bars ───────────────────────────────────────────────────────── */
-QProgressBar {
-    background-color: #252533;
-    border: none;
-    border-radius: 3px;
-    text-align: center;
-    color: transparent;
-}
-QProgressBar::chunk {
-    background-color: #F5A623;
-    border-radius: 3px;
-}
-
-/* ── Tab widgets ─────────────────────────────────────────────────────────── */
-QTabWidget::pane {
-    background-color: #0d0d12;
-    border: 1px solid #252533;
-    border-radius: 8px;
-}
-QTabBar::tab {
-    background: #16161f;
-    color: #8888a8;
-    border: 1px solid #252533;
-    border-bottom: none;
-    padding: 6px 16px;
-    border-radius: 6px 6px 0 0;
-}
-QTabBar::tab:selected {
-    background: #F5A623;
-    color: #000000;
-    font-weight: bold;
-}
-QTabBar::tab:hover:!selected { color: #eeeef5; }
-
-/* ── Group boxes ─────────────────────────────────────────────────────────── */
-QGroupBox {
-    background-color: #16161f;
-    border: 1px solid #252533;
-    border-radius: 8px;
-    margin-top: 12px;
-    padding-top: 8px;
-    color: #eeeef5;
-    font-weight: bold;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 12px;
-    color: #8888a8;
-}
-
-/* ── List / tree / table views ───────────────────────────────────────────── */
-QListView, QTreeView, QTableView {
-    background-color: #0d0d12;
-    alternate-background-color: #13131a;
-    color: #eeeef5;
-    border: 1px solid #252533;
-    border-radius: 6px;
-    gridline-color: #252533;
-}
-QHeaderView::section {
-    background-color: #16161f;
-    color: #8888a8;
-    border: none;
-    border-bottom: 1px solid #252533;
-    padding: 5px 8px;
-    font-weight: bold;
-    font-size: 11px;
-}
-QListView::item:selected, QTreeView::item:selected {
-    background-color: #1e1e2a;
-    color: #F5A623;
-    border-radius: 4px;
-}
-QListView::item:hover, QTreeView::item:hover {
-    background-color: #16161f;
-}
-
-/* ── Spin boxes ──────────────────────────────────────────────────────────── */
-QSpinBox, QDoubleSpinBox {
+QSpinBox, QDoubleSpinBox {{
     background-color: #16161f;
     color: #eeeef5;
     border: 1px solid #252533;
     border-radius: 6px;
     padding: 4px 8px;
-}
-QSpinBox:focus, QDoubleSpinBox:focus { border-color: #F5A623; }
+}}
+QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {accent}; }}
 
-/* ── Slider ───────────────────────────────────────────────────────────────── */
-QSlider::groove:horizontal {
-    background: #252533;
-    height: 4px;
-    border-radius: 2px;
-}
-QSlider::handle:horizontal {
-    background: #F5A623;
-    width: 14px;
-    height: 14px;
-    margin: -5px 0;
-    border-radius: 7px;
-}
-QSlider::sub-page:horizontal {
-    background: #F5A623;
-    border-radius: 2px;
-}
-
-/* ── Status bar / label strips ───────────────────────────────────────────── */
-QStatusBar {
-    background-color: #0d0d12;
-    color: #8888a8;
-    border-top: 1px solid #252533;
-}
+QSlider::groove:horizontal {{
+    background: #252533; height: 4px; border-radius: 2px;
+}}
+QSlider::handle:horizontal {{
+    background: {accent};
+    width: 14px; height: 14px;
+    margin: -5px 0; border-radius: 7px;
+}}
+QSlider::sub-page:horizontal {{ background: {accent}; border-radius: 2px; }}
 """
 
-_LIGHT_QSS_OVERLAY: str = """
+
+def _build_light_qss(accent: str) -> str:
+    """
+    Build the vibrant Light Mode QSS overlay.
+
+    Design vision
+    -------------
+    * Warm ivory-lavender base (#faf9ff) – feels airy, not sterile
+    * Pure-white cards that pop off the base
+    * Soft periwinkle borders that fade into the background
+    * Accent colour drives every interactive element: focus rings,
+      progress chunks, hover tints, selection highlights
+    * Gradient header stripe on key containers (lavender → warm peach)
+    * Colorful platform badges, vivid status indicators
+
+    The goal: looks like a cross between Apple Music (light) and
+    Material You, with a music-app personality.
+    """
+    dim   = _dim_hex(accent)
+    faint = accent + "1a"   # 10 % opacity QSS hex8 approximation (not CSS)
+    return f"""
 /* ══════════════════════════════════════════════════════════════════════════
-   YTSpot Light Theme Overlay
+   YTSpot Light Theme  v3  (vibrant, colorful, premium)
    ══════════════════════════════════════════════════════════════════════════ */
 
-QToolTip {
-    background-color: #ffffff;
-    color: #1a1a1a;
-    border: 1px solid #F5A623;
-    border-radius: 6px;
-    padding: 5px 10px;
-    font-size: 12px;
-}
+/* ── Global ────────────────────────────────────────────────────────────── */
+QWidget {{
+    background-color: #faf9ff;
+    color: #1a1830;
+    selection-background-color: {accent};
+    selection-color: #ffffff;
+    font-family: "Segoe UI", "SF Pro Display", system-ui, sans-serif;
+}}
 
-QScrollBar:vertical {
-    background: #f0f0f5;
-    width: 6px;
-    border-radius: 3px;
-}
-QScrollBar::handle:vertical {
-    background: #c0c0cc;
-    border-radius: 3px;
-    min-height: 24px;
-}
-QScrollBar::handle:vertical:hover { background: #F5A623; }
-QScrollBar::add-line:vertical,
-QScrollBar::sub-line:vertical { height: 0; }
+QMainWindow, QDialog, QDockWidget {{
+    background-color: #faf9ff;
+}}
 
-QScrollBar:horizontal {
-    background: #f0f0f5;
-    height: 6px;
-    border-radius: 3px;
-}
-QScrollBar::handle:horizontal {
-    background: #c0c0cc;
-    border-radius: 3px;
-    min-width: 24px;
-}
-QScrollBar::handle:horizontal:hover { background: #F5A623; }
-QScrollBar::add-line:horizontal,
-QScrollBar::sub-line:horizontal { width: 0; }
-
-QProgressBar {
-    background-color: #e0e0e8;
+/* ── Scroll areas ─────────────────────────────────────────────────────── */
+QScrollArea, QScrollArea > QWidget > QWidget, QAbstractScrollArea {{
+    background-color: #faf9ff;
     border: none;
+}}
+
+/* ── Scrollbars (thin, colorful) ──────────────────────────────────────── */
+QScrollBar:vertical {{
+    background: #ede9ff;
+    width: 7px;
     border-radius: 3px;
+    margin: 0;
+}}
+QScrollBar::handle:vertical {{
+    background: #c8c0f0;
+    border-radius: 3px;
+    min-height: 28px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {accent}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
+
+QScrollBar:horizontal {{
+    background: #ede9ff;
+    height: 7px;
+    border-radius: 3px;
+    margin: 0;
+}}
+QScrollBar::handle:horizontal {{
+    background: #c8c0f0;
+    border-radius: 3px;
+    min-width: 28px;
+}}
+QScrollBar::handle:horizontal:hover {{ background: {accent}; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+
+/* ── Tooltips ─────────────────────────────────────────────────────────── */
+QToolTip {{
+    background-color: #ffffff;
+    color: #1a1830;
+    border: 1.5px solid {accent};
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+}}
+
+/* ── Cards / Frames ───────────────────────────────────────────────────── */
+QFrame {{
+    background-color: #ffffff;
+    border: 1px solid #e2ddf8;
+    border-radius: 12px;
+}}
+
+/* ── Inputs ───────────────────────────────────────────────────────────── */
+QLineEdit, QTextEdit, QPlainTextEdit {{
+    background-color: #ffffff;
+    color: #1a1830;
+    border: 1.5px solid #e2ddf8;
+    border-radius: 9px;
+    padding: 7px 12px;
+    selection-background-color: {accent};
+    selection-color: #ffffff;
+}}
+QLineEdit:hover, QTextEdit:hover, QPlainTextEdit:hover {{
+    border-color: #c8c0f0;
+}}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {{
+    border: 2px solid {accent};
+    background-color: #fff8f0;
+}}
+
+/* ── ComboBox ─────────────────────────────────────────────────────────── */
+QComboBox {{
+    background-color: #ffffff;
+    color: #1a1830;
+    border: 1.5px solid #e2ddf8;
+    border-radius: 9px;
+    padding: 6px 12px;
+    min-width: 80px;
+}}
+QComboBox:hover {{ border-color: #c8c0f0; }}
+QComboBox:focus {{ border: 2px solid {accent}; }}
+QComboBox::drop-down {{
+    border: none;
+    padding-right: 10px;
+}}
+QComboBox QAbstractItemView {{
+    background-color: #ffffff;
+    color: #1a1830;
+    border: 1.5px solid #e2ddf8;
+    border-radius: 8px;
+    selection-background-color: {accent};
+    selection-color: #ffffff;
+    padding: 4px;
+}}
+
+/* ── CheckBox ─────────────────────────────────────────────────────────── */
+QCheckBox {{ color: #1a1830; spacing: 8px; }}
+QCheckBox::indicator {{
+    width: 17px; height: 17px;
+    border: 2px solid #c8c0f0;
+    border-radius: 5px;
+    background: #ffffff;
+}}
+QCheckBox::indicator:hover {{ border-color: {accent}; }}
+QCheckBox::indicator:checked {{
+    background-color: {accent};
+    border-color: {accent};
+}}
+
+/* ── GroupBox ─────────────────────────────────────────────────────────── */
+QGroupBox {{
+    background-color: #f5f2ff;
+    border: 1.5px solid #e2ddf8;
+    border-radius: 12px;
+    margin-top: 14px;
+    padding-top: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #6b65a0;
+}}
+QGroupBox::title {{
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0 10px;
+    color: {accent};
+    font-weight: 700;
+    font-size: 12px;
+}}
+
+/* ── Progress bars  (vivid) ───────────────────────────────────────────── */
+QProgressBar {{
+    background-color: #ede9ff;
+    border: none;
+    border-radius: 5px;
     color: transparent;
-}
-QProgressBar::chunk {
-    background-color: #F5A623;
-    border-radius: 3px;
-}
+    height: 8px;
+}}
+QProgressBar::chunk {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {accent}, stop:1 {dim});
+    border-radius: 5px;
+}}
+
+/* ── Status bar ───────────────────────────────────────────────────────── */
+QStatusBar {{
+    background-color: #f0eeff;
+    color: #6b65a0;
+    border-top: 1px solid #e2ddf8;
+    font-size: 12px;
+}}
+
+/* ── Menu ─────────────────────────────────────────────────────────────── */
+QMenu {{
+    background-color: #ffffff;
+    color: #1a1830;
+    border: 1.5px solid #e2ddf8;
+    border-radius: 10px;
+    padding: 5px;
+}}
+QMenu::item {{
+    padding: 7px 22px;
+    border-radius: 6px;
+    font-size: 13px;
+}}
+QMenu::item:selected {{
+    background-color: #f0eeff;
+    color: {accent};
+    font-weight: 600;
+}}
+QMenu::separator {{
+    background-color: #e2ddf8;
+    height: 1px;
+    margin: 4px 10px;
+}}
+
+/* ── SpinBox ──────────────────────────────────────────────────────────── */
+QSpinBox, QDoubleSpinBox {{
+    background-color: #ffffff;
+    color: #1a1830;
+    border: 1.5px solid #e2ddf8;
+    border-radius: 7px;
+    padding: 5px 10px;
+}}
+QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {accent}; }}
+
+/* ── Slider ───────────────────────────────────────────────────────────── */
+QSlider::groove:horizontal {{
+    background: #e2ddf8;
+    height: 5px;
+    border-radius: 2px;
+}}
+QSlider::handle:horizontal {{
+    background: {accent};
+    width: 15px; height: 15px;
+    margin: -5px 0;
+    border-radius: 8px;
+}}
+QSlider::sub-page:horizontal {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {accent}, stop:1 {dim});
+    border-radius: 2px;
+}}
+
+/* ── Table / List views ───────────────────────────────────────────────── */
+QTableView, QListView, QTreeView {{
+    background-color: #ffffff;
+    alternate-background-color: #f8f6ff;
+    border: 1px solid #e2ddf8;
+    border-radius: 8px;
+    gridline-color: #f0eeff;
+    color: #1a1830;
+}}
+QHeaderView::section {{
+    background-color: #f0eeff;
+    color: #6b65a0;
+    border: none;
+    border-bottom: 2px solid {accent};
+    padding: 6px 10px;
+    font-weight: 600;
+    font-size: 12px;
+}}
+QTableView::item:selected, QListView::item:selected, QTreeView::item:selected {{
+    background-color: {accent};
+    color: #ffffff;
+    border-radius: 4px;
+}}
+
+/* ── Navigation panel ─────────────────────────────────────────────────── */
+#navigationPanel, #navigationWidget {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #ede9ff, stop:1 #fff4e6);
+    border-right: 1px solid #e2ddf8;
+}}
+
+/* ── Tab widget ───────────────────────────────────────────────────────── */
+QTabBar::tab {{
+    background: #f0eeff;
+    color: #6b65a0;
+    border: 1px solid #e2ddf8;
+    border-bottom: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    padding: 8px 18px;
+    font-weight: 500;
+    margin-right: 2px;
+}}
+QTabBar::tab:selected {{
+    background: #ffffff;
+    color: {accent};
+    font-weight: 700;
+    border-bottom: 3px solid {accent};
+}}
+QTabBar::tab:hover:!selected {{
+    background: #e8e3ff;
+    color: {accent};
+}}
+QTabWidget::pane {{
+    background-color: #ffffff;
+    border: 1px solid #e2ddf8;
+    border-radius: 0 8px 8px 8px;
+}}
+
+/* ── Push buttons ─────────────────────────────────────────────────────── */
+QPushButton {{
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 {accent}, stop:1 {dim});
+    color: #ffffff;
+    border: none;
+    border-radius: 9px;
+    padding: 8px 20px;
+    font-weight: 600;
+    font-size: 13px;
+}}
+QPushButton:hover {{
+    background: {dim};
+}}
+QPushButton:pressed {{
+    background: {_dim_hex(accent, 0.60)};
+}}
+QPushButton:disabled {{
+    background: #e2ddf8;
+    color: #b5b0d4;
+}}
+QPushButton[flat="true"] {{
+    background: transparent;
+    color: {accent};
+    border: 1.5px solid {accent};
+    border-radius: 9px;
+}}
+QPushButton[flat="true"]:hover {{
+    background: #f0eeff;
+}}
 """
 
-_OLED_QSS_OVERLAY: str = """
+
+def _build_oled_qss(accent: str) -> str:
+    return f"""
 /* ══════════════════════════════════════════════════════════════════════════
-   YTSpot OLED Overlay – true-black backgrounds for OLED screens
+   YTSpot OLED Theme  v3  (true-black for OLED displays)
    ══════════════════════════════════════════════════════════════════════════ */
 
-QWidget,
-QFrame,
-QScrollArea,
-QScrollArea > QWidget > QWidget,
-QMainWindow,
-QDialog,
-QDockWidget,
-QStackedWidget,
-QTabWidget,
-QTabWidget::pane {
+QWidget, QFrame, QScrollArea, QScrollArea > QWidget > QWidget,
+QMainWindow, QDialog, QDockWidget, QStackedWidget,
+QTabWidget, QTabWidget::pane {{
     background-color: #000000;
-}
+}}
 
-/* Keep card surfaces a hair off-black for legibility */
-QGroupBox,
-QListWidget,
-QListView,
-QTreeView,
-QTableView,
-QTableWidget {
+QGroupBox, QListWidget, QListView, QTreeView, QTableView, QTableWidget {{
     background-color: #0a0a0a;
     border-color: #1a1a1a;
-}
+}}
 
-#navigationPanel,
-#navigationWidget {
-    background-color: #000000;
-}
+#navigationPanel, #navigationWidget {{ background-color: #000000; }}
 
-QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {
+QLineEdit, QTextEdit, QPlainTextEdit, QComboBox {{
     background-color: #0a0a0a;
     border-color: #1e1e1e;
-}
+}}
+QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus,
+QComboBox:focus {{ border-color: {accent}; }}
 
-QScrollBar:vertical, QScrollBar:horizontal {
-    background-color: #000000;
-}
-QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
-    background-color: #2a2a2a;
-    border-radius: 3px;
-}
-QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
-    background-color: #F5A623;
-}
+QScrollBar:vertical, QScrollBar:horizontal {{ background-color: #000000; }}
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {{
+    background-color: #2a2a2a; border-radius: 3px;
+}}
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {{
+    background-color: {accent};
+}}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; height: 0; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; height: 0; }}
 
-QMenu {
-    background-color: #0a0a0a;
-    border-color: #1e1e1e;
-}
-QMenu::item:selected { background-color: #141414; }
+QMenu {{ background-color: #0a0a0a; border-color: #1e1e1e; }}
+QMenu::item:selected {{ background-color: #141414; color: {accent}; }}
 
-QToolTip {
+QToolTip {{
     background-color: #111111;
     color: #eeeef5;
-    border: 1px solid #F5A623;
+    border: 1px solid {accent};
     border-radius: 6px;
     padding: 5px 10px;
-}
+}}
 
-QProgressBar {
+QProgressBar {{
     background-color: #1a1a1a;
-    border: none;
-    border-radius: 3px;
-    color: transparent;
-}
-QProgressBar::chunk {
-    background-color: #F5A623;
-    border-radius: 3px;
-}
+    border: none; border-radius: 3px; color: transparent;
+}}
+QProgressBar::chunk {{ background-color: {accent}; border-radius: 3px; }}
+
+QPushButton {{
+    background-color: {accent};
+    color: #000000;
+    border: none; border-radius: 8px;
+    padding: 8px 18px; font-weight: 600;
+}}
+QPushButton:hover {{ background-color: {_dim_hex(accent)}; }}
 """
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Cycle order
-# ──────────────────────────────────────────────────────────────────────────────
-
-_CYCLE_ORDER: list[str] = ["dark", "light", "oled"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -504,19 +670,30 @@ _CYCLE_ORDER: list[str] = ["dark", "light", "oled"]
 
 class ThemeManager:
     """
-    Manages Dark / Light / OLED theme switching for the application.
+    Manages Dark / Light / OLED theme switching with dynamic accent colours.
 
     Parameters
     ----------
     config : AppConfig
-        The live application config instance.  ThemeManager reads the initial
-        theme from config.theme and writes back on every change.
+        Live application config.  ThemeManager reads config.theme on init
+        and writes it back on every change.
+
+    Usage
+    -----
+    >>> tm = ThemeManager(config)
+    >>> tm.apply("light")
+    >>> tm.set_accent("Violet")          # named palette entry
+    >>> tm.set_accent("#ff6b6b")         # arbitrary hex
+    >>> tm.cycle()                        # rotate dark→light→oled→dark
     """
 
     def __init__(self, config: AppConfig) -> None:
         self._config  = config
         self._current = config.theme
-        self._set_accent()
+        # Resolve initial accent: prefer saved config value, else brand default
+        saved_accent = getattr(config, "accent_color", None)
+        self._accent  = saved_accent if saved_accent else ACCENT_COLOR
+        self._apply_fluent()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -524,27 +701,57 @@ class ThemeManager:
     def current(self) -> str:
         return self._current
 
+    @property
+    def accent(self) -> str:
+        return self._accent
+
     def apply(self, theme_name: str) -> None:
-        """Switch to theme_name immediately and persist."""
+        """Switch to theme_name immediately and persist to config."""
         if theme_name not in ("dark", "light", "oled"):
             theme_name = "dark"
-
         self._current = theme_name
-
-        fluent_theme = Theme.LIGHT if theme_name == "light" else Theme.DARK
-        setTheme(fluent_theme)
-        self._set_accent()
-        self._apply_qss(theme_name)
-
+        self._apply_fluent()
+        self._apply_qss()
         self._config.theme = theme_name
         self._config.save()
 
     def cycle(self) -> str:
         """Advance to the next theme (dark → light → oled → dark) and apply."""
-        idx  = _CYCLE_ORDER.index(self._current) if self._current in _CYCLE_ORDER else 0
+        try:
+            idx = _CYCLE_ORDER.index(self._current)
+        except ValueError:
+            idx = 0
         next_theme = _CYCLE_ORDER[(idx + 1) % len(_CYCLE_ORDER)]
         self.apply(next_theme)
         return next_theme
+
+    def set_accent(self, name_or_hex: str) -> None:
+        """
+        Change the active accent colour and rebuild all QSS immediately.
+
+        Parameters
+        ----------
+        name_or_hex : A key from ACCENT_PALETTE (e.g. "Violet") or any valid
+                      hex string (e.g. "#7c3aed").  Both "#" and bare hex
+                      strings are accepted.
+        """
+        if name_or_hex in ACCENT_PALETTE:
+            resolved = ACCENT_PALETTE[name_or_hex]
+        elif name_or_hex.startswith("#") and len(name_or_hex) in (4, 7):
+            resolved = name_or_hex
+        elif len(name_or_hex) in (3, 6):
+            resolved = f"#{name_or_hex}"
+        else:
+            return   # invalid – ignore silently
+
+        self._accent = resolved
+        # Persist if AppConfig has the field
+        if hasattr(self._config, "accent_color"):
+            self._config.accent_color = resolved
+            self._config.save()
+
+        self._apply_fluent()
+        self._apply_qss()
 
     def theme_display_label(self) -> str:
         return {"dark": "🌙  Dark", "light": "☀️  Light", "oled": "⚫  OLED"}.get(
@@ -552,10 +759,13 @@ class ThemeManager:
         )
 
     def next_theme_label(self) -> str:
-        idx  = _CYCLE_ORDER.index(self._current) if self._current in _CYCLE_ORDER else 0
-        next_theme = _CYCLE_ORDER[(idx + 1) % len(_CYCLE_ORDER)]
+        try:
+            idx = _CYCLE_ORDER.index(self._current)
+        except ValueError:
+            idx = 0
+        nxt = _CYCLE_ORDER[(idx + 1) % len(_CYCLE_ORDER)]
         return {"dark": "🌙  Dark", "light": "☀️  Light", "oled": "⚫  OLED"}.get(
-            next_theme, "🌙  Dark"
+            nxt, "🌙  Dark"
         )
 
     def is_dark_variant(self) -> bool:
@@ -563,20 +773,23 @@ class ThemeManager:
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
-    def _set_accent(self) -> None:
-        setThemeColor(ACCENT_COLOR)
+    def _apply_fluent(self) -> None:
+        """Sync QFluentWidgets built-in theme + accent colour."""
+        fluent_theme = Theme.LIGHT if self._current == "light" else Theme.DARK
+        setTheme(fluent_theme)
+        setThemeColor(self._accent)
 
-    @staticmethod
-    def _apply_qss(theme_name: str) -> None:
+    def _apply_qss(self) -> None:
+        """Rebuild and apply the QSS overlay for the current theme + accent."""
         app = QApplication.instance()
         if app is None:
             return
 
-        if theme_name == "oled":
-            qss = _DARK_QSS_OVERLAY + _OLED_QSS_OVERLAY
-        elif theme_name == "light":
-            qss = _LIGHT_QSS_OVERLAY
+        if self._current == "oled":
+            qss = _build_dark_qss(self._accent) + _build_oled_qss(self._accent)
+        elif self._current == "light":
+            qss = _build_light_qss(self._accent)
         else:
-            qss = _DARK_QSS_OVERLAY
+            qss = _build_dark_qss(self._accent)
 
         app.setStyleSheet(qss)

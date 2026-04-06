@@ -50,8 +50,8 @@ class FetchWorker(QThread):
 
     # ── Signals ───────────────────────────────────────────────────────────────
 
-    track_found  = Signal(dict)     # One track; keys: index, title, artist,
-                                    # duration, platform, thumbnail_url, track_url
+    track_found  = Signal(dict, int, int)     # One track; keys: title, artist,
+                                            # duration, platform, thumbnail_url, track_url
     progress_msg = Signal(str)      # Status bar message
     soft_error   = Signal(str)      # Non-fatal per-item warning
     finished     = Signal(object)   # ParseResult  (always emitted on clean exit)
@@ -95,7 +95,6 @@ class FetchWorker(QThread):
         def on_item(track: TrackMeta, idx: int, total: Optional[int]) -> None:
             """Called by PlaylistParser for every resolved track."""
             self.track_found.emit({
-                "index":         track.index,
                 "title":         track.title,
                 "artist":        track.artist,
                 "duration":      track.duration_str,
@@ -103,7 +102,7 @@ class FetchWorker(QThread):
                 "thumbnail_url": track.thumbnail_url,
                 "track_url":     track.url,
                 "album":         track.album,
-            })
+            }, idx, total or 0)
 
         def on_progress(msg: str) -> None:
             """Called by PlaylistParser with status messages."""

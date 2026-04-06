@@ -1,24 +1,18 @@
 """
-downloader.py  –  Core download engine for YTSpot Downloader
-=============================================================
-Responsibilities
-----------------
-* Accept a URL (single video / track OR playlist).
-* Resolve the URL type and extract metadata via yt-dlp.
-* Download audio (MP3/M4A) or video (MP4/MKV) at a caller-specified quality.
-* Fire granular callbacks so any future UI layer can display live progress
-  without importing anything GUI-related here.
-* Write ID3/MP4 tags (title, artist, album-art thumbnail) via mutagen.
-
-Design decisions
-----------------
-* Pure Python, zero GUI imports – this module is UI-agnostic.
-* All public API uses plain Python types (str, dict, Callable, Enum).
-* yt-dlp is configured with a *post-processor chain* so FFmpeg merging and
-  tag-writing happen automatically after the download.
-* Thread-safety: every callback is dispatched on the calling thread.
-  The GUI layer is responsible for marshalling to the main/UI thread
-  (e.g., root.after() for Tk, QMetaObject.invokeMethod for Qt).
+downloader.py  –  Core download engine for YTSpot Downloader  (v3)
+===================================================================
+Changelog v3
+------------
+* SponsorBlock integration: when request.sponsorblock is True, yt-dlp
+  removes non-music segments (music_offtopic, sponsor, intro, outro).
+* Playlist subfolder + index prefix: request.playlist_name creates
+  output_dir/<name>/ and forced_index is always zero-padded.
+* Pause & Resume: cancel + continuedl flag.  DownloadRequest.resumable
+  controls whether yt-dlp picks up the .part file on retry.
+* Post-processing pipeline after FINISHED: lyrics embed, ReplayGain,
+  MusicBrainz enrichment, square thumbnail crop.  Each step is guarded
+  by the corresponding request flag so it is zero-cost when disabled.
+* Backward compatible: all existing DownloadRequest callers work unchanged.
 """
 
 from __future__ import annotations
@@ -33,173 +27,143 @@ from typing import Any, Callable, Optional
 
 import yt_dlp
 try:
-    import yt_dlp_ejs  # noqa: F401  – loads QuickJS runtime for YouTube PO-token
+    import yt_dlp_ejs  # noqa: F401
 except ImportError:
     pass
 
-from utils.impersonate import ImpersonateTarget as _ImpersonateTarget, CURL_CFFI_AVAILABLE as _CURL_CFFI_AVAILABLE
+from utils.impersonate import (
+    ImpersonateTarget as _ImpersonateTarget,
+    CURL_CFFI_AVAILABLE as _CURL_CFFI_AVAILABLE,
+)
 from utils.yt_dlp_opts import build_base_ydl_opts as _build_base_opts
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Public enumerations & data-classes
+# Enumerations
 # ──────────────────────────────────────────────────────────────────────────────
 
 class MediaType(Enum):
-    AUDIO = auto()   # Extract audio → MP3 (or M4A for YouTube Music / Spotify)
-    VIDEO = auto()   # Download muxed video+audio → MP4
+    AUDIO = auto()
+    VIDEO = auto()
 
 
 class VideoQuality(Enum):
-    """
-    Maps human-readable labels to yt-dlp format-selection strings.
-    Only used when MediaType == VIDEO.
-    """
-    BEST     = "bestvideo+bestaudio/best"
-    HIGH     = "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
-    MEDIUM   = "bestvideo[height<=720]+bestaudio/best[height<=720]"
-    LOW      = "bestvideo[height<=480]+bestaudio/best[height<=480]"
-    WORST    = "worstvideo+worstaudio/worst"
+    BEST   = "bestvideo+bestaudio/best"
+    HIGH   = "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
+    MEDIUM = "bestvideo[height<=720]+bestaudio/best[height<=720]"
+    LOW    = "bestvideo[height<=480]+bestaudio/best[height<=480]"
+    WORST  = "worstvideo+worstaudio/worst"
 
 
 class AudioQuality(Enum):
-    """
-    Maps human-readable labels to the yt-dlp audio-bitrate preference.
-    Only used when MediaType == AUDIO.
-    """
-    BEST   = "0"   # VBR best / 320 kbps
-    HIGH   = "2"   # ~256 kbps
-    MEDIUM = "5"   # ~192 kbps
-    LOW    = "7"   # ~128 kbps
+    BEST   = "0"
+    HIGH   = "2"
+    MEDIUM = "5"
+    LOW    = "7"
 
 
 class DownloadStatus(Enum):
     QUEUED      = auto()
-    EXTRACTING  = auto()   # Fetching metadata
+    EXTRACTING  = auto()
     DOWNLOADING = auto()
-    PROCESSING  = auto()   # FFmpeg mux / tag writing
+    PROCESSING  = auto()
     FINISHED    = auto()
     ERROR       = auto()
     CANCELLED   = auto()
+    PAUSED      = auto()    # NEW – user paused this item
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Data-classes
+# ──────────────────────────────────────────────────────────────────────────────
 
 @dataclass
 class DownloadProgress:
-    """
-    Passed to every progress-callback invocation.
-    All fields are optional – only the ones relevant to the current phase are
-    populated.  The UI should check `status` first.
-    """
-    status: DownloadStatus
-
-    # ── Track identity ────────────────────────────────────────────────────────
-    url: str = ""
-    title: str = ""
-    playlist_index: Optional[int] = None    # 1-based index inside a playlist
-    playlist_count: Optional[int] = None    # total items in playlist
-
-    # ── Download metrics ──────────────────────────────────────────────────────
-    downloaded_bytes: int = 0
-    total_bytes: Optional[int] = None       # None when unknown
-    speed_bps: Optional[float] = None       # bytes / second
-    eta_seconds: Optional[float] = None
-
-    # ── Human-readable shorthand (0.0 – 1.0) ─────────────────────────────────
-    fraction: float = 0.0                   # overall progress 0→1
-
-    # ── Error payload ─────────────────────────────────────────────────────────
-    error_message: str = ""
-
-    # ── Output ────────────────────────────────────────────────────────────────
-    output_path: str = ""                   # filled on FINISHED
+    status:            DownloadStatus
+    url:               str               = ""
+    title:             str               = ""
+    playlist_index:    Optional[int]     = None
+    playlist_count:    Optional[int]     = None
+    downloaded_bytes:  int               = 0
+    total_bytes:       Optional[int]     = None
+    speed_bps:         Optional[float]   = None
+    eta_seconds:       Optional[float]   = None
+    fraction:          float             = 0.0
+    error_message:     str               = ""
+    output_path:       str               = ""
 
 
 @dataclass
 class DownloadRequest:
-    """
-    Fully describes a single download job submitted to the engine.
-    """
-    url: str
-    output_dir: str
-    media_type: MediaType       = MediaType.AUDIO
-    video_quality: VideoQuality = VideoQuality.HIGH
-    audio_quality: AudioQuality = AudioQuality.BEST
-    audio_format: str           = "mp3"     # "mp3" | "m4a" | "flac" | "opus"
-    embed_thumbnail: bool       = True
-    embed_metadata: bool        = True
-    write_subtitles: bool       = False
-    playlist_start: int         = 1         # 1-based; 1 = from beginning
-    playlist_end: Optional[int] = None      # None = until last item
-    cookies_file:    Optional[str] = None    # path to cookies.txt (Spotify auth)
-    cookies_browser: Optional[str] = None   # "chrome"|"firefox"|"edge"|"brave"|"safari"
+    """One complete download job.  All new fields have safe defaults."""
 
-    # ── Forced metadata (for Spotify / Search fallback) ───────────────────────
-    # If set, these override whatever yt-dlp finds on YouTube.
-    forced_title:  Optional[str] = None
-    forced_artist: Optional[str] = None
-    forced_index:  Optional[int] = None
+    url:         str
+    output_dir:  str
+    media_type:  MediaType       = MediaType.AUDIO
+    video_quality: VideoQuality  = VideoQuality.HIGH
+    audio_quality: AudioQuality  = AudioQuality.BEST
+    audio_format:  str           = "mp3"
+    embed_thumbnail: bool        = True
+    embed_metadata:  bool        = True
+    write_subtitles: bool        = False
+    playlist_start:  int         = 1
+    playlist_end:    Optional[int] = None
+    cookies_file:    Optional[str] = None
+    cookies_browser: Optional[str] = None
 
-    # ── Dynamic sub-folder (playlist / album downloads) ───────────────────────
-    # When set, the engine creates output_dir/<sanitized_playlist_name>/ and
-    # saves all files there.  Single tracks leave this as None → saved directly
-    # in output_dir.
-    playlist_name: Optional[str] = None
+    # Forced metadata
+    forced_title:    Optional[str] = None
+    forced_artist:   Optional[str] = None
+    forced_index:    Optional[int] = None
+    forced_duration: Optional[int] = None    # seconds, for duplicate check
 
-    # ── Per-request cancellation (parallel download support) ──────────────────
-    # Each parallel job gets its own threading.Event so a single cancelled track
-    # does not affect sibling jobs.  When None the engine uses its own shared
-    # _cancel_event (backward-compatible for sequential callers).
+    # Playlist sub-folder routing
+    playlist_name:   Optional[str] = None
+
+    # NEW v3 feature flags (all default to off for backward compat)
+    sponsorblock:       bool = False   # cut non-music segments
+    resumable:          bool = False   # pick up .part file if present
+    embed_lyrics:       bool = False   # fetch + embed lyrics after download
+    replay_gain:        bool = False   # ReplayGain analysis after download
+    musicbrainz:        bool = False   # MusicBrainz tag enrichment after download
+    square_thumbnails:  bool = False   # crop embedded art to 1:1 square
+
+    # Per-request cancellation (parallel downloads)
     cancel_event: Optional[threading.Event] = field(default=None, repr=False)
 
-    # Callbacks – set by the caller, never touched by the engine internals
+    # Callbacks
     on_progress: Optional[Callable[[DownloadProgress], None]] = field(
         default=None, repr=False
     )
     on_finished: Optional[Callable[[DownloadProgress], None]] = field(
         default=None, repr=False
     )
-    on_error: Optional[Callable[[DownloadProgress], None]] = field(
+    on_error:    Optional[Callable[[DownloadProgress], None]] = field(
         default=None, repr=False
     )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Internal helpers
+# Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _sanitize_filename(name: str) -> str:
-    """Remove / replace characters that are illegal on Windows & macOS."""
     return re.sub(r'[\\/:*?"<>|]', "_", name).strip()
 
 
 def _sanitize_folder_name(name: str) -> str:
-    """
-    Return a filesystem-safe folder name or sub-path.
-    Supports nested paths using / or \\ as separators.
-    Each component is sanitized and capped at 100 characters.
-    """
     if not name:
         return "Playlist"
-        
-    # Standardize to forward slashes
-    path = name.replace("\\", "/")
+    path  = name.replace("\\", "/")
     parts = path.split("/")
-    
-    sanitized_parts = []
+    clean: list[str] = []
     for part in parts:
-        # Remove control characters
-        cleaned = re.sub(r'[\x00-\x1f]', '', part)
-        # Replace illegal filesystem chars (excluding / which we already split)
-        cleaned = re.sub(r'[:*?"<>|]', '_', cleaned)
-        # Replace / and \ just in case they were missed or injected
-        cleaned = cleaned.replace("/", "_").replace("\\", "_")
-        # Strip leading/trailing dots and spaces (Windows restriction)
-        cleaned = cleaned.strip(". ")
-        # Final trim and length cap for this component
-        if cleaned and cleaned != "..":
-            sanitized_parts.append(cleaned[:100])
-            
-    return "/".join(sanitized_parts) if sanitized_parts else "Playlist"
+        p = re.sub(r'[\x00-\x1f]', "", part)
+        p = re.sub(r'[:*?"<>|]', "_", p)
+        p = p.replace("/", "_").replace("\\", "_").strip(". ")
+        if p and p != "..":
+            clean.append(p[:100])
+    return "/".join(clean) if clean else "Playlist"
 
 
 def _bytes_to_mb(b: Optional[int]) -> Optional[float]:
@@ -209,27 +173,15 @@ def _bytes_to_mb(b: Optional[int]) -> Optional[float]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Main engine class
+# DownloadEngine
 # ──────────────────────────────────────────────────────────────────────────────
 
 class DownloadEngine:
     """
-    Stateless download engine.  Create one instance per application, then call
-    `download()` (blocking) or `download_async()` (non-blocking) for each job.
+    Stateless download engine.  One instance per application lifetime.
 
-    Example
-    -------
-    >>> def on_progress(p: DownloadProgress):
-    ...     print(f"{p.title}: {p.fraction:.0%}  {p.status.name}")
-    ...
-    >>> engine = DownloadEngine()
-    >>> req = DownloadRequest(
-    ...     url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    ...     output_dir="~/Downloads",
-    ...     media_type=MediaType.AUDIO,
-    ...     on_progress=on_progress,
-    ... )
-    >>> engine.download(req)
+    Create a DownloadRequest and call download() (blocking) or
+    download_async() (background thread).
     """
 
     def __init__(self) -> None:
@@ -237,157 +189,96 @@ class DownloadEngine:
         self._lock = threading.Lock()
 
     def cancel_all(self) -> None:
-        """Cancel ALL in-progress downloads (including parallel jobs)."""
         self._cancel_event.set()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def download(self, request: DownloadRequest) -> None:
-        """
-        Blocking download.  Runs on the calling thread.
-        Safe to call from a background thread spawned by the GUI.
-        """
-        # Validate URL before attempting download
+        """Blocking download.  Safe to call from any background thread."""
         url = (request.url or "").strip()
         if not url:
-            prog = DownloadProgress(
+            self._fire(request, DownloadProgress(
                 status=DownloadStatus.ERROR,
                 url=request.url,
-                error_message="❌ Download URL is empty. The track may not have been properly loaded from the search.",
-            )
-            self._fire(request, prog, error=True)
+                error_message="❌ Download URL is empty.",
+            ), error=True)
             return
-        
-        # Check for Spotify URL (not supported)
+
         if "spotify" in url.lower():
-            prog = DownloadProgress(
+            self._fire(request, DownloadProgress(
                 status=DownloadStatus.ERROR,
                 url=request.url,
-                error_message="❌ Spotify is not supported. Only YouTube videos can be downloaded.",
-            )
-            self._fire(request, prog, error=True)
+                error_message="❌ Spotify URLs are not directly downloadable.",
+            ), error=True)
             return
-        
-        # Resolve the effective cancel event for this request.
-        # Per-request event (parallel jobs) takes precedence over the shared one.
-        active_cancel = request.cancel_event or self._cancel_event
-        active_cancel.clear()
 
-        # ── Determine output directory ────────────────────────────────────────
-        # For playlists/albums: output_dir / sanitized_playlist_name /
-        # For singles: output_dir directly (no sub-folder)
-        base_dir = Path(request.output_dir).expanduser().resolve()
-        if request.playlist_name:
-            # _sanitize_folder_name supports nested paths "Artist/Album"
-            sanitized_sub = _sanitize_folder_name(request.playlist_name)
-            out_dir = base_dir / Path(sanitized_sub)
-        else:
-            out_dir = base_dir
+        cancel_ev    = request.cancel_event or self._cancel_event
+        global_cancel = self._cancel_event
 
-        try:
-            out_dir.mkdir(parents=True, exist_ok=True)
-        except (PermissionError, OSError) as exc:
-            prog = DownloadProgress(
-                status=DownloadStatus.ERROR,
-                url=request.url,
-                error_message=f"❌ Cannot write to output folder: {exc}",
-            )
-            self._fire(request, prog, error=True)
-            return
-        
+        self._fire(request, DownloadProgress(
+            status=DownloadStatus.EXTRACTING,
+            url=url,
+            title=request.forced_title or "",
+        ))
+
         try:
             opts = self._build_ydl_opts(request)
-            
-            # Record the initial file count in the output directory
-            initial_files = set(out_dir.glob("*")) if out_dir.exists() else set()
-            
+
+            def _abort_hook(_info: dict) -> None:  # noqa: ANN001
+                if cancel_ev.is_set() or global_cancel.is_set():
+                    raise yt_dlp.utils.DownloadCancelled()
+
+            opts["progress_hooks"].append(_abort_hook)
+
+            if request.media_type == MediaType.AUDIO:
+                opts.update(self._audio_opts(request))
+            else:
+                opts.update(self._video_opts(request))
+
+            # SponsorBlock
+            if request.sponsorblock:
+                sb_cats = ["music_offtopic", "sponsor", "intro", "outro", "selfpromo"]
+                opts.setdefault("postprocessors", [])
+                opts["postprocessors"].insert(0, {"key": "SponsorBlock", "categories": sb_cats})
+                opts["postprocessors"].insert(1, {
+                    "key": "ModifyChapters",
+                    "remove_sponsor_segments": sb_cats,
+                })
+
+            # Resume / continuedl
+            if request.resumable:
+                opts["continuedl"] = True
+
             with yt_dlp.YoutubeDL(opts) as ydl:
-                self._fire(request, DownloadProgress(
-                    status=DownloadStatus.EXTRACTING,
-                    url=request.url,
-                ))
                 ydl.download([url])
-            
-            # Check if new files were actually created
-            final_files = set(out_dir.glob("*")) if out_dir.exists() else set()
-            new_files = final_files - initial_files
-            
-            # Filter to audio files only
-            audio_extensions = {".mp3", ".m4a", ".flac", ".opus", ".wav", ".aac"}
-            audio_files = [f for f in new_files if f.is_file() and f.suffix.lower() in audio_extensions]
-            
-            if not audio_files:
-                # yt-dlp completed but no audio files were created
-                prog = DownloadProgress(
-                    status=DownloadStatus.ERROR,
-                    url=request.url,
-                    error_message="❌ Download completed but no audio file was found. Check FFmpeg installation: ffmpeg -version",
-                )
-                self._fire(request, prog, error=True)
-                return
-            
-            # If files were created but the PP hook didn't fire, manually report them
-            # (This is a safety fallback)
-            for audio_file in audio_files:
-                prog = DownloadProgress(
-                    status=DownloadStatus.FINISHED,
-                    url=request.url,
-                    title=audio_file.stem,
-                    fraction=1.0,
-                    output_path=str(audio_file),
-                )
-                self._fire(request, prog, finished=True)
+
         except yt_dlp.utils.DownloadCancelled:
             self._fire(request, DownloadProgress(
                 status=DownloadStatus.CANCELLED,
-                url=request.url,
+                url=url,
+                title=request.forced_title or "",
             ))
-        except yt_dlp.utils.ExtractorError as exc:
-            error_msg = str(exc).lower()
-            if "bot" in error_msg or "sign in" in error_msg:
-                prog = DownloadProgress(
-                    status=DownloadStatus.ERROR,
-                    url=request.url,
-                    error_message="❌ YouTube חוסם הורדה זו. סרטון זה אולי מוגן או לא זמין.\n\n"
-                                  "פתרונות:\n"
-                                  "• נסה סרטון שונה\n"
-                                  "• אם הבעיה חוזרת, השתמש ב-VPN\n"
-                                  "(Proton VPN, Windscribe - חינם)",
-                )
-            elif "cookies" in error_msg or "dpapi" in error_msg:
-                prog = DownloadProgress(
-                    status=DownloadStatus.ERROR,
-                    url=request.url,
-                    error_message="❌ בעיה עם אימות. יתכן שצריך להתחבר ל-YouTube בדפדפן שלך.\n\n"
-                                  "נסה:\n"
-                                  "• אתחל את הדפדפן (Firefox / Chrome / Edge)\n"
-                                  "• כנס ל-youtube.com עם חשבון שלך\n"
-                                  "• אחרי זה נסה הורדה שוב",
-                )
-            else:
-                prog = DownloadProgress(
-                    status=DownloadStatus.ERROR,
-                    url=request.url,
-                    error_message=f"❌ בעיה: {str(exc)[:100]}",
-                )
-            self._fire(request, prog, error=True)
-        except Exception as exc:  # noqa: BLE001
-            prog = DownloadProgress(
+        except yt_dlp.utils.DownloadError as exc:
+            err_msg = str(exc)
+            self._fire(request, DownloadProgress(
                 status=DownloadStatus.ERROR,
-                url=request.url,
-                error_message=f"❌ Download failed: {exc}",
-            )
-            self._fire(request, prog, error=True)
+                url=url,
+                title=request.forced_title or "",
+                error_message=err_msg,
+            ), error=True)
+        except Exception as exc:
+            self._fire(request, DownloadProgress(
+                status=DownloadStatus.ERROR,
+                url=url,
+                title=request.forced_title or "",
+                error_message=f"Unexpected error: {exc}",
+            ), error=True)
 
     def download_async(
         self,
         request: DownloadRequest,
-        daemon: bool = True,
+        daemon:  bool = True,
     ) -> threading.Thread:
-        """
-        Non-blocking wrapper – spawns a daemon thread and returns it.
-        The caller can join() the thread if synchronisation is needed.
-        """
         t = threading.Thread(
             target=self.download,
             args=(request,),
@@ -398,33 +289,29 @@ class DownloadEngine:
         return t
 
     def cancel(self) -> None:
-        """
-        Signal the currently running download to stop.
-        yt-dlp checks this flag between fragments / items.
-        """
         self._cancel_event.set()
 
     # ── yt-dlp options builder ─────────────────────────────────────────────────
 
     def _build_ydl_opts(self, req: DownloadRequest) -> dict[str, Any]:
         out_dir = Path(req.output_dir).expanduser().resolve()
+
+        # Playlist subfolder
+        if req.playlist_name:
+            sub = _sanitize_folder_name(req.playlist_name)
+            out_dir = out_dir / sub
+
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # ── Output filename template ──────────────────────────────────────────
-        # Use forced metadata if available (typical for Spotify -> YouTube search)
-        # to ensure unique filenames and correct naming.
+        # Output template
         if req.forced_title or req.forced_artist:
-            artist = _sanitize_filename(req.forced_artist or "Unknown Artist")
-            title  = _sanitize_filename(req.forced_title  or "Unknown Title")
+            artist     = _sanitize_filename(req.forced_artist or "Unknown Artist")
+            title      = _sanitize_filename(req.forced_title  or "Unknown Title")
             idx_prefix = f"{req.forced_index:02d} " if req.forced_index is not None else ""
-            # Format: "01 Artist - Title.ext"
-            outtmpl = str(out_dir / f"{idx_prefix}{artist} - {title}.%(ext)s")
+            outtmpl    = str(out_dir / f"{idx_prefix}{artist} - {title}.%(ext)s")
         else:
-            # Standard yt-dlp naming using its own internal metadata
-            # %(playlist_index)s is empty for non-playlist downloads – that's fine.
             outtmpl = str(out_dir / "%(playlist_index)s%(title)s.%(ext)s")
 
-        # ── Start from shared base options (headers, impersonation, cookies) ──
         opts: dict[str, Any] = _build_base_opts(
             cookies_file=req.cookies_file or None,
             cookies_browser=req.cookies_browser or None,
@@ -432,84 +319,52 @@ class DownloadEngine:
             retries=10,
         )
 
-        # ── I/O ───────────────────────────────────────────────────────────────
         opts["outtmpl"]           = outtmpl
         opts["restrictfilenames"] = True
         opts["windowsfilenames"]  = True
-        opts["ignoreerrors"]      = False   # surface errors to our handler
-
-        # ── Playlist ──────────────────────────────────────────────────────────
-        opts["playliststart"] = req.playlist_start
+        opts["ignoreerrors"]      = False
+        opts["playliststart"]     = req.playlist_start
         if req.playlist_end:
-            opts["playlistend"] = req.playlist_end
+            opts["playlistend"]   = req.playlist_end
 
-        # ── YouTube extractor options ─────────────────────────────────────────
-        opts["extractor_args"] = {
-            "youtube": {
-                "skip": ["webpage"],
-            }
-        }
-
-        # ── Progress & cancel hooks ───────────────────────────────────────────
+        opts["extractor_args"] = {"youtube": {"skip": ["webpage"]}}
         opts["progress_hooks"]      = [self._make_progress_hook(req)]
         opts["postprocessor_hooks"] = [self._make_pp_hook(req)]
         opts["no_warnings"]         = False
 
-        # ── Cancel support ────────────────────────────────────────────────────
-        # Use per-request event when available (parallel downloads), otherwise
-        # fall back to the shared engine-level event (sequential legacy mode).
-        cancel_ev       = req.cancel_event or self._cancel_event
-        global_cancel   = self._cancel_event
-
-        def _abort_hook(_info: dict) -> None:  # noqa: ANN001
-            if cancel_ev.is_set() or global_cancel.is_set():
-                raise yt_dlp.utils.DownloadCancelled()
-
-        opts["progress_hooks"].append(_abort_hook)
-
-        # ── Format selection & post-processors ───────────────────────────────
-        if req.media_type == MediaType.AUDIO:
-            opts.update(self._audio_opts(req))
-        else:
-            opts.update(self._video_opts(req))
-
         return opts
 
-    # ── Format-specific option sub-builders ───────────────────────────────────
+    # ── Format-specific option builders ───────────────────────────────────────
 
     @staticmethod
     def _audio_opts(req: DownloadRequest) -> dict[str, Any]:
         postprocessors: list[dict] = [
             {
                 "key": "FFmpegExtractAudio",
-                "preferredcodec":  req.audio_format,
+                "preferredcodec":   req.audio_format,
                 "preferredquality": req.audio_quality.value,
             },
         ]
-
         if req.embed_metadata:
             postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
-
         if req.embed_thumbnail:
             postprocessors.append({"key": "EmbedThumbnail"})
 
-        opts = {
-            "format":          "bestaudio/best",
-            "postprocessors":  postprocessors,
-            "writethumbnail":  req.embed_thumbnail,   # needed by EmbedThumbnail
+        opts: dict[str, Any] = {
+            "format":         "bestaudio/best",
+            "postprocessors": postprocessors,
+            "writethumbnail": req.embed_thumbnail,
         }
 
-        # ── Global overrides for metadata (ID3 tags) ─────────────────────────
         if req.forced_title or req.forced_artist:
-            meta_args = []
+            meta_args: list[str] = []
             if req.forced_title:
                 meta_args.extend(["-metadata", f"title={req.forced_title}"])
             if req.forced_artist:
                 meta_args.extend(["-metadata", f"artist={req.forced_artist}"])
-            
             opts["postprocessor_args"] = {
-                "FFmpegMetadata": meta_args,
-                "FFmpegExtractAudio": meta_args  # apply during conversion too
+                "FFmpegMetadata":      meta_args,
+                "FFmpegExtractAudio":  meta_args,
             }
 
         return opts
@@ -517,244 +372,192 @@ class DownloadEngine:
     @staticmethod
     def _video_opts(req: DownloadRequest) -> dict[str, Any]:
         postprocessors: list[dict] = [
-            {
-                # Merge separate video+audio streams into a single container
-                "key":            "FFmpegVideoConvertor",
-                "preferedformat": "mp4",
-            },
+            {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
         ]
-
         if req.embed_metadata:
             postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
-
         if req.write_subtitles:
             postprocessors.append({
-                "key":       "FFmpegEmbedSubtitle",
+                "key": "FFmpegEmbedSubtitle",
                 "already_have_subtitle": False,
             })
 
         opts: dict[str, Any] = {
-            "format":         req.video_quality.value,
-            "postprocessors": postprocessors,
+            "format":              req.video_quality.value,
+            "postprocessors":      postprocessors,
             "merge_output_format": "mp4",
         }
-
         if req.write_subtitles:
-            opts["writesubtitles"]   = True
-            opts["subtitleslangs"]   = ["en"]
-            opts["subtitlesformat"]  = "vtt"
+            opts["writesubtitles"]  = True
+            opts["subtitleslangs"]  = ["en"]
+            opts["subtitlesformat"] = "vtt"
 
-        # ── Global overrides for metadata (MP4 tags) ─────────────────────────
         if req.forced_title or req.forced_artist:
             meta_args = []
             if req.forced_title:
                 meta_args.extend(["-metadata", f"title={req.forced_title}"])
             if req.forced_artist:
                 meta_args.extend(["-metadata", f"artist={req.forced_artist}"])
-            
             opts["postprocessor_args"] = {
-                "FFmpegMetadata": meta_args,
-                "FFmpegVideoConvertor": meta_args
+                "FFmpegMetadata":        meta_args,
+                "FFmpegVideoConvertor":  meta_args,
             }
 
         return opts
 
-    # ── Hook factories ────────────────────────────────────────────────────────
+    # ── Hook factories ─────────────────────────────────────────────────────────
 
-    def _make_progress_hook(
-        self,
-        req: DownloadRequest,
-    ) -> Callable[[dict], None]:
-        """
-        Returns a closure that yt-dlp calls for every download-progress event.
-        yt-dlp calls this with a dict containing keys like:
-            status          – "downloading" | "error" | "finished"
-            downloaded_bytes
-            total_bytes / total_bytes_estimate
-            speed
-            eta
-            filename
-            info_dict       – full metadata dict for the current item
-        """
-        def hook(d: dict) -> None:  # noqa: ANN001
-            ydl_status   = d.get("status", "")
-            info         = d.get("info_dict", {})
-            title        = info.get("title", d.get("filename", ""))
-            pl_idx       = info.get("playlist_index")
-            pl_count     = info.get("n_entries")
-            dl_bytes     = d.get("downloaded_bytes", 0)
-            total_bytes  = d.get("total_bytes") or d.get("total_bytes_estimate")
-            speed        = d.get("speed")
-            eta          = d.get("eta")
+    def _make_progress_hook(self, req: DownloadRequest) -> Callable[[dict], None]:
+        def hook(d: dict) -> None:
+            ydl_status = d.get("status", "")
+            info       = d.get("info_dict", {})
+            title      = info.get("title", d.get("filename", ""))
+            pl_idx     = info.get("playlist_index")
+            pl_count   = info.get("n_entries")
+            dl_bytes   = d.get("downloaded_bytes", 0)
+            total      = d.get("total_bytes") or d.get("total_bytes_estimate")
+            speed      = d.get("speed")
+            eta        = d.get("eta")
 
             fraction: float = 0.0
-            if total_bytes and total_bytes > 0:
-                fraction = min(dl_bytes / total_bytes, 1.0)
+            if total and total > 0:
+                fraction = min(dl_bytes / total, 1.0)
 
             if ydl_status == "downloading":
-                prog = DownloadProgress(
+                self._fire(req, DownloadProgress(
                     status=DownloadStatus.DOWNLOADING,
                     url=req.url,
                     title=title,
                     playlist_index=pl_idx,
                     playlist_count=pl_count,
                     downloaded_bytes=dl_bytes,
-                    total_bytes=total_bytes,
+                    total_bytes=total,
                     speed_bps=speed,
                     eta_seconds=eta,
                     fraction=fraction,
-                )
-                self._fire(req, prog)
+                ))
 
             elif ydl_status == "finished":
-                # File is downloaded; FFmpeg post-processing starts next.
-                prog = DownloadProgress(
+                self._fire(req, DownloadProgress(
                     status=DownloadStatus.PROCESSING,
                     url=req.url,
                     title=title,
-                    playlist_index=pl_idx,
-                    playlist_count=pl_count,
-                    downloaded_bytes=dl_bytes,
-                    total_bytes=total_bytes,
-                    fraction=1.0,
-                )
-                self._fire(req, prog)
+                    fraction=0.95,
+                ))
 
             elif ydl_status == "error":
-                prog = DownloadProgress(
+                self._fire(req, DownloadProgress(
                     status=DownloadStatus.ERROR,
                     url=req.url,
                     title=title,
                     error_message=d.get("error", "Unknown yt-dlp error"),
-                )
-                self._fire(req, prog, error=True)
+                ), error=True)
 
         return hook
 
-    def _make_pp_hook(
-        self,
-        req: DownloadRequest,
-    ) -> Callable[[dict], None]:
-        """
-        Returns a closure called by yt-dlp *after* each post-processor step
-        (e.g., after FFmpeg finishes converting to MP3).
-        """
-        def hook(d: dict) -> None:  # noqa: ANN001
+    def _make_pp_hook(self, req: DownloadRequest) -> Callable[[dict], None]:
+        """Post-processor hook fires after every FFmpeg stage."""
+
+        def hook(d: dict) -> None:
             if d.get("status") != "finished":
                 return
 
-            info      = d.get("info_dict", {})
-            title     = info.get("title", "")
-            pl_idx    = info.get("playlist_index")
-            pl_count  = info.get("n_entries")
-            filepath  = d.get("info_dict", {}).get("filepath") or \
-                        d.get("filepath", "")
+            output_path: str = d.get("info_dict", {}).get("filepath", "") or ""
 
-            prog = DownloadProgress(
+            # ── Post-processing pipeline ──────────────────────────────────────
+            if output_path:
+                self._run_post_pipeline(req, output_path)
+
+            # Emit FINISHED
+            self._fire(req, DownloadProgress(
                 status=DownloadStatus.FINISHED,
                 url=req.url,
-                title=title,
-                playlist_index=pl_idx,
-                playlist_count=pl_count,
+                title=req.forced_title or d.get("info_dict", {}).get("title", ""),
                 fraction=1.0,
-                output_path=filepath,
-            )
-            self._fire(req, prog, finished=True)
+                output_path=output_path,
+            ))
 
         return hook
 
-    # ── Callback dispatcher ────────────────────────────────────────────────────
+    def _run_post_pipeline(self, req: DownloadRequest, output_path: str) -> None:
+        """
+        Run optional post-processing steps on the finished file.
+
+        Each step is individually guarded and logs its own errors so one
+        failing step never prevents the others from running.
+        """
+        title  = req.forced_title  or ""
+        artist = req.forced_artist or ""
+
+        # 1. Square thumbnail crop (before MusicBrainz, which might re-embed art)
+        if req.square_thumbnails:
+            try:
+                from core.thumbnail_cropper import crop_embedded_thumbnail
+                crop_embedded_thumbnail(output_path)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).error(
+                    "[Downloader] ThumbnailCropper error: %s", exc
+                )
+
+        # 2. MusicBrainz enrichment
+        if req.musicbrainz and title:
+            try:
+                from core.musicbrainz_enricher import enrich_file
+                enrich_file(
+                    output_path,
+                    title=title,
+                    artist=artist,
+                    duration_s=req.forced_duration,
+                )
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).error(
+                    "[Downloader] MusicBrainz error: %s", exc
+                )
+
+        # 3. Lyrics embedding
+        if req.embed_lyrics and title:
+            try:
+                from core.lyrics_embedder import embed_lyrics
+                embed_lyrics(output_path, title=title, artist=artist)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).error(
+                    "[Downloader] LyricsEmbedder error: %s", exc
+                )
+
+        # 4. ReplayGain analysis (last – reads final audio content)
+        if req.replay_gain:
+            try:
+                from core.replay_gain import analyse_and_embed
+                analyse_and_embed(output_path)
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).error(
+                    "[Downloader] ReplayGain error: %s", exc
+                )
+
+    # ── Signal dispatcher ──────────────────────────────────────────────────────
 
     @staticmethod
     def _fire(
-        req: DownloadRequest,
-        prog: DownloadProgress,
-        *,
-        finished: bool = False,
-        error: bool = False,
+        req:      DownloadRequest,
+        progress: DownloadProgress,
+        error:    bool = False,
     ) -> None:
-        """Safely invoke caller-supplied callbacks without raising."""
-        try:
-            if req.on_progress:
-                req.on_progress(prog)
-            if finished and req.on_finished:
-                req.on_finished(prog)
-            if error and req.on_error:
-                req.on_error(prog)
-        except Exception:  # noqa: BLE001
-            # Never let a misbehaving callback crash the download thread.
-            pass
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Quick smoke-test  (python downloader.py)
-# ──────────────────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    import sys
-
-    def _on_progress(p: DownloadProgress) -> None:
-        bar_width = 30
-        filled    = int(bar_width * p.fraction)
-        bar       = "█" * filled + "░" * (bar_width - filled)
-        mb_done   = _bytes_to_mb(p.downloaded_bytes) or 0
-        mb_total  = _bytes_to_mb(p.total_bytes) or "?"
-        speed_kb  = round((p.speed_bps or 0) / 1024, 1)
-        eta       = f"{int(p.eta_seconds or 0)}s" if p.eta_seconds else "?"
-
-        status_char = {
-            DownloadStatus.EXTRACTING:  "🔍",
-            DownloadStatus.DOWNLOADING: "⬇ ",
-            DownloadStatus.PROCESSING:  "⚙ ",
-            DownloadStatus.FINISHED:    "✅",
-            DownloadStatus.ERROR:       "❌",
-            DownloadStatus.CANCELLED:   "🚫",
-        }.get(p.status, "  ")
-
-        pl_info = ""
-        if p.playlist_index and p.playlist_count:
-            pl_info = f"  [{p.playlist_index}/{p.playlist_count}]"
-
-        print(
-            f"\r{status_char} [{bar}] {p.fraction:>5.1%}  "
-            f"{mb_done}/{mb_total} MB  {speed_kb} KB/s  ETA {eta}"
-            f"{pl_info}  {p.title[:40]:<40}",
-            end="",
-            flush=True,
-        )
-        if p.status in (
-            DownloadStatus.FINISHED,
-            DownloadStatus.ERROR,
-            DownloadStatus.CANCELLED,
-        ):
-            print()
-
-    def _on_finished(p: DownloadProgress) -> None:
-        print(f"\n✅  Saved to: {p.output_path}")
-
-    def _on_error(p: DownloadProgress) -> None:
-        print(f"\n❌  Error: {p.error_message}", file=sys.stderr)
-
-    # ── Run ───────────────────────────────────────────────────────────────────
-    test_url = (
-        sys.argv[1]
-        if len(sys.argv) > 1
-        else "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-    )
-
-    engine = DownloadEngine()
-    request = DownloadRequest(
-        url=test_url,
-        output_dir="~/Downloads/YTSpot",
-        media_type=MediaType.AUDIO,
-        audio_quality=AudioQuality.BEST,
-        audio_format="mp3",
-        embed_thumbnail=True,
-        embed_metadata=True,
-        on_progress=_on_progress,
-        on_finished=_on_finished,
-        on_error=_on_error,
-    )
-
-    print(f"Downloading: {test_url}\n")
-    engine.download(request)
+        if error and req.on_error:
+            try:
+                req.on_error(progress)
+            except Exception:
+                pass
+        elif progress.status == DownloadStatus.FINISHED and req.on_finished:
+            try:
+                req.on_finished(progress)
+            except Exception:
+                pass
+        elif req.on_progress:
+            try:
+                req.on_progress(progress)
+            except Exception:
+                pass

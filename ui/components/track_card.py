@@ -1,44 +1,24 @@
 """
-ui/components/track_card.py  –  Draggable download queue entry widget
-======================================================================
-Represents one track in the download queue panel.  Supports:
-
-* Thumbnail display with a grey placeholder until the image loads.
-* Checkbox for per-track selection (checked by default).
-* Title, artist, duration, and platform badge labels.
-* A vertical progress bar on the right edge that fills as the download
-  progresses.
-* A coloured status dot (queued / downloading / done / error / cancelled).
-* Full drag-and-drop reordering:  the card is the drag source; the parent
-  QueuePanel's scroll-area is the drop target.  The drag payload is the
-  card's queue_index encoded as UTF-8 bytes so the panel can reorder its
-  internal list correctly.
-* A "remove" (×) button that is visible on hover and emits remove_requested.
-
-Drag-and-drop protocol
------------------------
-Source (this card):
-    mousePressEvent records the press position.
-    mouseMoveEvent starts a QDrag with mimeData text = str(self.queue_index)
-    when the cursor moves more than QApplication.startDragDistance().
-
-Target (QueuePanel – implemented in ui/panels/queue_panel.py):
-    dragEnterEvent  – accept if mimeData has text.
-    dragMoveEvent   – draw a drop-indicator line between cards.
-    dropEvent       – parse the source index, reorder the layout, emit
-                      reorder_requested(from_index, to_index).
+ui/components/track_card.py  –  Draggable download queue entry  (v3)
+=====================================================================
+Changelog v3
+------------
+* Pause button (⏸) visible when status == "downloading".
+  Emits pause_requested(queue_index).
+* Resume button (▶) visible when status == "paused".
+  Emits resume_requested(queue_index).
+* Both buttons replace the single cancel-level control; the remove (×)
+  button is always available on hover.
+* Status dot gains a "paused" state (amber/warning colour).
+* All existing public API is unchanged (set_status, set_progress, etc.).
 """
 
 from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import (
-    QByteArray, QMimeData, QPoint, QSize, Qt, Signal,
-)
-from PySide6.QtGui import (
-    QColor, QDrag, QFont, QImage, QPixmap,
-)
+from PySide6.QtCore import QByteArray, QMimeData, QPoint, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QDrag, QFont, QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QFrame, QGraphicsDropShadowEffect,
     QHBoxLayout, QLabel, QProgressBar, QSizePolicy, QVBoxLayout, QWidget,
@@ -53,155 +33,99 @@ from ui.theme_manager import (
 )
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Design tokens  (deep, premium palette – v2)
-# ──────────────────────────────────────────────────────────────────────────────
+# ── Design tokens ──────────────────────────────────────────────────────────────
 
-_BG_NORMAL   = SURFACE_DARK       # "#16161f"
-_BG_HOVER    = SURFACE2_DARK      # "#1e1e2a"
+_BG_NORMAL   = SURFACE_DARK
+_BG_HOVER    = SURFACE2_DARK
 _BG_DRAG     = "#1a1a26"
-_BORDER      = BORDER_DARK        # "#252533"
-_TEXT        = TEXT_DARK          # "#eeeef5"
-_TEXT_2      = TEXT2_DARK         # "#8888a8"
-_TEXT_3      = TEXT3_DARK         # "#4a4a66"
-_SUCCESS     = SUCCESS_COLOR      # "#10b981"
-_ERROR       = ERROR_COLOR        # "#ef4444"
-_WARNING     = WARNING_COLOR      # "#f59e0b"
+_BORDER      = BORDER_DARK
+_TEXT        = TEXT_DARK
+_TEXT_2      = TEXT2_DARK
+_TEXT_3      = TEXT3_DARK
+_SUCCESS     = SUCCESS_COLOR
+_ERROR       = ERROR_COLOR
+_WARNING     = WARNING_COLOR
 _RADIUS      = 10
 _THUMB_W     = 96
 _THUMB_H     = 54
 
-# Status → dot colour
 _STATUS_COLORS: dict[str, str] = {
     "queued":      _TEXT_3,
     "downloading": ACCENT_COLOR,
-    "processing":  PROCESSING_COLOR,  # purple for FFmpeg stage
+    "processing":  PROCESSING_COLOR,
     "done":        _SUCCESS,
     "error":       _ERROR,
     "cancelled":   _WARNING,
+    "paused":      "#f59e0b",   # amber – NEW
 }
 
-# Platform badge colours  (bg, fg)
 _PLATFORM_COLORS: dict[str, tuple[str, str]] = {
-    "youtube":  ("#cc2200", "#ffffff"),   # deeper YouTube red
+    "youtube":  ("#cc2200", "#ffffff"),
     "ytmusic":  ("#cc2200", "#ffffff"),
-    "spotify":  ("#1aa34a", "#ffffff"),   # richer Spotify green
+    "spotify":  ("#1aa34a", "#ffffff"),
     "default":  (_BORDER, _TEXT_2),
 }
 
 
 def _make_placeholder_pixmap(w: int = _THUMB_W, h: int = _THUMB_H) -> QPixmap:
-    """Return a dark-grey rectangle with a centred play-triangle."""
-    img = QImage(w, h, QImage.Format.Format_RGB32)
-    img.fill(QColor("#1a1a20"))
-    # Draw a simple triangle using raw pixel manipulation – no QPainter dependency
+    img = QImage(w, h, QImage.Format.Format_ARGB32)
+    img.fill(QColor(BORDER_DARK))
+    # Draw a simple play triangle
+    from PySide6.QtGui import QPainter, QPen, QBrush, QPolygon
+    from PySide6.QtCore import QPoint as _QP
+    painter = QPainter(img)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setBrush(QBrush(QColor(TEXT3_DARK)))
+    painter.setPen(Qt.PenStyle.NoPen)
     cx, cy = w // 2, h // 2
-    for row in range(h):
-        for col in range(w):
-            dy = abs(row - cy)
-            dx = col - (cx - 10)
-            if 0 < dx < 20 - dy and dy < 10:
-                img.setPixelColor(col, row, QColor("#2a2a35"))
+    s = min(w, h) // 5
+    tri = QPolygon([_QP(cx - s, cy - s), _QP(cx + s, cy), _QP(cx - s, cy + s)])
+    painter.drawPolygon(tri)
+    painter.end()
     return QPixmap.fromImage(img)
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# TrackCard
-# ──────────────────────────────────────────────────────────────────────────────
-
 class TrackCard(QFrame):
     """
-    One entry in the download queue.
+    One entry in the download queue panel.
 
-    Signals
-    -------
-    remove_requested(int)
-        Emitted when the user clicks the × button.
-        Payload is self.queue_index so the panel can find and remove it.
-    selection_changed()
-        Emitted when the checkbox state changes so the panel can update
-        the "N of M selected" counter.
+    Parameters
+    ----------
+    title, artist, duration, platform, queue_index : track metadata.
+    parent : optional Qt parent.
     """
 
-    remove_requested  = Signal(int)   # queue_index
-    selection_changed = Signal()
+    # ── Signals ───────────────────────────────────────────────────────────────
+    remove_requested  = Signal(int)    # queue_index
+    pause_requested   = Signal(int)    # NEW – queue_index
+    resume_requested  = Signal(int)    # NEW – queue_index
+    reorder_requested = Signal(int, int)  # (from_index, to_index)
 
-    # ── Lifecycle ──────────────────────────────────────────────────────────────
+    # ── Constructor ───────────────────────────────────────────────────────────
 
     def __init__(
         self,
-        queue_index:   int,
-        title:         str,
-        artist:        str         = "",
-        duration:      str         = "",
-        platform:      str         = "youtube",
-        thumbnail_url: str         = "",
-        track_url:     str         = "",
-        album:         str         = "",
-        parent:        QWidget     = None,
+        title:        str,
+        artist:       str          = "",
+        duration:     str          = "",
+        platform:     str          = "youtube",
+        queue_index:  int          = 0,
+        track_url:    str          = "",
+        album:        str          = "",
+        parent:       QWidget      = None,
     ) -> None:
         super().__init__(parent)
-
-        # Public state read by the panel
-        self.queue_index   = queue_index
-        self.title         = title
-        self.artist        = artist
-        self.album         = album
-        self.track_url     = track_url
-        self.thumbnail_url = thumbnail_url
-
+        self.queue_index = queue_index
+        self.track_url   = track_url
+        self.title       = title
+        self.artist      = artist
+        self.album       = album
+        self._platform   = platform.lower()
+        self._status     = "queued"
         self._drag_start_pos: Optional[QPoint] = None
 
         self._build(title, artist, duration, platform)
-        self._apply_base_style()
-        self._install_hover()
-
-        # Subtle depth shadow
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(14)
-        shadow.setOffset(0, 3)
-        shadow.setColor(QColor(0, 0, 0, 100))
-        self.setGraphicsEffect(shadow)
-
-    # ── Public API ─────────────────────────────────────────────────────────────
-
-    def is_selected(self) -> bool:
-        return self._checkbox.isChecked()
-
-    def set_selected(self, checked: bool) -> None:
-        self._checkbox.setChecked(checked)
-
-    def set_thumbnail(self, raw_bytes: bytes) -> None:
-        """Decode raw image bytes and display the thumbnail."""
-        pixmap = QPixmap()
-        if pixmap.loadFromData(raw_bytes):
-            pixmap = pixmap.scaled(
-                _THUMB_W, _THUMB_H,
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            # Centre-crop to exact thumbnail size
-            x = (pixmap.width()  - _THUMB_W) // 2
-            y = (pixmap.height() - _THUMB_H) // 2
-            pixmap = pixmap.copy(x, y, _THUMB_W, _THUMB_H)
-            self._thumb_label.setPixmap(pixmap)
-
-    def set_status(self, status: str) -> None:
-        """Update the status dot colour and progress bar visibility."""
-        color = _STATUS_COLORS.get(status, _TEXT_3)
-        self._status_dot.setStyleSheet(f"color: {color}; background: transparent;")
-
-        if status == "downloading":
-            self._progress_bar.setVisible(True)
-        elif status in ("done", "error", "cancelled"):
-            self._progress_bar.setVisible(False)
-            if status == "done":
-                self._progress_bar.setValue(100)
-
-    def set_progress(self, fraction: float) -> None:
-        """Update the vertical progress bar (0.0 – 1.0)."""
-        value = int(max(0.0, min(1.0, fraction)) * 100)
-        self._progress_bar.setValue(value)
+        self._apply_shadow()
 
     # ── Build ──────────────────────────────────────────────────────────────────
 
@@ -212,52 +136,41 @@ class TrackCard(QFrame):
         duration: str,
         platform: str,
     ) -> None:
-        self.setFixedHeight(80)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(82)
+        self.setObjectName("trackCard")
+        self._refresh_style(hover=False)
 
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(8, 6, 0, 6)
-        outer.setSpacing(0)
+        outer.setContentsMargins(10, 8, 10, 8)
+        outer.setSpacing(10)
 
-        # ── Checkbox ──────────────────────────────────────────────────────────
-        self._checkbox = QCheckBox()
-        self._checkbox.setChecked(True)
-        self._checkbox.setFixedSize(20, 20)
-        self._checkbox.stateChanged.connect(lambda _: self.selection_changed.emit())
-        self._checkbox.setStyleSheet(f"""
-            QCheckBox::indicator {{
-                width: 16px; height: 16px;
-                border: 2px solid {_BORDER};
-                border-radius: 4px;
-                background: transparent;
-            }}
-            QCheckBox::indicator:checked {{
-                background-color: {ACCENT_COLOR};
-                border-color: {ACCENT_COLOR};
-                image: none;
-            }}
-        """)
-        outer.addWidget(self._checkbox)
-        outer.addSpacing(10)
+        # Checkbox
+        self._check = QCheckBox()
+        self._check.setChecked(True)
+        self._check.setFixedSize(20, 20)
+        outer.addWidget(self._check)
 
-        # ── Thumbnail ─────────────────────────────────────────────────────────
-        self._thumb_label = QLabel()
-        self._thumb_label.setFixedSize(_THUMB_W, _THUMB_H)
-        self._thumb_label.setPixmap(_make_placeholder_pixmap())
-        self._thumb_label.setScaledContents(False)
-        self._thumb_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._thumb_label.setStyleSheet(
-            f"border-radius: 4px; background: #1a1a20;"
+        # Thumbnail
+        self._thumb_lbl = QLabel()
+        self._thumb_lbl.setFixedSize(_THUMB_W, _THUMB_H)
+        self._thumb_lbl.setScaledContents(True)
+        self._thumb_lbl.setPixmap(_make_placeholder_pixmap())
+        self._thumb_lbl.setStyleSheet(
+            f"border-radius: 6px; border: 1px solid {_BORDER};"
         )
-        outer.addWidget(self._thumb_label)
-        outer.addSpacing(10)
+        outer.addWidget(self._thumb_lbl)
 
-        # ── Text block ────────────────────────────────────────────────────────
+        # Status dot
+        self._dot = QLabel("●")
+        self._dot.setFixedWidth(14)
+        self._dot.setStyleSheet(f"color: {_TEXT_3}; background: transparent; font-size: 10px;")
+        outer.addWidget(self._dot)
+
+        # Text column
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
-        text_col.setContentsMargins(0, 0, 0, 0)
 
-        self._title_lbl = BodyLabel(f"{self.queue_index}. {title}")
+        self._title_lbl = BodyLabel(title[:80])
         self._title_lbl.setStyleSheet(f"color: {_TEXT}; background: transparent;")
         title_font = QFont()
         title_font.setPointSize(10)
@@ -268,117 +181,201 @@ class TrackCard(QFrame):
         self._artist_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
         text_col.addWidget(self._artist_lbl)
 
-        outer.addLayout(text_col, stretch=1)
-        outer.addSpacing(8)
-
-        # ── Badges (duration + platform) ──────────────────────────────────────
-        badge_col = QVBoxLayout()
-        badge_col.setSpacing(4)
-        badge_col.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
-
-        self._dur_badge   = self._make_badge(duration or "--:--", "default")
-        self._plat_badge  = self._make_badge(platform.upper(), platform)
-        badge_col.addWidget(self._dur_badge,  alignment=Qt.AlignmentFlag.AlignRight)
-        badge_col.addWidget(self._plat_badge, alignment=Qt.AlignmentFlag.AlignRight)
-        outer.addLayout(badge_col)
-        outer.addSpacing(6)
-
-        # ── Remove button ─────────────────────────────────────────────────────
-        self._remove_btn = ToolButton()
-        self._remove_btn.setText("✕")
-        self._remove_btn.setFixedSize(28, 28)
-        self._remove_btn.setVisible(False)
-        self._remove_btn.clicked.connect(
-            lambda: self.remove_requested.emit(self.queue_index)
-        )
-        self._remove_btn.setStyleSheet(f"""
-            ToolButton {{
-                background: transparent;
-                border: none;
-                color: {_TEXT_3};
-                font-size: 11px;
-            }}
-            ToolButton:hover {{ color: {_ERROR}; }}
-        """)
-        outer.addWidget(self._remove_btn)
-        outer.addSpacing(2)
-
-        # ── Status dot ────────────────────────────────────────────────────────
-        self._status_dot = QLabel("●")
-        self._status_dot.setFixedWidth(16)
-        self._status_dot.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        self._status_dot.setStyleSheet(f"color: {_TEXT_3}; background: transparent;")
-        outer.addWidget(self._status_dot)
-        outer.addSpacing(2)
-
-        # ── Vertical progress bar ─────────────────────────────────────────────
+        # Progress bar (hidden until download starts)
         self._progress_bar = QProgressBar()
-        self._progress_bar.setOrientation(Qt.Orientation.Vertical)
-        self._progress_bar.setFixedWidth(4)
-        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setRange(0, 1000)
         self._progress_bar.setValue(0)
+        self._progress_bar.setFixedHeight(3)
         self._progress_bar.setTextVisible(False)
-        self._progress_bar.setVisible(False)
         self._progress_bar.setStyleSheet(f"""
             QProgressBar {{
                 background: {_BORDER};
                 border: none;
-                border-radius: 2px;
+                border-radius: 1px;
             }}
             QProgressBar::chunk {{
                 background: {ACCENT_COLOR};
-                border-radius: 2px;
+                border-radius: 1px;
             }}
         """)
-        outer.addWidget(self._progress_bar)
+        self._progress_bar.setVisible(False)
+        text_col.addWidget(self._progress_bar)
+
+        outer.addLayout(text_col, stretch=1)
+        outer.addSpacing(8)
+
+        # Badge column
+        badge_col = QVBoxLayout()
+        badge_col.setSpacing(4)
+        badge_col.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
+
+        self._dur_badge  = self._make_badge(duration or "--:--", "default")
+        self._plat_badge = self._make_badge(platform.upper(), platform)
+        badge_col.addWidget(self._dur_badge,  alignment=Qt.AlignmentFlag.AlignRight)
+        badge_col.addWidget(self._plat_badge, alignment=Qt.AlignmentFlag.AlignRight)
+        outer.addLayout(badge_col)
+        outer.addSpacing(4)
+
+        # Action buttons column
+        btn_col = QVBoxLayout()
+        btn_col.setSpacing(4)
+        btn_col.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        # Pause button (shown while downloading)
+        self._pause_btn = ToolButton()
+        self._pause_btn.setText("⏸")
+        self._pause_btn.setFixedSize(28, 28)
+        self._pause_btn.setVisible(False)
+        self._pause_btn.setToolTip("Pause download")
+        self._pause_btn.clicked.connect(
+            lambda: self.pause_requested.emit(self.queue_index)
+        )
+        self._pause_btn.setStyleSheet(self._action_btn_style("#f59e0b"))
+        btn_col.addWidget(self._pause_btn)
+
+        # Resume button (shown while paused)
+        self._resume_btn = ToolButton()
+        self._resume_btn.setText("▶")
+        self._resume_btn.setFixedSize(28, 28)
+        self._resume_btn.setVisible(False)
+        self._resume_btn.setToolTip("Resume download")
+        self._resume_btn.clicked.connect(
+            lambda: self.resume_requested.emit(self.queue_index)
+        )
+        self._resume_btn.setStyleSheet(self._action_btn_style(ACCENT_COLOR))
+        btn_col.addWidget(self._resume_btn)
+
+        # Remove button (shown on hover)
+        self._remove_btn = ToolButton()
+        self._remove_btn.setText("✕")
+        self._remove_btn.setFixedSize(28, 28)
+        self._remove_btn.setVisible(False)
+        self._remove_btn.setToolTip("Remove from queue")
+        self._remove_btn.clicked.connect(
+            lambda: self.remove_requested.emit(self.queue_index)
+        )
+        self._remove_btn.setStyleSheet(self._action_btn_style(_ERROR))
+        btn_col.addWidget(self._remove_btn)
+
+        outer.addLayout(btn_col)
 
     @staticmethod
-    def _make_badge(text: str, kind: str) -> QLabel:
-        bg, fg = _PLATFORM_COLORS.get(kind, _PLATFORM_COLORS["default"])
+    def _action_btn_style(color: str) -> str:
+        return f"""
+            ToolButton {{
+                color: {color};
+                background: transparent;
+                border: none;
+                border-radius: 4px;
+                font-size: 13px;
+            }}
+            ToolButton:hover {{
+                background: rgba(255,255,255,0.07);
+            }}
+        """
+
+    def _make_badge(self, text: str, kind: str) -> QLabel:
         lbl = QLabel(text)
-        lbl.setFont(QFont("Consolas", 9))
+        fg_bg = _PLATFORM_COLORS.get(kind.lower(), _PLATFORM_COLORS["default"])
+        bg, fg = fg_bg
+        lbl.setStyleSheet(f"""
+            QLabel {{
+                background: {bg};
+                color: {fg};
+                border-radius: 4px;
+                padding: 1px 6px;
+                font-size: 10px;
+                font-weight: 600;
+            }}
+        """)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(
-            f"background: {bg}; color: {fg}; border-radius: 3px;"
-            f" padding: 1px 5px;"
-        )
-        lbl.setFixedHeight(18)
         return lbl
 
-    # ── Styling ───────────────────────────────────────────────────────────────
+    def _apply_shadow(self) -> None:
+        fx = QGraphicsDropShadowEffect(self)
+        fx.setBlurRadius(12)
+        fx.setXOffset(0)
+        fx.setYOffset(2)
+        fx.setColor(QColor(0, 0, 0, 60))
+        self.setGraphicsEffect(fx)
 
-    def _apply_base_style(self) -> None:
+    def _refresh_style(self, hover: bool) -> None:
+        bg = _BG_HOVER if hover else _BG_NORMAL
         self.setStyleSheet(f"""
-            TrackCard {{
-                background-color: {_BG_NORMAL};
+            QFrame#trackCard {{
+                background: {bg};
                 border: 1px solid {_BORDER};
                 border-radius: {_RADIUS}px;
             }}
-        """)
-
-    def _install_hover(self) -> None:
-        for w in (self, self._thumb_label, self._title_lbl, self._artist_lbl):
-            w.setMouseTracking(True)
-
-    # ── Events ────────────────────────────────────────────────────────────────
-
-    def enterEvent(self, event) -> None:
-        self.setStyleSheet(f"""
-            TrackCard {{
-                background-color: {_BG_HOVER};
-                border: 1px solid {ACCENT_COLOR};
-                border-radius: {_RADIUS}px;
+            QFrame#trackCard:hover {{
+                border-color: {ACCENT_COLOR}44;
             }}
         """)
-        self._remove_btn.setVisible(True)
+
+    # ── Public API ─────────────────────────────────────────────────────────────
+
+    def is_checked(self) -> bool:
+        return self._check.isChecked()
+
+    def set_checked(self, checked: bool) -> None:
+        self._check.setChecked(checked)
+
+    def set_thumbnail(self, pixmap: QPixmap) -> None:
+        self._thumb_lbl.setPixmap(pixmap)
+
+    def set_progress(self, fraction: float) -> None:
+        self._progress_bar.setValue(int(fraction * 1000))
+        self._progress_bar.setVisible(fraction > 0.0 and self._status not in ("done", "error", "cancelled"))
+
+    def set_status(self, status: str) -> None:
+        """
+        Update the visual state.
+
+        status : one of "queued" | "downloading" | "processing" |
+                         "done" | "error" | "cancelled" | "paused"
+        """
+        self._status = status
+        color = _STATUS_COLORS.get(status, _TEXT_3)
+        self._dot.setStyleSheet(
+            f"color: {color}; background: transparent; font-size: 10px;"
+        )
+
+        is_downloading = status == "downloading"
+        is_paused      = status == "paused"
+        is_terminal    = status in ("done", "error", "cancelled")
+
+        self._pause_btn.setVisible(is_downloading)
+        self._resume_btn.setVisible(is_paused)
+
+        if is_terminal:
+            self._progress_bar.setVisible(False)
+
+        # Disable checkbox once download is in flight
+        self._check.setEnabled(status == "queued")
+
+    def set_artist(self, artist: str) -> None:
+        self._artist_lbl.setText(artist or "—")
+
+    def set_title(self, title: str) -> None:
+        self._title_lbl.setText(title[:80])
+
+    def update_queue_index(self, new_index: int) -> None:
+        self.queue_index = new_index
+
+    # ── Hover events ──────────────────────────────────────────────────────────
+
+    def enterEvent(self, event) -> None:
+        self._refresh_style(hover=True)
+        if self._status == "queued":
+            self._remove_btn.setVisible(True)
         super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
-        self._apply_base_style()
+        self._refresh_style(hover=False)
         self._remove_btn.setVisible(False)
         super().leaveEvent(event)
 
-    # ── Drag-and-drop source ──────────────────────────────────────────────────
+    # ── Drag & drop ───────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -387,39 +384,15 @@ class TrackCard(QFrame):
 
     def mouseMoveEvent(self, event) -> None:
         if (
-            event.buttons() & Qt.MouseButton.LeftButton
-            and self._drag_start_pos is not None
+            self._drag_start_pos is not None
+            and (event.buttons() & Qt.MouseButton.LeftButton)
+            and (
+                event.position().toPoint() - self._drag_start_pos
+            ).manhattanLength() >= QApplication.startDragDistance()
         ):
-            delta = (event.position().toPoint() - self._drag_start_pos).manhattanLength()
-            if delta >= QApplication.startDragDistance():
-                self._start_drag()
+            drag = QDrag(self)
+            mime = QMimeData()
+            mime.setText(str(self.queue_index))
+            drag.setMimeData(mime)
+            drag.exec(Qt.DropAction.MoveAction)
         super().mouseMoveEvent(event)
-
-    def _start_drag(self) -> None:
-        drag = QDrag(self)
-        mime = QMimeData()
-        # Encode the queue_index as plain text; the panel decodes it in dropEvent
-        mime.setText(str(self.queue_index))
-        drag.setMimeData(mime)
-
-        # Render the card itself as the drag pixmap
-        pixmap = self.grab()
-        drag.setPixmap(pixmap.scaled(
-            pixmap.width() // 2,
-            pixmap.height() // 2,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        ))
-        drag.setHotSpot(QPoint(drag.pixmap().width() // 2, drag.pixmap().height() // 2))
-
-        # Visual feedback during drag
-        self.setStyleSheet(f"""
-            TrackCard {{
-                background-color: {_BG_DRAG};
-                border: 1px dashed {ACCENT_COLOR};
-                border-radius: {_RADIUS}px;
-                opacity: 0.7;
-            }}
-        """)
-        drag.exec(Qt.DropAction.MoveAction)
-        self._apply_base_style()

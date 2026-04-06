@@ -228,6 +228,9 @@ class SearchPanel(QWidget):
         youtube_action = self._platform_menu.addAction(t("platform_youtube"))
         youtube_action.triggered.connect(lambda: self._set_platform("youtube"))
 
+        ytmusic_action = self._platform_menu.addAction(t("platform_ytmusic"))
+        ytmusic_action.triggered.connect(lambda: self._set_platform("ytmusic"))
+
         spotify_action = self._platform_menu.addAction(t("platform_spotify"))
         spotify_action.triggered.connect(lambda: self._set_platform("spotify"))
 
@@ -421,6 +424,8 @@ class SearchPanel(QWidget):
         self._current_platform = platform
         if platform == "youtube":
             self._platform_btn.setText(t("platform_youtube"))
+        elif platform == "ytmusic":
+            self._platform_btn.setText(t("platform_ytmusic"))
         elif platform == "spotify":
             self._platform_btn.setText(t("platform_spotify"))
         elif platform == "both":

@@ -191,6 +191,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
             "Select a platform and type your query above."
         ),
         "platform_youtube": "YouTube",
+        "platform_ytmusic": "YouTube Music",
         "platform_spotify": "Spotify",
         "platform_both": "Both",
 
@@ -401,6 +402,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
             "בחר פלטפורמה והקלד שאילתה למעלה."
         ),
         "platform_youtube": "YouTube",
+        "platform_ytmusic": "YouTube Music",
         "platform_spotify": "Spotify",
         "platform_both": "הכל",
 
