@@ -685,13 +685,21 @@ class AppWindow(FluentWindow):
 
         for card in selected:
             track_playlist_name: Optional[str] = None
-            if is_multi and self._cfg.playlist_subfolders:
-                if self._last_url_kind == UrlKind.ARTIST:
-                    album_part = card.album if card.album else "Singles"
+            if self._cfg.playlist_subfolders:
+                if is_multi:
+                    if self._last_url_kind == UrlKind.ARTIST:
+                        album_part = card.album if card.album else "Singles & EPs"
+                        track_playlist_name = f"{card.artist}/{album_part}"
+                    elif self._last_url_kind == UrlKind.ALBUM:
+                        artist_part = card.artist if card.artist else "Unknown Artist"
+                        track_playlist_name = f"{artist_part}/{self._last_playlist_title}"
+                    else:
+                        track_playlist_name = self._last_playlist_title
+                elif card.artist:
+                    # Normal search result or single track with metadata
+                    album_part = card.album if card.album else "Singles & EPs"
                     track_playlist_name = f"{card.artist}/{album_part}"
-                elif self._last_url_kind == UrlKind.ALBUM:
-                    track_playlist_name = f"{card.artist}/{self._last_playlist_title}"
-                else:
+                elif self._last_playlist_title:
                     track_playlist_name = self._last_playlist_title
 
             # Duplicate detection
@@ -732,6 +740,7 @@ class AppWindow(FluentWindow):
                 embed_metadata=self._cfg.embed_metadata,
                 forced_title=card.title,
                 forced_artist=card.artist,
+                forced_album=card.album,
                 forced_index=card.queue_index if self._cfg.playlist_index_prefix else None,
                 cookies_file=self._cfg.cookies_file or None,
                 playlist_name=track_playlist_name,
@@ -841,6 +850,10 @@ class AppWindow(FluentWindow):
     # ──────────────────────────────────────────────────────────────────────────
 
     def _on_fetch(self, url: str) -> None:
+        """
+        Entry point for fetching content from a URL (single or playlist).
+        """
+        print(f"[DEBUG-CLIENT] AppWindow._on_fetch: url={url}")
         if not url.strip():
             return
         if self._fetch_worker and self._fetch_worker.isRunning():
@@ -851,7 +864,13 @@ class AppWindow(FluentWindow):
         self._status_bar.set_status(t("fetching"))
         self._status_bar.set_cancel_visible(True)
 
-        self._fetch_worker = FetchWorker(url, cookies_file=self._cfg.cookies_file, parent=self)
+        self._fetch_worker = FetchWorker(
+            url,
+            cookies_file=self._cfg.cookies_file,
+            proxy_url=self._cfg.proxy_server_url,
+            proxy_token=self._cfg.spotify_app_api_key,
+            parent=self
+        )
         self._fetch_worker.track_found.connect(self._on_track_meta)
         self._fetch_worker.finished.connect(self._on_fetch_finished)
         self._fetch_worker.error.connect(self._on_fetch_error)
@@ -866,32 +885,35 @@ class AppWindow(FluentWindow):
         )
 
     def _add_track_to_queue(self, data) -> None:
-        idx  = len(self._queue_panel.get_all_cards()) + 1
-        
+        idx = len(self._queue_panel.get_all_cards()) + 1
+
         # Support both dict (from FetchWorker) and objects (from SearchWorker)
         get = lambda k, d="": data.get(k, d) if isinstance(data, dict) else getattr(data, k, d)
-        
-        card = TrackCard(
+
+        # Call QueuePanel.add_card which creates the TrackCard correctly
+        card = self._queue_panel.add_card(
+            index=idx,
             title=get("title", "Unknown"),
             artist=get("artist", ""),
             duration=get("duration", "") if isinstance(data, dict) else get("duration_str", ""),
             platform=get("platform", "youtube"),
-            queue_index=idx,
             track_url=get("track_url", "") if isinstance(data, dict) else get("url", ""),
             album=get("album", ""),
         )
+
+        # Connect AppWindow-specific handlers
         card.remove_requested.connect(self._on_card_removed)
         card.pause_requested.connect(self._on_pause_track)
         card.resume_requested.connect(self._on_resume_track)
 
-        self._queue_panel.add_card(card)
         self._index_to_card[idx] = card
         self._update_dl_bar()
 
         # Fire thumbnail load
-        thumb_url = data.get("thumbnail_url", "")
+        thumb_url = get("thumbnail_url", "")
         if thumb_url:
             tw = ThumbnailWorker(idx, thumb_url, parent=self)
+            # Use card local variable in lambda
             tw.thumbnail_ready.connect(lambda idx, data, c=card: self._set_card_thumb(c, data))
             tw.start()
 
@@ -930,12 +952,14 @@ class AppWindow(FluentWindow):
             self._search_worker.cancel()
         self._search_worker = SearchWorker(
             query=query,
-            platform="both",
+            platform=self._search_panel._current_platform,
             youtube_max_results=self._cfg.youtube_max_results,
             spotify_max_results=self._cfg.spotify_max_results,
             cookies_file=self._cfg.cookies_file,
             spotify_client_id=self._cfg.spotify_app_api_key,
             spotify_client_secret="",
+            proxy_url=self._cfg.proxy_server_url,
+            proxy_token=self._cfg.spotify_app_api_key,
             parent=self
         )
         self._search_worker.result_ready.connect(

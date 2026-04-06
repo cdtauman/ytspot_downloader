@@ -75,6 +75,8 @@ class SearchWorker(QThread):
         cookies_file:         Optional[str] = None,
         spotify_client_id:    str           = "",
         spotify_client_secret: str          = "",
+        proxy_url:            Optional[str] = None,
+        proxy_token:          Optional[str] = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -84,6 +86,8 @@ class SearchWorker(QThread):
         self._spotify_max_results   = max(1, min(100, spotify_max_results))
         self._spotify_client_id     = spotify_client_id
         self._spotify_client_secret = spotify_client_secret
+        self._proxy_url             = proxy_url
+        self._proxy_token           = proxy_token
         self._engine                = SearchEngine(cookies_file=cookies_file)
         logger.debug(
             "[SearchWorker] Init: query=%r  platform=%s  yt_limit=%d  sp_limit=%d",
@@ -194,6 +198,7 @@ class SearchWorker(QThread):
                 self._engine.search_spotify_categorized(
                     self._query,
                     max_results=self._spotify_max_results,
+                    proxy_url=self._proxy_url,
                     on_result=on_result,
                 )
             else:
@@ -201,6 +206,8 @@ class SearchWorker(QThread):
                 self._engine.search_spotify(
                     self._query,
                     max_results=self._spotify_max_results,
+                    proxy_url=self._proxy_url,
+                    proxy_token=self._proxy_token,
                     on_result=on_result,
                 )
         except Exception as exc:

@@ -16,6 +16,19 @@ Changelog v3
 * All public methods return ``list[SearchResult]``; on_result callbacks
   are optional for incremental UI population.
 
+Fixes (v3.1)
+------------
+* FIX 1 – _YTMusicBackend._ytm_playlist_url: handle both browseId
+  (VL-prefixed) and bare playlistId forms correctly.
+* FIX 2 – _YTMusicBackend.search_playlists: stop silently dropping
+  items whose ID is in ``playlistId`` rather than ``browseId``.
+* FIX 3 – _YTDLPBackend.search_playlists: replace the broken
+  ytsearch+ie_key approach (which always returned an empty list) with
+  a direct YouTube search-results URL using the playlist filter token
+  (sp=EgIQAw%3D%3D).
+* FIX 4 – _YTMusicBackend.search_all: rebalance per-category budgets
+  so albums, artists, and playlists each receive a meaningful quota.
+
 Design decisions
 ----------------
 * ytmusicapi is used **unauthenticated** (no OAuth header required).
@@ -30,6 +43,7 @@ from __future__ import annotations
 
 import re
 import threading
+import urllib.parse
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable, Optional
@@ -222,9 +236,20 @@ class _YTMusicBackend:
         return f"https://music.youtube.com/browse/{browse_id}"
 
     @staticmethod
-    def _ytm_playlist_url(browse_id: str) -> str:
-        # YTM playlists: browseId starts with VL for public playlists
-        return f"https://music.youtube.com/playlist?list={browse_id.lstrip('VL')}"
+    def _ytm_playlist_url(playlist_id: str) -> str:
+        """Build a YTM playlist URL from either a browseId or a playlistId.
+
+        ytmusicapi uses two ID forms:
+          • browseId   – starts with "VL" followed by the real list ID
+          • playlistId – the bare list ID (e.g. "PLxxxxxx")
+        Both must resolve to  ?list=<bare_id>.
+
+        FIX 1: previously used str.lstrip("VL") which incorrectly stripped
+        any leading 'V' or 'L' characters even from plain playlistIds.
+        Now we only strip the "VL" prefix when it is unambiguously present.
+        """
+        bare = playlist_id[2:] if playlist_id.upper().startswith("VL") else playlist_id
+        return f"https://music.youtube.com/playlist?list={bare}"
 
     # ── public search methods ──────────────────────────────────────────────────
 
@@ -355,17 +380,27 @@ class _YTMusicBackend:
         cancel:      Optional[threading.Event] = None,
         on_result:   Optional[Callable[[SearchResult], None]] = None,
     ) -> list[SearchResult]:
-        """Search YTM for Community Playlists."""
+        """Search YTM for Community Playlists.
+
+        FIX 2: ytmusicapi returns some community playlists with only a
+        ``playlistId`` field and no ``browseId``.  The previous guard
+        ``if not browse_id: continue`` silently discarded every such item,
+        resulting in zero playlist results.  We now fall back to
+        ``playlistId`` so no valid result is dropped.
+        """
         raw = self._ytm.search(query, filter="playlists", limit=max_results)
         results: list[SearchResult] = []
         for idx, item in enumerate(raw, start=1):
             if cancel and cancel.is_set():
                 break
-            browse_id = item.get("browseId") or ""
-            if not browse_id:
+
+            # ytmusicapi may store the ID in either browseId or playlistId
+            browse_id   = item.get("browseId")   or ""
+            playlist_id = item.get("playlistId") or ""
+            resolved_id = browse_id or playlist_id   # prefer browseId
+            if not resolved_id:
                 continue
 
-            # ytmusicapi exposes itemCount as int or None
             item_count: Optional[int] = None
             raw_count = item.get("itemCount")
             if raw_count is not None:
@@ -378,12 +413,12 @@ class _YTMusicBackend:
                 result_index=idx,
                 title=item.get("title") or "Unknown Playlist",
                 artist=item.get("author") or "",
-                url=self._ytm_playlist_url(browse_id),
+                url=self._ytm_playlist_url(resolved_id),
                 platform=SourcePlatform.YOUTUBE_MUSIC,
                 kind=ResultKind.PLAYLIST,
                 thumbnail_url=_pick_thumbnail(item.get("thumbnails") or []),
                 item_count=item_count,
-                browse_id=browse_id,
+                browse_id=resolved_id,
             )
             results.append(r)
             if on_result:
@@ -406,19 +441,24 @@ class _YTMusicBackend:
 
         Results are emitted incrementally via on_result as each category
         completes so the UI can populate sections in real-time.
+
+        FIX 4: rebalanced per-category budgets so albums, artists, and
+        playlists each receive a meaningful quota instead of the previous
+        floor of 3.  With max_results=20 the new budgets are:
+          songs=8, albums=5, artists=4, playlists=5.
         """
-        # Category budgets: songs get the lion's share
-        song_limit     = max(max_results // 2, 8)
-        album_limit    = max(max_results // 6, 3)
-        artist_limit   = max(max_results // 6, 3)
-        playlist_limit = max(max_results // 6, 3)
+        # Category budgets – balanced so every section is meaningfully filled.
+        song_limit     = max(max_results // 3,  8)
+        album_limit    = max(max_results // 5,  5)
+        artist_limit   = max(max_results // 6,  4)
+        playlist_limit = max(max_results // 5,  5)
 
         combined: list[SearchResult] = []
         global_idx = 1
 
         def _run_category(
-            method:    Callable[..., list[SearchResult]],
-            limit:     int,
+            method: Callable[..., list[SearchResult]],
+            limit:  int,
         ) -> None:
             nonlocal global_idx
             try:
@@ -527,17 +567,41 @@ class _YTDLPBackend:
         cancel:      Optional[threading.Event] = None,
         on_result:   Optional[Callable[[SearchResult], None]] = None,
     ) -> list[SearchResult]:
-        """ytsearch for playlists only."""
-        opts = self._opts(max(10, max_results))
+        """Search YouTube for playlists.
+
+        FIX 3: The previous implementation used ``ytsearch{N}:{query} playlist``
+        and then filtered entries by ``ie_key in ("youtubeplaylist",
+        "youtubetab")``.  This never worked: yt-dlp's ytsearch extractor
+        always wraps every hit as a bare video entry regardless of content
+        type, so the ie_key filter discarded 100 % of results and the method
+        always returned an empty list.
+
+        New approach: hit the YouTube search-results page directly with the
+        "playlist" content-filter token (sp=EgIQAw%3D%3D).  yt-dlp's
+        flat-playlist extractor parses the resulting playlist cards correctly
+        and requires no further ie_key filtering.
+        """
+        # sp=EgIQAw%3D%3D is YouTube's search filter token for "Type: Playlist"
+        safe_url = (
+            "https://www.youtube.com/results?"
+            + urllib.parse.urlencode(
+                {"search_query": query, "sp": "EgIQAw%3D%3D"}
+            )
+        )
+
+        opts = self._opts(max_results)
+        opts.update({
+            "extract_flat": "in_playlist",   # get playlist cards, not their contents
+            "playlistend":  max_results,
+            "noplaylist":   False,
+        })
+
         results: list[SearchResult] = []
         seen: set[str] = set()
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(
-                    f"ytsearch{max_results}:{query} playlist",
-                    download=False,
-                )
+                info = ydl.extract_info(safe_url, download=False)
         except Exception:
             return results
 
@@ -549,16 +613,20 @@ class _YTDLPBackend:
                 break
             if not entry:
                 continue
-            ie_key = (entry.get("ie_key") or "").lower()
-            _type  = entry.get("_type") or ""
-            # Only genuine playlist entries
-            if ie_key not in ("youtubeplaylist", "youtubetab") and \
-                    _type not in ("playlist", "multi_video"):
-                continue
+
             url = entry.get("webpage_url") or entry.get("url") or ""
+            if not url:
+                # Flat entries sometimes only carry an id
+                eid = entry.get("id") or ""
+                if eid:
+                    url = f"https://www.youtube.com/playlist?list={eid}"
             if not url or url in seen:
                 continue
+            # Skip bare video watch URLs (no list= parameter)
+            if "watch?v=" in url and "list=" not in url:
+                continue
             seen.add(url)
+
             platform = (
                 SourcePlatform.YOUTUBE_MUSIC
                 if "music.youtube.com" in url
@@ -573,6 +641,8 @@ class _YTDLPBackend:
                     on_result(r)
                 except Exception:
                     pass
+            if len(results) >= max_results:
+                break
 
         return results
 
@@ -790,6 +860,7 @@ class SearchEngine:
         query:       str,
         max_results: int = 15,
         proxy_url:   Optional[str] = None,
+        proxy_token: Optional[str] = None,
         on_result:   Optional[Callable[[SearchResult], None]] = None,
     ) -> list[SearchResult]:
         """
@@ -807,11 +878,14 @@ class SearchEngine:
         if not proxy_url:
             return []
 
-        endpoint = f"{proxy_url.rstrip('/')}/search"
-        params   = {"q": query, "limit": str(max_results)}
+        endpoint = f"{proxy_url.rstrip('/')}/api/v1/search"
+        params   = {"query": query, "limit": str(max_results)}
+        headers  = {}
+        if proxy_token:
+            headers["X-App-Token"] = proxy_token
 
         try:
-            response = httpx.get(endpoint, params=params, timeout=10.0)
+            response = httpx.get(endpoint, params=params, headers=headers, timeout=10.0)
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPError as exc:
@@ -821,13 +895,31 @@ class SearchEngine:
 
         raw_items: list[tuple[str, dict]] = []
         if isinstance(data, dict):
-            for kind_str in ("track", "album", "artist", "playlist"):
-                for item in (data.get(f"{kind_str}s") or []):
+            # The v1 contract wraps everything in a 'data' key
+            payload = data.get("data") if "data" in data else data
+
+            if isinstance(payload, dict):
+                # Priority 1: categorized keys ('tracks', 'albums', etc.)
+                found_categorized = False
+                for kind_str in ("track", "album", "artist", "playlist"):
+                    items = payload.get(f"{kind_str}s")
+                    if items and isinstance(items, list):
+                        found_categorized = True
+                        for item in items:
+                            raw_items.append((kind_str, item))
+                
+                # Priority 2: 'results' key (fallback)
+                if not found_categorized:
+                    res_list = payload.get("results")
+                    if isinstance(res_list, list):
+                        for item in res_list:
+                            kind_str = item.get("type", "track")
+                            raw_items.append((kind_str, item))
+            
+            elif isinstance(payload, list):
+                for item in payload:
+                    kind_str = item.get("type", "track")
                     raw_items.append((kind_str, item))
-        elif isinstance(data, list):
-            for item in data:
-                kind_str = item.get("type", "track")
-                raw_items.append((kind_str, item))
 
         kind_map: dict[str, ResultKind] = {
             "track":    ResultKind.TRACK,
@@ -848,7 +940,7 @@ class SearchEngine:
 
                 dur    = item.get("duration_sec")
                 thumb  = item.get("thumbnail_url") or item.get("image_url") or ""
-                s_url  = item.get("spotify_url") or ""
+                s_url  = item.get("url") or item.get("spotify_url") or ""
                 kind   = kind_map.get(kind_str, ResultKind.TRACK)
 
                 res_url = (
@@ -867,7 +959,7 @@ class SearchEngine:
                     thumbnail_url=thumb,
                     duration_sec=dur,
                     duration_str=_seconds_to_duration(dur) if dur else "",
-                    album=item.get("album_name") or "",
+                    album=item.get("album") or item.get("album_name") or "",
                 )
                 if kind in (ResultKind.ALBUM, ResultKind.PLAYLIST):
                     raw_count = item.get("total_tracks") or item.get("item_count")
@@ -1003,8 +1095,8 @@ class PageScraper:
         try:
             soup = BeautifulSoup(html, "html.parser")
             for tag, attr in [
-                ("iframe", "src"), ("a", "href"), ("video", "src"),
-                ("source", "src"), ("link", "href"),
+                ("iframe", "src"), ("a", "href"),
+                ("video", "src"), ("source", "src"), ("link", "href"),
             ]:
                 for el in soup.find_all(tag):
                     if self._cancel.is_set():

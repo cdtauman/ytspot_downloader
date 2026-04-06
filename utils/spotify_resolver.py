@@ -99,8 +99,10 @@ class SpotifyResolver:
     @classmethod
     def resolve(
         cls,
-        url:     str,
-        on_item: Optional[Callable[[dict], None]] = None,
+        url:         str,
+        on_item:     Optional[Callable[[dict], None]] = None,
+        proxy_url:   Optional[str] = None,
+        proxy_token: Optional[str] = None,
     ) -> list[dict]:
         """
         Resolve any Spotify URL to a list of track dicts.
@@ -124,17 +126,23 @@ class SpotifyResolver:
         ValueError  – url does not match a recognised Spotify pattern.
         RuntimeError – network / parse failure.
         """
+        print(f"[DEBUG-CLIENT] SpotifyResolver.resolve: url={url}")
         match = re.search(
             r"open\.spotify\.com/(track|album|playlist|artist)/([A-Za-z0-9]+)",
             url,
         )
         if not match:
+            print(f"[DEBUG-CLIENT] SpotifyResolver: URL Match FAILED for {url}")
             raise ValueError(f"Invalid or unsupported Spotify URL: {url!r}")
 
         entity_type = match.group(1)
         entity_id   = match.group(2)
 
-        proxy_url, proxy_token = cls._get_proxy_config()
+        # Use passed config or fallback to global AppConfig
+        if not proxy_url or not proxy_token:
+            cfg_url, cfg_token = cls._get_proxy_config()
+            proxy_url   = proxy_url or cfg_url
+            proxy_token = proxy_token or cfg_token
 
         if proxy_url and "your-future-server" not in proxy_url.lower():
             return cls._resolve_proxy(url, proxy_url, proxy_token, on_item)
@@ -406,12 +414,22 @@ class SpotifyResolver:
             headers["X-App-Token"] = proxy_token
 
         full_url = f"{endpoint}?{urllib.parse.urlencode(params)}"
+        print(f"[DEBUG-CLIENT] Proxy Fetching: {full_url}")
         req      = urllib.request.Request(full_url, headers=headers)
 
         try:
-            with urllib.request.urlopen(req, timeout=20) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                print(f"[DEBUG-CLIENT] Proxy Status Code: {resp.status}")
                 raw_data = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as he:
+            if he.code == 429:
+                msg = "Spotify Rate Limit exceeded (Too Many Requests). Please wait a few minutes and try again."
+                print(f"[DEBUG-CLIENT] {msg}")
+                raise RuntimeError(msg) from he
+            print(f"[DEBUG-CLIENT] Proxy HTTP ERROR: {he.code} {he.reason}")
+            raise RuntimeError(f"Proxy resolution failed (HTTP {he.code}): {he.reason}") from he
         except Exception as exc:
+            print(f"[DEBUG-CLIENT] Proxy ERROR: {exc}")
             raise RuntimeError(f"Proxy resolution failed: {exc}") from exc
 
         # New format: {"status": "success", "data": {"metadata": {...}, "items": [...]}}

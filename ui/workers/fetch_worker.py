@@ -72,11 +72,15 @@ class FetchWorker(QThread):
         self,
         url:          str,
         cookies_file: Optional[str] = None,
+        proxy_url:    Optional[str] = None,
+        proxy_token:  Optional[str] = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._url     = url
         self._cookies = cookies_file
+        self._proxy_url = proxy_url
+        self._proxy_token = proxy_token
         self._parser  = PlaylistParser()
 
     def cancel(self) -> None:
@@ -116,6 +120,8 @@ class FetchWorker(QThread):
             result: ParseResult = self._parser.parse(
                 self._url,
                 cookies_file=self._cookies,
+                proxy_url=self._proxy_url,
+                proxy_token=self._proxy_token,
                 on_item=on_item,
                 on_progress=on_progress,
                 on_error=on_error,

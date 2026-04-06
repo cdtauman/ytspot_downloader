@@ -317,6 +317,8 @@ class PlaylistParser:
         url:             str,
         *,
         cookies_file:    Optional[str]                               = None,
+        proxy_url:       Optional[str]                               = None,
+        proxy_token:     Optional[str]                               = None,
         on_item:         Optional[Callable[[TrackMeta, int, Optional[int]], None]] = None,
         on_progress:     Optional[Callable[[str], None]]             = None,
         on_error:        Optional[Callable[[str], None]]             = None,
@@ -326,13 +328,21 @@ class PlaylistParser:
         """
         self._cancel.clear()
         platform, kind = classify_url(url)
+        print(f"[DEBUG-CLIENT] PlaylistParser.parse: url={url}, platform={platform.name}, kind={kind.name}")
         result = ParseResult(url=url, kind=kind, platform=platform)
 
         self._notify(on_progress, f"Analysing URL… ({platform.name})")
 
         # ── Spotify resolution ────────────────────────────────────────────────
         if platform == SourcePlatform.SPOTIFY:
-            return self._parse_spotify(url, result, kind, on_item, on_progress, on_error)
+            return self._parse_spotify(
+                url, result, kind,
+                proxy_url=proxy_url,
+                proxy_token=proxy_token,
+                on_item=on_item,
+                on_progress=on_progress,
+                on_error=on_error,
+            )
 
         logger = _SilentLogger()
         ydl_opts = self._build_opts(cookies_file, logger)
@@ -421,9 +431,11 @@ class PlaylistParser:
         url:         str,
         result:      ParseResult,
         kind:        UrlKind,
-        on_item:     Optional[Callable],
-        on_progress: Optional[Callable],
-        on_error:    Optional[Callable],
+        proxy_url:   Optional[str] = None,
+        proxy_token: Optional[str] = None,
+        on_item:     Optional[Callable] = None,
+        on_progress: Optional[Callable] = None,
+        on_error:    Optional[Callable] = None,
     ) -> ParseResult:
         """
         Resolve a Spotify URL via SpotifyResolver and populate ParseResult.
@@ -458,7 +470,12 @@ class PlaylistParser:
 
         try:
             self._notify(on_progress, "Resolving Spotify link…")
-            items = SpotifyResolver.resolve(url, on_item=_on_spotify_item)
+            items = SpotifyResolver.resolve(
+                url,
+                on_item=_on_spotify_item,
+                proxy_url=proxy_url,
+                proxy_token=proxy_token,
+            )
 
             # Update summary fields after full resolution
             result.total_count = len(result.tracks)

@@ -193,7 +193,6 @@ class QueuePanel(QWidget):
         artist:        str         = "",
         duration:      str         = "",
         platform:      str         = "youtube",
-        thumbnail_url: str         = "",
         track_url:     str         = "",
         album:         str         = "",
     ) -> TrackCard:
@@ -210,7 +209,6 @@ class QueuePanel(QWidget):
             artist=artist,
             duration=duration,
             platform=platform,
-            thumbnail_url=thumbnail_url,
             track_url=track_url,
             album=album,
             parent=self._drop_area,
@@ -418,7 +416,7 @@ class QueuePanel(QWidget):
         """Remove all cards whose status is 'done'."""
         to_remove = []
         for card in self._cards:
-            style = card._status_dot.styleSheet()  # noqa: SLF001
+            style = card._dot.styleSheet()  # noqa: SLF001
             if "#34d399" in style:   # _SUCCESS colour
                 to_remove.append(card)
         for card in to_remove:

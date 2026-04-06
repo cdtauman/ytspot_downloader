@@ -97,6 +97,7 @@ class TrackCard(QFrame):
 
     # ── Signals ───────────────────────────────────────────────────────────────
     remove_requested  = Signal(int)    # queue_index
+    selection_changed = Signal()      # checkbox toggled
     pause_requested   = Signal(int)    # NEW – queue_index
     resume_requested  = Signal(int)    # NEW – queue_index
     reorder_requested = Signal(int, int)  # (from_index, to_index)
@@ -148,6 +149,7 @@ class TrackCard(QFrame):
         self._check = QCheckBox()
         self._check.setChecked(True)
         self._check.setFixedSize(20, 20)
+        self._check.stateChanged.connect(lambda: self.selection_changed.emit())
         outer.addWidget(self._check)
 
         # Thumbnail
@@ -314,10 +316,10 @@ class TrackCard(QFrame):
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    def is_checked(self) -> bool:
+    def is_selected(self) -> bool:
         return self._check.isChecked()
 
-    def set_checked(self, checked: bool) -> None:
+    def set_selected(self, checked: bool) -> None:
         self._check.setChecked(checked)
 
     def set_thumbnail(self, pixmap: QPixmap) -> None:

@@ -114,6 +114,7 @@ class DownloadRequest:
     # Forced metadata
     forced_title:    Optional[str] = None
     forced_artist:   Optional[str] = None
+    forced_album:    Optional[str] = None
     forced_index:    Optional[int] = None
     forced_duration: Optional[int] = None    # seconds, for duplicate check
 
