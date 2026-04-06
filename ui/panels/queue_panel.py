@@ -195,6 +195,7 @@ class QueuePanel(QWidget):
         platform:      str         = "youtube",
         thumbnail_url: str         = "",
         track_url:     str         = "",
+        album:         str         = "",
     ) -> TrackCard:
         """
         Create and append a new TrackCard.  Hides the empty state on first add.
@@ -211,6 +212,7 @@ class QueuePanel(QWidget):
             platform=platform,
             thumbnail_url=thumbnail_url,
             track_url=track_url,
+            album=album,
             parent=self._drop_area,
         )
         card.remove_requested.connect(self._on_card_remove)

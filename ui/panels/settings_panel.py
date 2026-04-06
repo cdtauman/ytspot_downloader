@@ -112,7 +112,10 @@ class SettingsPanel(QScrollArea):
         except Exception:
             pass
         try:
+            self._youtube_results_card.setValue(self._cfg.youtube_max_results)
+            self._spotify_results_card.setValue(self._cfg.spotify_max_results)
             self._spotify_proxy_card.setText(self._cfg.proxy_server_url)
+            self._spotify_proxy_token_card.setText(self._cfg.spotify_app_api_key)
         except Exception:
             pass
 
@@ -258,19 +261,33 @@ class SettingsPanel(QScrollArea):
         # ── 4. Search ─────────────────────────────────────────────────────────
         search_grp = SettingCardGroup(t("search_group"), content)
 
-        self._results_card = _SpinnerSettingCard(
+        self._youtube_results_card = _SpinnerSettingCard(
             icon=FluentIcon.SEARCH,
-            title=t("max_search_results"),
-            content=t("max_search_results_desc"),
-            value=self._cfg.search_max_results,
+            title=t("max_youtube_results"),
+            content=t("max_youtube_results_desc"),
+            value=self._cfg.youtube_max_results,
             min_val=1,
-            max_val=50,
+            max_val=100,
             parent=search_grp,
         )
-        self._results_card.value_changed.connect(
-            lambda v: self._persist("search_max_results", v)
+        self._youtube_results_card.value_changed.connect(
+            lambda v: self._persist("youtube_max_results", v)
         )
-        search_grp.addSettingCard(self._results_card)
+        search_grp.addSettingCard(self._youtube_results_card)
+
+        self._spotify_results_card = _SpinnerSettingCard(
+            icon=FluentIcon.SEARCH,
+            title=t("max_spotify_results"),
+            content=t("max_spotify_results_desc"),
+            value=self._cfg.spotify_max_results,
+            min_val=1,
+            max_val=100,
+            parent=search_grp,
+        )
+        self._spotify_results_card.value_changed.connect(
+            lambda v: self._persist("spotify_max_results", v)
+        )
+        search_grp.addSettingCard(self._spotify_results_card)
 
         self._spotify_proxy_card = _TextSettingCard(
             icon=FluentIcon.LINK,
@@ -286,7 +303,24 @@ class SettingsPanel(QScrollArea):
 
         layout.addWidget(search_grp)
 
-        # ── 5. Authentication ─────────────────────────────────────────────────
+        # ── 5. Spotify ────────────────────────────────────────────────────────
+        spotify_grp = SettingCardGroup(t("spotify_group"), content)
+
+        self._spotify_proxy_token_card = _TextSettingCard(
+            icon=FluentIcon.CERTIFICATE,
+            title=t("spotify_proxy_api_key"),
+            content=t("spotify_proxy_api_key_desc"),
+            value=self._cfg.spotify_app_api_key,
+            parent=spotify_grp,
+        )
+        self._spotify_proxy_token_card.value_changed.connect(
+            lambda v: self._persist("spotify_app_api_key", v)
+        )
+        spotify_grp.addSettingCard(self._spotify_proxy_token_card)
+
+        layout.addWidget(spotify_grp)
+
+        # ── 6. Authentication ─────────────────────────────────────────────────
         auth_grp = SettingCardGroup(t("authentication"), content)
 
         cookies_val = self._cfg.cookies_file
@@ -422,7 +456,7 @@ class _SpinnerSettingCard(QFrame):
 
     def _build(self, icon, title: str, content: str) -> None:
         from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
-        from qfluentwidgets import IconWidget, ToolButton
+        from qfluentwidgets import IconWidget, SpinBox
 
         self.setFixedHeight(76)
         self.setStyleSheet(f"""
@@ -459,40 +493,39 @@ class _SpinnerSettingCard(QFrame):
         text_col.addWidget(sub_lbl)
         row.addLayout(text_col, stretch=1)
 
-        # Spinner controls
-        self._minus_btn = ToolButton()
-        self._minus_btn.setText("−")
-        self._minus_btn.setFixedSize(30, 30)
-        self._minus_btn.clicked.connect(self._decrement)
+        # SpinBox
+        self._spin_box = SpinBox(self)
+        self._spin_box.setRange(self._min_val, self._max_val)
+        self._spin_box.setValue(self._value)
+        self._spin_box.setFixedWidth(120)
+        self._spin_box.setStyleSheet(f"""
+            SpinBox {{
+                color: {_TEXT};
+                background: {_SURFACE};
+                border: 1px solid {_BORDER};
+                border-radius: 4px;
+                font-size: 13px;
+                padding: 4px;
+            }}
+            SpinBox:hover {{
+                border-color: {ACCENT_COLOR};
+            }}
+            SpinBox:focus {{
+                border-color: {ACCENT_COLOR};
+                background: {_BG};
+            }}
+        """)
+        self._spin_box.valueChanged.connect(self._on_spin_changed)
+        row.addWidget(self._spin_box)
 
-        self._value_lbl = QLabel(str(self._value))
-        self._value_lbl.setFixedWidth(36)
-        self._value_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._value_lbl.setStyleSheet(
-            f"color: {ACCENT_COLOR}; font-size: 14px;"
-            " font-weight: bold; background: transparent;"
-        )
+    def _on_spin_changed(self, value: int) -> None:
+        if value != self._value:
+            self._value = value
+            self.value_changed.emit(value)
 
-        self._plus_btn = ToolButton()
-        self._plus_btn.setText("+")
-        self._plus_btn.setFixedSize(30, 30)
-        self._plus_btn.clicked.connect(self._increment)
-
-        row.addWidget(self._minus_btn)
-        row.addWidget(self._value_lbl)
-        row.addWidget(self._plus_btn)
-
-    def _increment(self) -> None:
-        if self._value < self._max_val:
-            self._value += 1
-            self._value_lbl.setText(str(self._value))
-            self.value_changed.emit(self._value)
-
-    def _decrement(self) -> None:
-        if self._value > self._min_val:
-            self._value -= 1
-            self._value_lbl.setText(str(self._value))
-            self.value_changed.emit(self._value)
+    def setValue(self, value: int) -> None:
+        self._value = value
+        self._spin_box.setValue(value)
 
 
 class _LanguageSettingCard(QFrame):

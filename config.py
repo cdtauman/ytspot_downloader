@@ -102,6 +102,8 @@ _DEFAULTS: dict[str, Any] = {
 
     # Maximum number of search results to fetch per query.
     "search_max_results":   15,
+    "youtube_max_results":  15,
+    "spotify_max_results":  15,
 
     # ── Batch import ──────────────────────────────────────────────────────────
     # The last directory the user opened when importing a .txt URL batch file.
@@ -135,6 +137,9 @@ _DEFAULTS: dict[str, Any] = {
     # Number of tracks downloaded simultaneously (1 = sequential, max = 5).
     # Higher values consume more CPU/bandwidth but complete batches faster.
     "max_parallel_downloads": 3,
+
+    # ── Spotify Proxy API Key ─────────────────────────────────────────────────
+    "spotify_app_api_key": "c6ffadbe3f5cb7146a72d91364c0a3cd981a90d67c167fc6acf44db4f3cbf8ad",
 
 }
 
@@ -509,6 +514,36 @@ class AppConfig:
     # ──
 
     @property
+    def youtube_max_results(self) -> int:
+        """Maximum number of results for YouTube search."""
+        raw = self._data.get("youtube_max_results", 15)
+        try:
+            val = int(raw)
+        except (TypeError, ValueError):
+            val = 15
+        return max(1, min(100, val))
+
+    @youtube_max_results.setter
+    def youtube_max_results(self, value: int) -> None:
+        self._data["youtube_max_results"] = max(1, min(100, int(value)))
+
+    @property
+    def spotify_max_results(self) -> int:
+        """Maximum number of results for Spotify search."""
+        raw = self._data.get("spotify_max_results", 15)
+        try:
+            val = int(raw)
+        except (TypeError, ValueError):
+            val = 15
+        return max(1, min(100, val))
+
+    @spotify_max_results.setter
+    def spotify_max_results(self, value: int) -> None:
+        self._data["spotify_max_results"] = max(1, min(100, int(value)))
+
+    # ──
+
+    @property
     def batch_import_dir(self) -> str:
         """
         Last directory the user opened when importing a .txt URL batch file.
@@ -579,6 +614,15 @@ class AppConfig:
     @spotify_client_secret.setter
     def spotify_client_secret(self, value: str) -> None:
         self._data["spotify_client_secret"] = str(value).strip()
+
+    @property
+    def spotify_app_api_key(self) -> str:
+        """Security token for the Spotify proxy server (sent as X-App-Token)."""
+        return str(self._data.get("spotify_app_api_key", ""))
+
+    @spotify_app_api_key.setter
+    def spotify_app_api_key(self, value: str) -> None:
+        self._data["spotify_app_api_key"] = str(value).strip()
 
     # ── Parallel download concurrency ─────────────────────────────────────────
 

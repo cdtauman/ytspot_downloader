@@ -134,30 +134,15 @@ class SpotifyResolver:
         entity_type = match.group(1)
         entity_id   = match.group(2)
 
-        # Decide which strategy to use
-        client_id, client_secret = cls._get_credentials()
-        use_api = bool(client_id and client_secret)
+        proxy_url, proxy_token = cls._get_proxy_config()
 
-        if use_api:
-            if entity_type == "track":
-                return cls._resolve_track_api(entity_id, on_item)
-            elif entity_type == "album":
-                return cls._resolve_album_api(entity_id, on_item)
-            elif entity_type == "playlist":
-                return cls._resolve_playlist_api(entity_id, on_item)
-            elif entity_type == "artist":
-                return cls._resolve_artist_api(entity_id, on_item)
-        else:
-            # Embed fallback: only works for track / album / playlist
-            if entity_type == "artist":
-                raise RuntimeError(
-                    "Artist discography requires Spotify API credentials.\n\n"
-                    "Go to Settings → Spotify and enter your Client ID and Secret.\n"
-                    "(Free Spotify Developer account required – no Premium needed.)"
-                )
-            return cls._embed_fallback(entity_type, entity_id, on_item)
+        if proxy_url and "your-future-server" not in proxy_url.lower():
+            return cls._resolve_proxy(url, proxy_url, proxy_token, on_item)
 
-        return []
+        raise RuntimeError(
+            "Spotify Proxy is not configured.\n\n"
+            "Please go to Settings → Spotify and set your Proxy URL and App API Key."
+        )
 
     @classmethod
     def resolve_artist(
@@ -400,6 +385,69 @@ class SpotifyResolver:
 
         return items
 
+    @classmethod
+    def _resolve_proxy(
+        cls,
+        url:          str,
+        proxy_base:   str,
+        proxy_token:  str,
+        on_item:      Optional[Callable[[dict], None]] = None,
+    ) -> list[dict]:
+        """
+        Resolve a Spotify URL via the configured proxy server.
+        Endpoint: /api/v1/resolve?url={url}
+        Header: X-App-Token
+        """
+        proxy_base = proxy_base.rstrip("/")
+        endpoint   = f"{proxy_base}/api/v1/resolve"
+        params     = {"url": url}
+        headers    = {"User-Agent": _REQUEST_UA}
+        if proxy_token:
+            headers["X-App-Token"] = proxy_token
+
+        full_url = f"{endpoint}?{urllib.parse.urlencode(params)}"
+        req      = urllib.request.Request(full_url, headers=headers)
+
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                raw_data = json.loads(resp.read().decode())
+        except Exception as exc:
+            raise RuntimeError(f"Proxy resolution failed: {exc}") from exc
+
+        # New format: {"status": "success", "data": {"metadata": {...}, "items": [...]}}
+        data = raw_data.get("data") if isinstance(raw_data, dict) else raw_data
+        
+        if isinstance(data, dict) and "items" in data:
+            items = data["items"]
+        elif isinstance(data, dict) and "results" in data:
+            items = data["results"]
+        elif isinstance(data, list):
+            items = data
+        else:
+            # Fallback for single track or unknown format
+            if isinstance(data, dict) and "title" in data:
+                items = [data]
+            else:
+                items = []
+
+        # Ensure all items have the required fields and emit them
+        for item in items:
+            # Reconstruct the expected dict format if keys are different
+            # Server returns: title, artist, yt_query, image_url, album, duration_sec
+            normalized = {
+                "title":         item.get("title") or "Unknown Title",
+                "artist":        item.get("artist") or "Unknown Artist",
+                "url":           item.get("yt_query") or item.get("url") or "",
+                "duration_sec":  item.get("duration_sec"),
+                "thumbnail_url": item.get("image_url") or item.get("thumbnail_url") or "",
+                "spotify_url":   item.get("spotify_url") or "",
+                "album":         item.get("album") or "",
+            }
+            if on_item:
+                on_item(normalized)
+
+        return items
+
     # ──────────────────────────────────────────────────────────────────────────
     # Spotify Web API transport
     # ──────────────────────────────────────────────────────────────────────────
@@ -603,5 +651,15 @@ class SpotifyResolver:
             from config import AppConfig
             cfg = AppConfig()
             return cfg.spotify_client_id.strip(), cfg.spotify_client_secret.strip()
+        except Exception:
+            return "", ""
+
+    @staticmethod
+    def _get_proxy_config() -> tuple[str, str]:
+        """Read proxy configuration from AppConfig."""
+        try:
+            from config import AppConfig
+            cfg = AppConfig()
+            return cfg.proxy_server_url.strip(), cfg.spotify_app_api_key.strip()
         except Exception:
             return "", ""

@@ -102,6 +102,7 @@ class FetchWorker(QThread):
                 "platform":      self._PLATFORM_STR.get(track.platform, "youtube"),
                 "thumbnail_url": track.thumbnail_url,
                 "track_url":     track.url,
+                "album":         track.album,
             })
 
         def on_progress(msg: str) -> None:

@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 from qfluentwidgets import (
     BodyLabel, CaptionLabel, IndeterminateProgressRing,
-    PushButton, SearchLineEdit,
+    PushButton, SearchLineEdit, SegmentedWidget,
 )
 
 from config import AppConfig
@@ -103,6 +103,7 @@ class SearchPanel(QWidget):
         self._section_cards:    dict[ResultKind, list[SearchResultCard]] = {
             k: [] for k in _SECTION_ORDER
         }
+        self._current_filter: Optional[ResultKind] = None
 
         self._build()
         self._restore_state()
@@ -153,6 +154,10 @@ class SearchPanel(QWidget):
 
         self._section_cards[kind].append(card)
         self._cards.append(card)
+        
+        # Ensure the section visibility respects the current filter
+        self._apply_filter(self._current_filter)
+        
         self._update_count()
         return card
 
@@ -234,6 +239,19 @@ class SearchPanel(QWidget):
         top_row.addWidget(self._platform_btn)
 
         root.addLayout(top_row)
+
+        # ── Filter bar ────────────────────────────────────────────────────────
+        self.filter_nav = SegmentedWidget(self)
+        self.filter_nav.setFixedHeight(34)
+        self._add_filter_item("all", t("search_filter_all"), None)
+        self._add_filter_item("tracks", t("search_filter_tracks"), ResultKind.TRACK)
+        self._add_filter_item("albums", t("search_filter_albums"), ResultKind.ALBUM)
+        self._add_filter_item("artists", t("search_filter_artists"), ResultKind.ARTIST)
+        self._add_filter_item("playlists", t("search_filter_playlists"), ResultKind.PLAYLIST)
+        self._add_filter_item("channels", t("search_filter_channels"), ResultKind.CHANNEL)
+        
+        self.filter_nav.setCurrentItem("all")
+        root.addWidget(self.filter_nav)
 
         # ── Sub-bar: result count + ring + clear button ───────────────────────
         sub_row = QHBoxLayout()
@@ -415,3 +433,22 @@ class SearchPanel(QWidget):
             self.clear_results()
             self.save_state()
             self.search_requested.emit(query)
+
+    def _add_filter_item(self, route: str, text: str, kind: Optional[ResultKind]) -> None:
+        self.filter_nav.addItem(
+            route, text, 
+            onClick=lambda: self._apply_filter(kind)
+        )
+
+    def _apply_filter(self, kind: Optional[ResultKind]) -> None:
+        """Show only sections matching the filter. None means 'All'."""
+        self._current_filter = kind
+        
+        for section_kind, widget in self._section_widgets.items():
+            # A section should be visible if:
+            # 1. It has cards
+            # 2. (Current filter is None) OR (Current filter matches section kind)
+            has_cards = len(self._section_cards[section_kind]) > 0
+            matches_filter = (kind is None) or (kind == section_kind)
+            
+            widget.setVisible(has_cards and matches_filter)

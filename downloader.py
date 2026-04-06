@@ -174,27 +174,32 @@ def _sanitize_filename(name: str) -> str:
 
 def _sanitize_folder_name(name: str) -> str:
     """
-    Return a filesystem-safe folder name for use as a playlist sub-directory.
-
-    Strips:
-      * Characters illegal on Windows/macOS/Linux: \\ / : * ? " < > |
-      * Leading and trailing whitespace and dots (Windows restriction)
-      * Control characters (0x00–0x1F)
-      * Consecutive spaces → single space, then spaces → underscores
-    Truncates to 200 characters to stay well within path-length limits.
-    Falls back to "Playlist" if the result would be empty.
+    Return a filesystem-safe folder name or sub-path.
+    Supports nested paths using / or \\ as separators.
+    Each component is sanitized and capped at 100 characters.
     """
-    # Remove control characters
-    cleaned = re.sub(r'[\x00-\x1f]', '', name)
-    # Replace illegal filesystem chars with underscore
-    cleaned = re.sub(r'[\\/:*?"<>|]', '_', cleaned)
-    # Collapse multiple spaces/underscores
-    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-    # Strip leading/trailing dots (Windows hides files starting with '.')
-    cleaned = cleaned.strip('.')
-    # Final trim and length cap
-    cleaned = cleaned.strip()[:200]
-    return cleaned if cleaned else "Playlist"
+    if not name:
+        return "Playlist"
+        
+    # Standardize to forward slashes
+    path = name.replace("\\", "/")
+    parts = path.split("/")
+    
+    sanitized_parts = []
+    for part in parts:
+        # Remove control characters
+        cleaned = re.sub(r'[\x00-\x1f]', '', part)
+        # Replace illegal filesystem chars (excluding / which we already split)
+        cleaned = re.sub(r'[:*?"<>|]', '_', cleaned)
+        # Replace / and \ just in case they were missed or injected
+        cleaned = cleaned.replace("/", "_").replace("\\", "_")
+        # Strip leading/trailing dots and spaces (Windows restriction)
+        cleaned = cleaned.strip(". ")
+        # Final trim and length cap for this component
+        if cleaned and cleaned != "..":
+            sanitized_parts.append(cleaned[:100])
+            
+    return "/".join(sanitized_parts) if sanitized_parts else "Playlist"
 
 
 def _bytes_to_mb(b: Optional[int]) -> Optional[float]:
@@ -273,7 +278,9 @@ class DownloadEngine:
         # For singles: output_dir directly (no sub-folder)
         base_dir = Path(request.output_dir).expanduser().resolve()
         if request.playlist_name:
-            out_dir = base_dir / _sanitize_folder_name(request.playlist_name)
+            # _sanitize_folder_name supports nested paths "Artist/Album"
+            sanitized_sub = _sanitize_folder_name(request.playlist_name)
+            out_dir = base_dir / Path(sanitized_sub)
         else:
             out_dir = base_dir
 

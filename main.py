@@ -63,8 +63,14 @@ def main() -> int:
     theme_mgr.apply(cfg.theme)
 
     # 6. Main window
-    window = AppWindow(config=cfg, db=db)
-    window.show()
+    try:
+        window = AppWindow(config=cfg, db=db)
+        window.show()
+    except Exception as e:
+        print(f"CRITICAL STARTUP ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
 
     # 7. Event loop
     return app.exec()

@@ -123,10 +123,18 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         ),
 
         "search_group": "Search",
-        "max_search_results": "Max Search Results",
+        "max_search_results": "Max Search Results (Legacy)",
         "max_search_results_desc": "Maximum number of results to fetch per search query (1 – 50)",
+        "max_youtube_results": "Max YouTube Results",
+        "max_youtube_results_desc": "Maximum number of results to fetch for YouTube searches (1 – 100)",
+        "max_spotify_results": "Max Spotify Results",
+        "max_spotify_results_desc": "Maximum number of results to fetch for Spotify searches (1 – 100)",
         "spotify_proxy": "Spotify Proxy Server URL",
         "spotify_proxy_desc": "URL to your Spotify proxy server (e.g. http://localhost:8000)",
+
+        "spotify_group": "Spotify",
+        "spotify_proxy_api_key": "App API Key",
+        "spotify_proxy_api_key_desc": "Security token for your proxy server (X-App-Token)",
 
         "authentication": "Authentication",
         "cookies_file": "Cookies File",
@@ -185,6 +193,13 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "platform_youtube": "YouTube",
         "platform_spotify": "Spotify",
         "platform_both": "Both",
+
+        "search_filter_all": "All",
+        "search_filter_tracks": "Tracks",
+        "search_filter_albums": "Albums",
+        "search_filter_artists": "Artists",
+        "search_filter_playlists": "Playlists",
+        "search_filter_channels": "Channels",
 
         # ── Queue panel ─────────────────────────────────────────────────────────
         "no_tracks_loaded": "No tracks loaded",
@@ -318,10 +333,18 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         ),
 
         "search_group": "חיפוש",
-        "max_search_results": "מקסימום תוצאות חיפוש",
+        "max_search_results": "מקסימום תוצאות חיפוש (ישן)",
         "max_search_results_desc": "מספר מקסימלי של תוצאות לשאילתת חיפוש (1 – 50)",
+        "max_youtube_results": "מקסימום תוצאות YouTube",
+        "max_youtube_results_desc": "מספר מקסימלי של תוצאות לחיפושי YouTube (1 – 100)",
+        "max_spotify_results": "מקסימום תוצאות Spotify",
+        "max_spotify_results_desc": "מספר מקסימלי של תוצאות לחיפושי Spotify (1 – 100)",
         "spotify_proxy": "כתובת שרת פרוקסי ל-Spotify",
         "spotify_proxy_desc": "כתובת ה-URL של שרת הפרוקסי ל-Spotify (למשל http://localhost:8000)",
+
+        "spotify_group": "Spotify",
+        "spotify_proxy_api_key": "מפתח API לאפליקציה (App API Key)",
+        "spotify_proxy_api_key_desc": "טוקן אבטחה לשרת הפרוקסי (נשלח כ-X-App-Token)",
 
         "authentication": "אימות",
         "cookies_file": "קובץ עוגיות",
@@ -380,6 +403,13 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "platform_youtube": "YouTube",
         "platform_spotify": "Spotify",
         "platform_both": "הכל",
+
+        "search_filter_all": "הכל",
+        "search_filter_tracks": "שירים",
+        "search_filter_albums": "אלבומים",
+        "search_filter_artists": "אמנים",
+        "search_filter_playlists": "פלייליסטים",
+        "search_filter_channels": "ערוצים",
 
         # ── Queue panel ─────────────────────────────────────────────────────────
         "no_tracks_loaded": "אין פריטים בתור",

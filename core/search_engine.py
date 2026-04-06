@@ -95,6 +95,7 @@ class SearchResult:
     url:            str             = ""        # canonical watch / track URL
     platform:       SourcePlatform  = SourcePlatform.UNKNOWN
     kind:           ResultKind      = ResultKind.TRACK   # entity category
+    album:          str             = ""        # album name
 
     # ── Display metadata ──────────────────────────────────────────────────────
     thumbnail_url:  str             = ""
@@ -149,8 +150,24 @@ def _detect_kind(entry: dict, platform: SourcePlatform) -> ResultKind:
     # yt-dlp uses YoutubePlaylist / YoutubeTab for playlists / channels
     if ie_key in ("youtubeplaylist",) or _type in ("playlist", "multi_video"):
         return ResultKind.PLAYLIST
-    if ie_key in ("youtubetab",) or "youtube.com/@" in url or "/channel/" in url:
+    # Keywords for Artist/Channel
+    title_lower = (entry.get("title") or "").lower()
+    uploader_lower = (entry.get("uploader") or "").lower()
+    is_official = "official" in title_lower or "official" in uploader_lower or "רשמי" in title_lower
+    is_channel_word = "channel" in title_lower or "ערוץ" in title_lower
+
+    if ie_key in ("youtubetab",) or "youtube.com/@" in url or "/channel/UC" in url or is_channel_word:
+        if platform == SourcePlatform.YOUTUBE_MUSIC or "/artist/" in url or is_official:
+            return ResultKind.ARTIST
         return ResultKind.CHANNEL
+
+    # YouTube Music specific patterns
+    if platform == SourcePlatform.YOUTUBE_MUSIC or "music.youtube.com" in url:
+        if "/album/" in url or "/browse/MPREb_" in url:
+            return ResultKind.ALBUM
+        if "/artist/" in url or "/browse/F8" in url or is_official:
+            return ResultKind.ARTIST
+
     if platform == SourcePlatform.SPOTIFY:
         # These are set by the caller based on Spotify API type field
         return ResultKind.TRACK
@@ -394,14 +411,15 @@ class SearchEngine:
 
         def _search_playlists() -> None:
             try:
+                n = max(10, max_results)
                 opts = _build_search_opts(
                     cookies_file=self._cookies_file,
                     logger=_SilentLogger(),
-                    max_results=max(5, max_results // 3),
+                    max_results=n,
                 )
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(
-                        f"ytsearch{max(5, max_results // 3)}:{query} playlist",
+                        f"ytsearch{n}:{query} playlist",
                         download=False,
                     )
                 if not info:
@@ -433,15 +451,17 @@ class SearchEngine:
 
         def _search_channels() -> None:
             try:
-                n = max(3, max_results // 5)
+                # Boost limit and search for official artists too
+                n = max(10, max_results)
                 opts = _build_search_opts(
                     cookies_file=self._cookies_file,
                     logger=_SilentLogger(),
                     max_results=n,
                 )
                 with yt_dlp.YoutubeDL(opts) as ydl:
+                    # Searching for channels and official artists
                     info = ydl.extract_info(
-                        f"ytsearch{n}:{query} channel",
+                        f"ytsearch{n}:{query} official channel",
                         download=False,
                     )
                 if not info:
@@ -460,11 +480,37 @@ class SearchEngine:
             except Exception:
                 pass
 
-        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="yt-search") as pool:
+        def _search_yt_music() -> None:
+            try:
+                n = max(15, max_results)
+                # ytmusicsearch returns a mix of songs, albums, and artists
+                opts = _build_search_opts(
+                    cookies_file=self._cookies_file,
+                    logger=_SilentLogger(),
+                    max_results=n,
+                )
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(f"ytmusicsearch{n}:{query}", download=False)
+                if not info:
+                    return
+                for entry in (info.get("entries") or []):
+                    if self._cancel.is_set():
+                        return
+                    if not entry:
+                        continue
+                    url = entry.get("webpage_url") or entry.get("url") or ""
+                    plat = SourcePlatform.YOUTUBE_MUSIC
+                    # _detect_kind will handle categorization via URL patterns
+                    _emit(_entry_to_search_result(entry, 0, plat))
+            except Exception:
+                pass
+
+        with ThreadPoolExecutor(max_workers=4, thread_name_prefix="yt-search") as pool:
             fs = [
                 pool.submit(_search_tracks),
                 pool.submit(_search_playlists),
                 pool.submit(_search_channels),
+                pool.submit(_search_yt_music),
             ]
             for f in as_completed(fs):
                 _ = f.result()   # surface any unexpected exceptions
@@ -512,29 +558,23 @@ class SearchEngine:
         """
         self._cancel.clear()
 
-        # Try Spotify Web API first
+        # Try Spotify Proxy (only)
+        print(f"SEARCH: Starting Spotify search for: {query}")
         try:
             from config import AppConfig
             cfg = AppConfig()
-            client_id     = cfg.spotify_client_id.strip()
-            client_secret = cfg.spotify_client_secret.strip()
-            proxy_url     = cfg.proxy_server_url.strip()
-        except Exception:
-            client_id = client_secret = proxy_url = ""
+            proxy_url = cfg.proxy_server_url.strip()
+            print(f"SEARCH: Using proxy URL: {proxy_url}")
+        except Exception as e:
+            print(f"SEARCH: Failed to read config: {e}")
+            proxy_url = ""
 
-        if client_id and client_secret:
-            return self._search_spotify_api(query, max_results, on_result)
-
-        # Fall back to proxy server
         if proxy_url and "your-future-server" not in proxy_url.lower():
             return self._search_spotify_proxy(query, max_results, on_result, proxy_url)
 
         raise SearchError(
-            "Spotify search is not configured.\n\n"
-            "Option A (recommended): Go to Settings → Spotify and enter your "
-            "Developer App Client ID and Secret (free account at "
-            "developer.spotify.com/dashboard).\n\n"
-            "Option B (legacy): Set a Proxy Server URL in Settings → Search."
+            "Spotify Proxy is not configured.\n\n"
+            "Please go to Settings → Spotify and set your Proxy URL and App API Key."
         )
 
     # ── Spotify Web API search ─────────────────────────────────────────────────
@@ -681,11 +721,29 @@ class SearchEngine:
         params    = {"query": query, "limit": max_results}
 
         try:
-            with httpx.Client(timeout=15.0) as client:
+            from config import AppConfig
+            token = AppConfig().spotify_app_api_key.strip()
+        except Exception:
+            token = ""
+
+        headers = {
+            "Accept":      "application/json",
+            "User-Agent":  "YTSpotDownloader/1.0",
+        }
+        if token:
+            headers["X-App-Token"] = token
+
+        print(f"SEARCH: Proxy request to {endpoint} with params {params}")
+        try:
+            with httpx.Client(timeout=20.0, headers=headers) as client:
                 resp = client.get(endpoint, params=params)
+                print(f"SEARCH: Proxy responded with status {resp.status_code}")
                 resp.raise_for_status()
                 data = resp.json()
+                print(f"SEARCH: Raw data received: {data}")
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 422:
+                 print(f"SEARCH: Server validation error (422): {exc.response.text}")
             raise SearchError(
                 f"Proxy returned HTTP {exc.response.status_code}. "
                 f"Is the server running at {proxy_url}?"
@@ -695,23 +753,69 @@ class SearchEngine:
                 f"Cannot reach proxy at {proxy_url}: {exc}"
             ) from exc
 
-        for idx, item in enumerate((data.get("data") or [])[:max_results], start=1):
+        # Handle various response formats (list or dict with results/data keys)
+        # New format: {"status": "success", "data": {"tracks": [...], "albums": [...], ...}}
+        raw_items = []
+        if isinstance(data, list):
+            raw_items = [("track", item) for item in data]
+        elif isinstance(data, dict):
+            inner_data = data.get("data")
+            if isinstance(inner_data, dict):
+                # New categorised format
+                for category in ["tracks", "albums", "artists", "playlists"]:
+                    cat_items = inner_data.get(category) or []
+                    kind_str = category.rstrip("s") # tracks -> track
+                    raw_items.extend([(kind_str, item) for item in cat_items])
+            else:
+                # Legacy or flat dict format
+                items = data.get("results") or data.get("data") or data.get("items") or []
+                raw_items = [("track", item) for item in items]
+        
+        if not raw_items:
+            print(f"DEBUG: No results found from {proxy_url}. Response: {data}")
+
+        kind_map = {
+            "track":    ResultKind.TRACK,
+            "album":    ResultKind.ALBUM,
+            "artist":   ResultKind.ARTIST,
+            "playlist": ResultKind.PLAYLIST,
+        }
+
+        for idx, (kind_str, item) in enumerate(raw_items, start=1):
             if self._cancel.is_set():
                 break
             try:
-                title  = item.get("title") or "Unknown Title"
+                title  = item.get("title") or item.get("name") or "Unknown Title"
                 artist = item.get("artist") or ""
+                if not artist and kind_str == "artist":
+                    artist = title
+                
                 dur    = item.get("duration_sec")
-                thumb  = item.get("thumbnail_url", "")
+                thumb  = item.get("thumbnail_url") or item.get("image_url") or ""
+                s_url  = item.get("spotify_url") or ""
+                
+                # For tracks, we use ytsearch; for others, we use the Spotify URL for drill-down
+                kind = kind_map.get(kind_str, ResultKind.TRACK)
+                if kind == ResultKind.TRACK:
+                    res_url = f"ytsearch1:{artist} {title} audio"
+                else:
+                    res_url = s_url
+
                 r = SearchResult(
                     result_index=idx,
                     title=title, artist=artist,
-                    url=f"ytsearch1:{artist} {title} audio",
-                    platform=SourcePlatform.SPOTIFY, kind=ResultKind.TRACK,
+                    url=res_url,
+                    platform=SourcePlatform.SPOTIFY, kind=kind,
                     thumbnail_url=thumb,
                     duration_sec=dur,
                     duration_str=_seconds_to_str(dur) if dur else "",
+                    album=item.get("album_name") or "",
                 )
+                
+                # Capture item count for playlists/albums if available
+                if kind in (ResultKind.ALBUM, ResultKind.PLAYLIST):
+                    r.item_count = item.get("total_tracks") or item.get("item_count")
+
                 results.append(r)
                 if on_result:
                     try:

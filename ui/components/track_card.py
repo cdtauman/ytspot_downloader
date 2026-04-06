@@ -137,6 +137,7 @@ class TrackCard(QFrame):
         platform:      str         = "youtube",
         thumbnail_url: str         = "",
         track_url:     str         = "",
+        album:         str         = "",
         parent:        QWidget     = None,
     ) -> None:
         super().__init__(parent)
@@ -145,6 +146,7 @@ class TrackCard(QFrame):
         self.queue_index   = queue_index
         self.title         = title
         self.artist        = artist
+        self.album         = album
         self.track_url     = track_url
         self.thumbnail_url = thumbnail_url
 

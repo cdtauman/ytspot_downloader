@@ -70,7 +70,8 @@ class SearchWorker(QThread):
         self,
         query:                str,
         platform:             str           = "youtube",
-        max_results:          int           = 15,
+        youtube_max_results:  int           = 15,
+        spotify_max_results:  int           = 15,
         cookies_file:         Optional[str] = None,
         spotify_client_id:    str           = "",
         spotify_client_secret: str          = "",
@@ -79,13 +80,14 @@ class SearchWorker(QThread):
         super().__init__(parent)
         self._query                 = query.strip()
         self._platform              = platform
-        self._max_results           = max(1, min(50, max_results))
+        self._youtube_max_results   = max(1, min(100, youtube_max_results))
+        self._spotify_max_results   = max(1, min(100, spotify_max_results))
         self._spotify_client_id     = spotify_client_id
         self._spotify_client_secret = spotify_client_secret
         self._engine                = SearchEngine(cookies_file=cookies_file)
         logger.debug(
-            "[SearchWorker] Init: query=%r  platform=%s  max_results=%d",
-            self._query, self._platform, self._max_results,
+            "[SearchWorker] Init: query=%r  platform=%s  yt_limit=%d  sp_limit=%d",
+            self._query, self._platform, self._youtube_max_results, self._spotify_max_results,
         )
 
     def cancel(self) -> None:
@@ -155,14 +157,14 @@ class SearchWorker(QThread):
             if hasattr(self._engine, "search_youtube_categorized"):
                 self._engine.search_youtube_categorized(
                     self._query,
-                    max_results=self._max_results,
+                    max_results=self._youtube_max_results,
                     on_result=on_result,
                 )
             else:
                 # Fallback for older engine versions
                 self._engine.search_youtube(
                     self._query,
-                    max_results=self._max_results,
+                    max_results=self._youtube_max_results,
                     on_result=on_result,
                 )
         except Exception as exc:
@@ -175,16 +177,14 @@ class SearchWorker(QThread):
             if hasattr(self._engine, "search_spotify_categorized"):
                 self._engine.search_spotify_categorized(
                     self._query,
-                    max_results=self._max_results,
+                    max_results=self._spotify_max_results,
                     on_result=on_result,
-                    client_id=self._spotify_client_id,
-                    client_secret=self._spotify_client_secret,
                 )
             else:
                 # Fallback for older engine versions
                 self._engine.search_spotify(
                     self._query,
-                    max_results=self._max_results,
+                    max_results=self._spotify_max_results,
                     on_result=on_result,
                 )
         except Exception as exc:

@@ -541,6 +541,7 @@ class AppWindow(FluentWindow):
             platform=data.get("platform", "youtube"),
             thumbnail_url=data.get("thumbnail_url", ""),
             track_url=data.get("track_url", ""),
+            album=data.get("album", ""),
         )
         self._index_to_card[data["index"]] = card
         self._update_dl_bar()
@@ -700,17 +701,27 @@ class AppWindow(FluentWindow):
 
         # Determine playlist sub-folder (PLAYLIST / ALBUM / ARTIST → sub-folder)
         _multi_kinds = {UrlKind.PLAYLIST, UrlKind.ALBUM, UrlKind.ARTIST}
-        playlist_name: Optional[str] = (
-            self._last_playlist_title or None
-            if self._last_url_kind in _multi_kinds
-            else None
-        )
-
+        is_multi = self._last_url_kind in _multi_kinds
+        
         # Build job list
         jobs: list[tuple[int, DownloadRequest]] = []
         self._key_to_card.clear()
 
         for card in selected:
+            # Determine playlist sub-folder per track
+            track_playlist_name = None
+            if is_multi:
+                if self._last_url_kind == UrlKind.ARTIST:
+                    # Artist flow: ArtistName / AlbumName (or Singles)
+                    album_part = card.album if card.album else "Singles"
+                    track_playlist_name = f"{card.artist}/{album_part}"
+                elif self._last_url_kind == UrlKind.ALBUM:
+                    # Album flow: ArtistName / AlbumName
+                    track_playlist_name = f"{card.artist}/{self._last_playlist_title}"
+                else:
+                    # Playlist flow: PlaylistTitle
+                    track_playlist_name = self._last_playlist_title
+
             req = DownloadRequest(
                 url=card.track_url,
                 output_dir=output_dir,
@@ -724,7 +735,7 @@ class AppWindow(FluentWindow):
                 forced_artist=card.artist,
                 forced_index=card.queue_index,
                 cookies_file=self._cfg.cookies_file or None,
-                playlist_name=playlist_name,
+                playlist_name=track_playlist_name,
             )
             key = str(id(card))
             self._key_to_card[key] = card
@@ -965,7 +976,8 @@ class AppWindow(FluentWindow):
         self._search_worker = SearchWorker(
             query=query,
             platform=platform,
-            max_results=self._cfg.search_max_results,
+            youtube_max_results=self._cfg.youtube_max_results,
+            spotify_max_results=self._cfg.spotify_max_results,
             cookies_file=self._cfg.cookies_file or None,
             spotify_client_id=self._cfg.spotify_client_id,
             spotify_client_secret=self._cfg.spotify_client_secret,
@@ -1018,6 +1030,7 @@ class AppWindow(FluentWindow):
             platform=result.platform.name.lower(),
             thumbnail_url=result.thumbnail_url,
             track_url=result.url,
+            album=result.album,
         )
         self._index_to_card[next_index] = card
         self._update_dl_bar()
