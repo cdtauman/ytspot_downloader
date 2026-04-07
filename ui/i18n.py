@@ -206,6 +206,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no_tracks_loaded": "No tracks loaded",
         "select_deselect_all": "Select / Deselect All",
         "clear_completed": "Clear completed",
+        "clear_all": "Clear all",
         "sel_of_n": "{sel} / {n} selected",
         "queue_empty_hint": (
             "Paste a YouTube or Spotify URL above\n"
@@ -417,6 +418,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no_tracks_loaded": "אין פריטים בתור",
         "select_deselect_all": "בחר / בטל בחירה הכל",
         "clear_completed": "נקה שהושלמו",
+        "clear_all": "נקה הכל",
         "sel_of_n": "{sel} / {n} נבחרו",
         "queue_empty_hint": (
             "הדבק קישור YouTube או Spotify למעלה\n"

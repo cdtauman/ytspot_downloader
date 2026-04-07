@@ -128,6 +128,7 @@ class DownloadRequest:
     replay_gain:        bool = False   # ReplayGain analysis after download
     musicbrainz:        bool = False   # MusicBrainz tag enrichment after download
     square_thumbnails:  bool = False   # crop embedded art to 1:1 square
+    clean_filename:     bool = False   # NEW - use minimal filename (Title only)
 
     # Per-request cancellation (parallel downloads)
     cancel_event: Optional[threading.Event] = field(default=None, repr=False)
@@ -250,8 +251,29 @@ class DownloadEngine:
             if request.resumable:
                 opts["continuedl"] = True
 
+            import time
+            max_retries = 3
             with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([url])
+                for attempt in range(max_retries):
+                    try:
+                        ydl.download([url])
+                        break
+                    except Exception as exc:
+                        if "WinError 5" in str(exc) and attempt < max_retries - 1:
+                            # Transient file lock (common with media players on Windows)
+                            time.sleep(2)
+                            continue
+                        raise
+
+            # ── Finalized: emit FINISHED once here ────────────────────────────
+            final_path = getattr(request, "_final_output_path", "")
+            self._fire(request, DownloadProgress(
+                status=DownloadStatus.FINISHED,
+                url=url,
+                title=request.forced_title or "",  # Simplified, real title handled in hook
+                fraction=1.0,
+                output_path=final_path,
+            ))
 
         except yt_dlp.utils.DownloadCancelled:
             self._fire(request, DownloadProgress(
@@ -305,7 +327,10 @@ class DownloadEngine:
         out_dir.mkdir(parents=True, exist_ok=True)
 
         # Output template
-        if req.forced_title or req.forced_artist:
+        if req.clean_filename:
+            title   = _sanitize_filename(req.forced_title  or "%(title)s")
+            outtmpl = str(out_dir / f"{title}.%(ext)s")
+        elif req.forced_title or req.forced_artist:
             artist     = _sanitize_filename(req.forced_artist or "Unknown Artist")
             title      = _sanitize_filename(req.forced_title  or "Unknown Title")
             idx_prefix = f"{req.forced_index:02d} " if req.forced_index is not None else ""
@@ -468,15 +493,8 @@ class DownloadEngine:
             # ── Post-processing pipeline ──────────────────────────────────────
             if output_path:
                 self._run_post_pipeline(req, output_path)
-
-            # Emit FINISHED
-            self._fire(req, DownloadProgress(
-                status=DownloadStatus.FINISHED,
-                url=req.url,
-                title=req.forced_title or d.get("info_dict", {}).get("title", ""),
-                fraction=1.0,
-                output_path=output_path,
-            ))
+                # Store for the final emission after ydl.download() returns
+                req._final_output_path = output_path  # noqa: SLF001
 
         return hook
 

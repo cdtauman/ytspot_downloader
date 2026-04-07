@@ -195,6 +195,8 @@ class QueuePanel(QWidget):
         platform:      str         = "youtube",
         track_url:     str         = "",
         album:         str         = "",
+        parent_artist: str         = "",
+        release_type:  str         = "",
     ) -> TrackCard:
         """
         Create and append a new TrackCard.  Hides the empty state on first add.
@@ -211,6 +213,8 @@ class QueuePanel(QWidget):
             platform=platform,
             track_url=track_url,
             album=album,
+            parent_artist=parent_artist,
+            release_type=release_type,
             parent=self._drop_area,
         )
         card.remove_requested.connect(self._on_card_remove)
@@ -315,6 +319,12 @@ class QueuePanel(QWidget):
         """)
         clear_done_btn.clicked.connect(self._clear_completed)
         h_row.addWidget(clear_done_btn)
+
+        self._clear_all_btn = PushButton(t("clear_all"))
+        self._clear_all_btn.setFixedHeight(26)
+        self._clear_all_btn.setStyleSheet(clear_done_btn.styleSheet())
+        self._clear_all_btn.clicked.connect(self.clear)
+        h_row.addWidget(self._clear_all_btn)
 
         root.addWidget(header)
 

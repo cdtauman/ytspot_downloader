@@ -587,6 +587,7 @@ class AppWindow(FluentWindow):
                 replay_gain=req.replay_gain,
                 musicbrainz=req.musicbrainz,
                 square_thumbnails=req.square_thumbnails,
+                clean_filename=req.clean_filename,
                 cookies_file=req.cookies_file,
             )
             self._paused_requests[key] = req_copy
@@ -693,7 +694,35 @@ class AppWindow(FluentWindow):
         for card in selected:
             track_playlist_name: Optional[str] = None
             if self._cfg.playlist_subfolders:
-                if is_multi:
+                # 1. Check for YTM Discography specific metadata first
+                parent = (card.parent_artist or "").strip()
+                kind   = (card.release_type or "").strip()
+                album  = (card.album or "").strip()
+
+                if parent:
+                    # Map type to Hebrew category
+                    category = "סינגלים וגרסאות EP"
+                    
+                    # Robust categorization
+                    is_live = "live" in card.title.lower() or "הופעה" in card.title
+                    
+                    if kind == "album": category = "אלבומים"
+                    elif kind == "performance" or is_live: category = "הופעות חיות"
+                    
+                    # Hierarchy: Artist / Category / [Album if exists]
+                    # Flatten singles/performances: Only albums get a subfolder.
+                    if kind == "album" and album:
+                        clean_album = album.replace("Album - ", "").replace("Album -", "").strip()
+                        track_playlist_name = f"{parent}/{category}/{clean_album}"
+                    else:
+                        track_playlist_name = f"{parent}/{category}"
+                    
+                    # Force card.artist to match the parent to ensure individual track 
+                    # subfolders are not created by external artists in collaborators.
+                    card.artist = parent
+                
+                # 2. Fallback to existing logic for other URL kinds
+                elif is_multi:
                     if self._last_url_kind == UrlKind.ARTIST:
                         album_part = card.album if card.album else "Singles & EPs"
                         track_playlist_name = f"{card.artist}/{album_part}"
@@ -703,7 +732,6 @@ class AppWindow(FluentWindow):
                     else:
                         track_playlist_name = self._last_playlist_title
                 elif card.artist:
-                    # Normal search result or single track with metadata
                     album_part = card.album if card.album else "Singles & EPs"
                     track_playlist_name = f"{card.artist}/{album_part}"
                 elif self._last_playlist_title:
@@ -719,7 +747,7 @@ class AppWindow(FluentWindow):
                     index=card.queue_index if self._cfg.playlist_index_prefix else None,
                     include_index=self._cfg.playlist_index_prefix,
                     duration_s=None,
-                    playlist_name=track_playlist_name or "",
+                    playlist_name=self._get_dynamic_folder(card, track_playlist_name),
                 )
                 if dup is not None:
                     if self._cfg.duplicate_action == "skip":
@@ -750,13 +778,14 @@ class AppWindow(FluentWindow):
                 forced_album=card.album,
                 forced_index=card.queue_index if self._cfg.playlist_index_prefix else None,
                 cookies_file=self._cfg.cookies_file or None,
-                playlist_name=track_playlist_name,
+                playlist_name=self._get_dynamic_folder(card, track_playlist_name),
                 # v3 feature flags
                 sponsorblock=self._cfg.sponsorblock_enabled,
                 embed_lyrics=self._cfg.lyrics_enabled,
                 replay_gain=self._cfg.replay_gain_enabled,
                 musicbrainz=self._cfg.musicbrainz_enabled,
                 square_thumbnails=self._cfg.square_thumbnails,
+                clean_filename=bool(card.parent_artist),
             )
             key = str(id(card))
             self._key_to_card[key] = card
@@ -906,6 +935,8 @@ class AppWindow(FluentWindow):
             platform=get("platform", "youtube"),
             track_url=get("track_url", "") if isinstance(data, dict) else get("url", ""),
             album=get("album", ""),
+            parent_artist=get("parent_artist", ""),
+            release_type=get("release_type", ""),
         )
 
         # Connect AppWindow-specific handlers
@@ -936,8 +967,8 @@ class AppWindow(FluentWindow):
         self._status_bar.set_cancel_visible(False)
         if hasattr(result, "playlist_title") and result.playlist_title:
             self._last_playlist_title = result.playlist_title
-        if hasattr(result, "url_kind"):
-            self._last_url_kind = result.url_kind
+        if hasattr(result, "kind"):
+            self._last_url_kind = result.kind
         n = len(self._queue_panel.get_all_cards())
         self._status_bar.set_status(
             t("fetch_done", n=n, plural=("" if n == 1 else "s"))
@@ -1094,6 +1125,31 @@ class AppWindow(FluentWindow):
 
     def _on_options_changed(self) -> None:
         pass
+
+    def _get_dynamic_folder(self, card, fallback: Optional[str] = None) -> str:
+        """
+        Constructs a folder path like 'Artist / Album' while avoiding redundancy.
+        Prioritizes structured fallback (e.g. from YTM scraper) to enforce hierarchy.
+        """
+        if fallback:
+            # Clean any 'Album - ' prefix from the overall path parts
+            # Handles 'Artist / Category / Album - Title' -> 'Artist / Category / Title'
+            clean_path = fallback.replace("Album - ", "").replace("Album -", "").strip()
+            return clean_path
+
+        artist = (card.artist or "").strip()
+        album  = (card.album or "").strip()
+        
+        # Clean 'Album - ' prefix if present in the simple artist/album fallback
+        if album.lower().startswith("album - "):
+            album = album[8:].strip()
+
+        # 1. Both present and distinct
+        if artist and album and artist.lower() != album.lower():
+            return f"{artist}/{album}"
+            
+        # 2. Prefer artist if available, then album
+        return artist or album or ""
 
     def _update_dl_bar(self) -> None:
         cards    = self._queue_panel.get_all_cards()

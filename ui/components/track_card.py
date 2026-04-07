@@ -113,6 +113,8 @@ class TrackCard(QFrame):
         queue_index:  int          = 0,
         track_url:    str          = "",
         album:        str          = "",
+        parent_artist: str         = "",
+        release_type:  str         = "",
         parent:       QWidget      = None,
     ) -> None:
         super().__init__(parent)
@@ -121,11 +123,15 @@ class TrackCard(QFrame):
         self.title       = title
         self.artist      = artist
         self.album       = album
-        self._platform   = platform.lower()
-        self._status     = "queued"
+        self.parent_artist = parent_artist
+        self.release_type  = release_type
+        # Ensure platform is a string (might be SourcePlatform enum)
+        plat_str = str(platform.value if hasattr(platform, "value") else platform).lower()
+        self._platform = plat_str
+        self._status   = "queued"
         self._drag_start_pos: Optional[QPoint] = None
 
-        self._build(title, artist, duration, platform)
+        self._build(title, artist, duration, plat_str)
         self._apply_shadow()
 
     # ── Build ──────────────────────────────────────────────────────────────────

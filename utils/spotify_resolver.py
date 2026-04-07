@@ -415,10 +415,15 @@ class SpotifyResolver:
 
         full_url = f"{endpoint}?{urllib.parse.urlencode(params)}"
         print(f"[DEBUG-CLIENT] Proxy Fetching: {full_url}")
-        req      = urllib.request.Request(full_url, headers=headers)
-
+        # Set dynamic timeout: artists can take much longer (up to 10 mins)
+        match_type = re.search(r"open\.spotify\.com/(track|album|playlist|artist)/", url)
+        entity_type = match_type.group(1) if match_type else "track"
+        timeout = 600 if entity_type == "artist" else 120
+        
+        req = urllib.request.Request(full_url, headers=headers)
+        
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 print(f"[DEBUG-CLIENT] Proxy Status Code: {resp.status}")
                 raw_data = json.loads(resp.read().decode())
         except urllib.error.HTTPError as he:

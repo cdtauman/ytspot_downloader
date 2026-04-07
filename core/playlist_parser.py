@@ -83,6 +83,8 @@ class TrackMeta:
     title:          str   = "Unknown Title"
     artist:         str   = ""          # uploader / artist name
     album:          str   = ""          # album / playlist title
+    parent_artist:  str   = ""          # NEW - cleaned root artist for organization
+    release_type:   str   = ""          # NEW - "album", "single", or "performance"
 
     # ── Timing ───────────────────────────────────────────────────────────────
     duration_sec:   Optional[int]   = None   # None = live / unknown
@@ -161,7 +163,10 @@ def classify_url(url: str) -> tuple[SourcePlatform, UrlKind]:
     """
     if _YTM_RE.search(url):
         platform = SourcePlatform.YOUTUBE_MUSIC
-        kind     = UrlKind.PLAYLIST if _YT_PLAYLIST_RE.search(url) else UrlKind.SINGLE_VIDEO
+        if "/browse/" in url or "/channel/" in url:
+            kind = UrlKind.ARTIST
+        else:
+            kind = UrlKind.PLAYLIST if _YT_PLAYLIST_RE.search(url) else UrlKind.SINGLE_VIDEO
         return platform, kind
 
     if "youtube.com" in url or "youtu.be" in url:
@@ -268,7 +273,7 @@ def _entry_to_track(
         url=url,
         title=entry.get("title") or entry.get("fulltitle") or "Unknown Title",
         artist=artist,
-        album=album or entry.get("album") or entry.get("playlist_title") or "",
+        album=(entry.get("album") or entry.get("playlist_title") or album or "").strip(),
         duration_sec=duration_sec,
         duration_str=TrackMeta.format_duration(duration_sec),
         thumbnail_url=_best_thumbnail(entry),
@@ -344,38 +349,19 @@ class PlaylistParser:
                 on_error=on_error,
             )
 
-        logger = _SilentLogger()
-        ydl_opts = self._build_opts(cookies_file, logger)
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-
-            if info is None:
-                # Surface the real yt-dlp error/warning messages
-                detail = "; ".join(logger.errors + logger.warnings) or "No details available."
-                result.error = f"yt-dlp returned no data for this URL. Detail: {detail}"
-                return result
-
-        except yt_dlp.utils.DownloadError as exc:
-            result.error = str(exc)
-            return result
-        except Exception as exc:  # noqa: BLE001
-            result.error = f"Unexpected extraction error: {exc}"
-            return result
-
-        # ── Detect whether result is a playlist/collection or a single item ──
-        is_playlist = info.get("_type") in ("playlist", "multi_video") or \
-                      "entries" in info
-
-        if is_playlist:
-            self._process_playlist(
-                info, result, on_item, on_progress, on_error
+        # ── YouTube Music Artist resolution ───────────────────────────────
+        if platform == SourcePlatform.YOUTUBE_MUSIC and kind == UrlKind.ARTIST:
+            return self._parse_ytm_artist(
+                url, result,
+                on_item=on_item,
+                on_progress=on_progress,
+                on_error=on_error,
             )
-        else:
-            self._process_single(info, result, on_item, on_progress)
 
-        return result
+        # ── Standard yt-dlp resolution ──
+        return self._parse_standard_yt(
+            url, result, on_item, on_progress, on_error
+        )
 
     def parse_async(
         self,
@@ -426,6 +412,106 @@ class PlaylistParser:
 
     # ── Spotify-specific parsing ───────────────────────────────────────────────
 
+    def _parse_ytm_artist(
+        self,
+        url:             str,
+        result:          ParseResult,
+        *,
+        on_item:         Optional[Callable] = None,
+        on_progress:     Optional[Callable] = None,
+        on_error:        Optional[Callable] = None,
+    ) -> ParseResult:
+        """
+        Specialised resolver for YTM browse/artist URLs.
+        Scrapes album/single shelves and resolves them individually to preserve
+        correct folder organization (Artist/Album).
+        """
+        from utils.ytm_scraper import fetch_ytm_artist_releases
+        
+        self._notify(on_progress, "Analyzing YouTube Music artist catalog…")
+        releases = fetch_ytm_artist_releases(url)
+        
+        if not releases:
+            # Fallback to standard yt-dlp if scraping fails or no releases found
+            self._notify(on_progress, "No structured sections found, falling back to general uploads…")
+            return self._parse_standard_yt(url, result, on_item, on_progress, on_error)
+
+        total_releases = len(releases)
+        self._notify(on_progress, f"Found {total_releases} Albums/Singles to resolve.")
+        
+        idx_counter = [0]
+        ydl_opts = self._build_opts(None)  # Use default options for individual albums
+        
+        for r_idx, release in enumerate(releases, 1):
+            if self._cancel.is_set():
+                result.cancelled = True
+                break
+            
+            msg = f"Resolving {release['type']} {r_idx}/{total_releases}: {release['title']} …"
+            self._notify(on_progress, msg)
+            
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(release["url"], download=False)
+                    if info:
+                        entries    = list(info.get("entries") or [])
+                        album_name = info.get("title") or release["title"]
+                        
+                        for entry in entries:
+                            if entry is None or self._cancel.is_set(): 
+                                continue
+                            idx_counter[0] += 1
+                            idx = idx_counter[0]
+                            track = _entry_to_track(entry, idx, result.platform, album_name)
+                            # NEW: Propagate scraper metadata
+                            track.parent_artist = release.get("parent_artist", "")
+                            track.release_type  = release.get("type", "")
+                            
+                            result.tracks.append(track)
+                            if on_item:
+                                on_item(track, idx, None)
+            except Exception as exc:
+                self._notify(on_error, f"Failed to resolve {release['title']}: {exc}")
+
+        result.total_count    = len(result.tracks)
+        result.playlist_title = f"Discography ({result.total_count} tracks)"
+        return result
+
+    def _parse_standard_yt(
+        self,
+        url:             str,
+        result:          ParseResult,
+        on_item:         Optional[Callable],
+        on_progress:     Optional[Callable],
+        on_error:        Optional[Callable],
+    ) -> ParseResult:
+        """Standard yt-dlp extraction logic for YouTube and Generic URLs."""
+        logger = _SilentLogger()
+        # Note: cookies_file support could be passed through if needed
+        ydl_opts = self._build_opts(None, logger)
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if info is None:
+                detail = "; ".join(logger.errors + logger.warnings) or "No details available."
+                result.error = f"yt-dlp returned no data for this URL. Detail: {detail}"
+                return result
+        except yt_dlp.utils.DownloadError as exc:
+            result.error = str(exc)
+            return result
+        except Exception as exc:
+            result.error = f"Unexpected extraction error: {exc}"
+            return result
+
+        is_playlist = info.get("_type") in ("playlist", "multi_video") or "entries" in info
+        if is_playlist:
+            result.kind = UrlKind.PLAYLIST
+            self._process_playlist(info, result, on_item, on_progress, on_error)
+        else:
+            self._process_single(info, result, on_item, on_progress)
+        return result
+
     def _parse_spotify(
         self,
         url:         str,
@@ -455,6 +541,7 @@ class PlaylistParser:
                 url=track_data["url"],
                 title=track_data["title"],
                 artist=track_data["artist"],
+                album=track_data.get("album", ""),
                 duration_sec=track_data.get("duration_sec"),
                 thumbnail_url=track_data.get("thumbnail_url", ""),
                 platform=SourcePlatform.SPOTIFY,
