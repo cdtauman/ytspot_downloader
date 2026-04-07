@@ -112,6 +112,23 @@ All settings are persisted to `~/.ytspot/config.json` and can be changed from th
 | YouTube Music | Yes | Yes | Via YouTube search |
 | Spotify | Via YouTube match | Via YouTube match | Requires proxy server |
 | Generic URLs | Yes (yt-dlp) | Partial | No |
+ 
+---
+ 
+## YouTube Music Discography
+ 
+The app includes a specialized, stateful scraper for YouTube Music artist pages to ensure 100% catalog coverage and perfect organization:
+ 
+- **Stateful API Scraping**: Automatically extracts and persists `visitorData` tokens to bypass session-locks on "See-All" shelves, ensuring every album, single, and live performance is found.
+- **Shelf-to-Folder Mapping**: Releases are automatically categorized into a structured directory hierarchy:
+  - `[Artist]/אלבומים/[Album Name]/` — Full albums with original track numbering.
+  - `[Artist]/סינגלים וגרסאות EP/` — Singles and EPs with clean filenames.
+  - `[Artist]/הופעות חיות/` — Live performances and concert recordings.
+- **Intelligent ID Resolution**: Prioritizes `playlistId` (OLAK/VL) for albums to ensure full tracklist expansion, while using `videoId` for direct media access for individual performances.
+- **Clean Filenames**: Implements a hybrid indexing strategy that preserves track numbers for albums (e.g., `01 Song.mp3`) but keeps singles and videos clean and index-free.
+ 
+---
+
 
 Spotify downloads work by converting the track metadata to a YouTube search query (`artist title audio`) and downloading the best YouTube match. This requires no Spotify account or API key.
 

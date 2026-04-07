@@ -78,7 +78,8 @@ class TrackMeta:
     something even when the extractor returns incomplete data.
     """
     # ── Identity ─────────────────────────────────────────────────────────────
-    index:          int   = 0           # 1-based position inside the playlist
+    index:          int   = 0           # 1-based position in the result list (for sorting)
+    album_index:    int   = 0           # 1-based position in the album/release (for filename)
     url:            str   = ""          # canonical watch/track URL
     title:          str   = "Unknown Title"
     artist:         str   = ""          # uploader / artist name
@@ -455,9 +456,14 @@ class PlaylistParser:
                     info = ydl.extract_info(release["url"], download=False)
                     if info:
                         entries    = list(info.get("entries") or [])
+                        
+                        # Fix: Singles and Performances are often returned as single entities, not playlists.
+                        if not entries and info.get("id"):
+                            entries = [info]
+                            
                         album_name = info.get("title") or release["title"]
                         
-                        for entry in entries:
+                        for t_idx, entry in enumerate(entries, 1):
                             if entry is None or self._cancel.is_set(): 
                                 continue
                             idx_counter[0] += 1
@@ -466,6 +472,7 @@ class PlaylistParser:
                             # NEW: Propagate scraper metadata
                             track.parent_artist = release.get("parent_artist", "")
                             track.release_type  = release.get("type", "")
+                            track.album_index   = t_idx # Relative index in album/EP
                             
                             result.tracks.append(track)
                             if on_item:

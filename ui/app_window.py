@@ -700,14 +700,13 @@ class AppWindow(FluentWindow):
                 album  = (card.album or "").strip()
 
                 if parent:
-                    # Map type to Hebrew category
-                    category = "סינגלים וגרסאות EP"
-                    
                     # Robust categorization
                     is_live = "live" in card.title.lower() or "הופעה" in card.title
-                    
+
                     if kind == "album": category = "אלבומים"
                     elif kind == "performance" or is_live: category = "הופעות חיות"
+                    elif kind == "video": category = "סרטונים"
+                    else: category = "סינגלים וגרסאות EP"
                     
                     # Hierarchy: Artist / Category / [Album if exists]
                     # Flatten singles/performances: Only albums get a subfolder.
@@ -776,7 +775,7 @@ class AppWindow(FluentWindow):
                 forced_title=card.title,
                 forced_artist=card.artist,
                 forced_album=card.album,
-                forced_index=card.queue_index if self._cfg.playlist_index_prefix else None,
+                forced_index=card.album_index if (self._cfg.playlist_index_prefix and card.release_type == "album") else None,
                 cookies_file=self._cfg.cookies_file or None,
                 playlist_name=self._get_dynamic_folder(card, track_playlist_name),
                 # v3 feature flags
@@ -937,6 +936,7 @@ class AppWindow(FluentWindow):
             album=get("album", ""),
             parent_artist=get("parent_artist", ""),
             release_type=get("release_type", ""),
+            album_index=get("album_index", 0),
         )
 
         # Connect AppWindow-specific handlers

@@ -197,6 +197,7 @@ class QueuePanel(QWidget):
         album:         str         = "",
         parent_artist: str         = "",
         release_type:  str         = "",
+        album_index:   int         = 0,
     ) -> TrackCard:
         """
         Create and append a new TrackCard.  Hides the empty state on first add.
@@ -215,6 +216,7 @@ class QueuePanel(QWidget):
             album=album,
             parent_artist=parent_artist,
             release_type=release_type,
+            album_index=album_index,
             parent=self._drop_area,
         )
         card.remove_requested.connect(self._on_card_remove)

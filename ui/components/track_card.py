@@ -115,6 +115,7 @@ class TrackCard(QFrame):
         album:        str          = "",
         parent_artist: str         = "",
         release_type:  str         = "",
+        album_index:   int         = 0,
         parent:       QWidget      = None,
     ) -> None:
         super().__init__(parent)
@@ -125,6 +126,7 @@ class TrackCard(QFrame):
         self.album       = album
         self.parent_artist = parent_artist
         self.release_type  = release_type
+        self.album_index   = album_index
         # Ensure platform is a string (might be SourcePlatform enum)
         plat_str = str(platform.value if hasattr(platform, "value") else platform).lower()
         self._platform = plat_str

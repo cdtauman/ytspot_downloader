@@ -329,7 +329,8 @@ class DownloadEngine:
         # Output template
         if req.clean_filename:
             title   = _sanitize_filename(req.forced_title  or "%(title)s")
-            outtmpl = str(out_dir / f"{title}.%(ext)s")
+            idx_prefix = f"{req.forced_index:02d} " if (req.forced_index is not None and req.forced_index > 0) else ""
+            outtmpl = str(out_dir / f"{idx_prefix}{title}.%(ext)s")
         elif req.forced_title or req.forced_artist:
             artist     = _sanitize_filename(req.forced_artist or "Unknown Artist")
             title      = _sanitize_filename(req.forced_title  or "Unknown Title")
