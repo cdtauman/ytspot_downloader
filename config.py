@@ -1,10 +1,11 @@
 """
-config.py  –  Persistent user-preferences manager  (v3)
-=========================================================
+config.py  –  Persistent user-preferences manager  (v3.1 - Anti-Ban Update)
+==========================================================================
 Backward-compatible additive update: every v1/v2 key is preserved.
 New keys for Phase 2 features are purely additive.
+Updated with safety measures to prevent IP flagging and Rate Limiting.
 
-New fields (Phase 2)
+New fields (Phase 2 & Anti-Ban)
 --------------------
   accent_color             – custom accent hex (theme_manager v3)
   sponsorblock_enabled     – SponsorBlock segment removal
@@ -20,6 +21,8 @@ New fields (Phase 2)
   global_hotkeys_enabled   – register OS-level pause/open hotkeys
   queue_state              – serialised queue for smart auto-resume
   paused_items             – items paused by the user (cancel+part file)
+  download_delay_range     – Min/Max seconds between requests to avoid bans
+  randomize_user_agent     – Rotate browser headers
 """
 
 from __future__ import annotations
@@ -92,14 +95,16 @@ _DEFAULTS: dict[str, Any] = {
     "spotify_client_secret":    "",
     "spotify_app_api_key":      "c6ffadbe3f5cb7146a72d91364c0a3cd981a90d67c167fc6acf44db4f3cbf8ad",
 
-    # ── Parallel downloads ────────────────────────────────────────────────────
-    "max_parallel_downloads": 3,
+    # ── Anti-Ban & Parallelism ────────────────────────────────────────────────
+    "max_parallel_downloads": 3,           # Safer sweet spot
+    "download_delay_range":   [1.5, 4.0],  # Min/Max seconds between requests
+    "randomize_user_agent":   True,        # Rotate browser headers
 
     # ── Advanced: audio post-processing ──────────────────────────────────────
     "sponsorblock_enabled":  False,         # cut non-music segments
     "lyrics_enabled":        False,         # NEW – auto-fetch + embed lyrics
     "replay_gain_enabled":   False,         # NEW – ReplayGain analysis
-    "square_thumbnails":     False,         # NEW – crop 16:9 art to 1:1
+    "square_thumbnails":     True,          # NEW – crop 16:9 art to 1:1
     "musicbrainz_enabled":   True,          # NEW – MusicBrainz tag enrichment
 
     # ── Playlist behaviour ────────────────────────────────────────────────────
@@ -435,16 +440,36 @@ class AppConfig:
 
     @property
     def max_parallel_downloads(self) -> int:
-        raw = self._data.get("max_parallel_downloads", 3)
+        raw = self._data.get("max_parallel_downloads", _DEFAULTS["max_parallel_downloads"])
         try:
             val = int(raw)
         except (TypeError, ValueError):
-            val = 3
-        return max(1, min(5, val))
+            val = _DEFAULTS["max_parallel_downloads"]
+        return max(1, min(6, val))
 
     @max_parallel_downloads.setter
     def max_parallel_downloads(self, value: int) -> None:
-        self._data["max_parallel_downloads"] = max(1, min(5, int(value)))
+        self._data["max_parallel_downloads"] = max(1, min(6, int(value)))
+
+    # ── Anti-Ban typed properties ─────────────────────────────────────────────
+
+    @property
+    def download_delay_range(self) -> list[float]:
+        val = self._data.get("download_delay_range", _DEFAULTS["download_delay_range"])
+        return val if isinstance(val, list) and len(val) == 2 else _DEFAULTS["download_delay_range"]
+
+    @download_delay_range.setter
+    def download_delay_range(self, value: list[float]) -> None:
+        if isinstance(value, list) and len(value) == 2:
+            self._data["download_delay_range"] = [float(v) for v in value]
+
+    @property
+    def randomize_user_agent(self) -> bool:
+        return bool(self._data.get("randomize_user_agent", _DEFAULTS["randomize_user_agent"]))
+
+    @randomize_user_agent.setter
+    def randomize_user_agent(self, value: bool) -> None:
+        self._data["randomize_user_agent"] = bool(value)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Typed properties – v3 (new Phase 2 features)

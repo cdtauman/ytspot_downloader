@@ -108,6 +108,7 @@ class FetchWorker(QThread):
                 "album":         track.album,
                 "parent_artist": track.parent_artist,
                 "release_type":  track.release_type,
+                "album_index":   track.album_index,
             }, idx, total or 0)
 
         def on_progress(msg: str) -> None:

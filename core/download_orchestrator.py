@@ -24,11 +24,13 @@ Zero GUI imports.
 
 from __future__ import annotations
 
+import time
+import random
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Optional, Protocol, Tuple
 
 from core.history_db import DownloadRecord, HistoryDB
 from downloader import (
@@ -61,6 +63,7 @@ class OrchestratorCallbacks(Protocol):
     def on_overall_progress(self, fraction: float) -> None: ...
     def on_metrics(self, speed: str, eta: str) -> None: ...
     def on_status_message(self, msg: str) -> None: ...
+    def on_job_count_changed(self, completed: int, total: int) -> None: ...
     def on_batch_finished(self) -> None: ...
 
 
@@ -103,7 +106,7 @@ class DownloadOrchestrator:
         self._engine      = engine
         self._cb          = callbacks
         self._db          = db
-        self._max_workers = max(1, min(max_workers, 5))
+        self._max_workers = max(1, min(max_workers, 6))
 
         # Cancel infrastructure
         self._cancel_events: dict[str, threading.Event] = {}
@@ -141,9 +144,13 @@ class DownloadOrchestrator:
 
     # ── Main entry point (blocking — call from background thread) ─────────────
 
-    def run_batch(self, jobs: list[tuple[str, DownloadRequest]]) -> BatchResult:
+    def run_batch(
+        self, 
+        jobs: list[tuple[str, DownloadRequest]],
+        delay_range: Optional[Tuple[float, float]] = None
+    ) -> BatchResult:
         """
-        Execute a batch of downloads with bounded parallelism.
+        Execute a batch of downloads with bounded parallelism and optional staggered start.
         """
         if not jobs:
             logger.debug("[Orchestrator] Empty batch — skipping")
@@ -179,7 +186,21 @@ class DownloadOrchestrator:
             self._pool = pool
 
         try:
-            for key, req in jobs:
+            for i, (key, req) in enumerate(jobs):
+                if self._engine._cancel_event.is_set():
+                    break
+                    
+                # Stagger the starts to avoid "Burst" detection (Anti-Ban)
+                if i > 0 and delay_range:
+                    sleep_time = random.uniform(*delay_range)
+                    logger.debug(f"[Orchestrator] Staggering start: sleeping {sleep_time:.2f}s")
+                    # Check for cancellation during sleep
+                    sleep_start = time.time()
+                    while time.time() - sleep_start < sleep_time:
+                        if self._engine._cancel_event.is_set():
+                            break
+                        time.sleep(0.2)
+
                 ev = threading.Event()
                 req.cancel_event = ev
                 self._cancel_events[key] = ev
@@ -278,6 +299,7 @@ class DownloadOrchestrator:
             self._safe_cb("on_track_progress", key, 1.0)
             self._safe_cb("on_track_finished", key, p.output_path or "")
             self._safe_cb("on_overall_progress", min(overall, 1.0))
+            self._safe_cb("on_job_count_changed", self._completed, self._total)
             logger.info("[Orchestrator] Track done: %s → %s", key, p.output_path)
             self._persist_record(req, p)
 
@@ -288,6 +310,7 @@ class DownloadOrchestrator:
             )
             self._safe_cb("on_track_status", key, "error")
             self._safe_cb("on_track_error", key, err)
+            self._safe_cb("on_job_count_changed", self._completed + self._failed, self._total) # treat failed as 'done' for progress count
             logger.warning("[Orchestrator] Track error: %s — %s", key, p.error_message)
 
         req.on_progress = on_progress

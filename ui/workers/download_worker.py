@@ -29,6 +29,7 @@ from typing import Optional
 
 from PySide6.QtCore import QThread, Signal
 
+from config import AppConfig
 from core.download_orchestrator import (
     BatchResult,
     DownloadOrchestrator,
@@ -77,6 +78,9 @@ class _SignalAdapter:
     def on_status_message(self, msg: str) -> None:
         self._w.status_msg.emit(msg)
 
+    def on_job_count_changed(self, completed: int, total: int) -> None:
+        self._w.job_count_changed.emit(completed, total)
+
     def on_batch_finished(self) -> None:
         self._w.all_finished.emit()
 
@@ -107,6 +111,7 @@ class DownloadWorker(QThread):
     metrics          = Signal(str, str)
     status_msg       = Signal(str)
     job_error        = Signal(str, object)
+    job_count_changed = Signal(int, int)
     all_finished     = Signal()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -115,12 +120,14 @@ class DownloadWorker(QThread):
         self,
         jobs:        list[tuple[str, DownloadRequest]],
         engine:      DownloadEngine,
+        config:      AppConfig,
         db:          Optional[HistoryDB] = None,
         max_workers: int = 3,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._jobs   = jobs
+        self._cfg    = config
         self._orch   = DownloadOrchestrator(
             engine=engine,
             callbacks=_SignalAdapter(self),
@@ -156,4 +163,5 @@ class DownloadWorker(QThread):
 
     def run(self) -> None:
         """Blocking call on the QThread — delegates entirely to orchestrator."""
-        self._orch.run_batch(self._jobs)
+        delay_range = self._cfg.download_delay_range
+        self._orch.run_batch(self._jobs, delay_range=delay_range)

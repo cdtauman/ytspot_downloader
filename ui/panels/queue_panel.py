@@ -27,7 +27,10 @@ from PySide6.QtWidgets import (
     QCheckBox, QFrame, QHBoxLayout, QLabel,
     QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
 )
-from qfluentwidgets import BodyLabel, CaptionLabel, PushButton
+from qfluentwidgets import (
+    BodyLabel, CaptionLabel, PushButton,
+    DropDownPushButton, RoundMenu, Action, ToolButton, FluentIcon
+)
 
 from ui.components.track_card import TrackCard
 from ui.i18n import t
@@ -178,6 +181,7 @@ class QueuePanel(QWidget):
 
     selection_changed = Signal(int)   # count of selected cards
     card_removed      = Signal(int)   # queue_index of removed card
+    pause_resume_triggered = Signal(bool) # True=pause, False=resume
 
     def __init__(self, parent: QWidget = None) -> None:
         super().__init__(parent)
@@ -198,6 +202,7 @@ class QueuePanel(QWidget):
         parent_artist: str         = "",
         release_type:  str         = "",
         album_index:   int         = 0,
+        thumbnail_url: str         = "",
     ) -> TrackCard:
         """
         Create and append a new TrackCard.  Hides the empty state on first add.
@@ -217,6 +222,7 @@ class QueuePanel(QWidget):
             parent_artist=parent_artist,
             release_type=release_type,
             album_index=album_index,
+            thumbnail_url=thumbnail_url,
             parent=self._drop_area,
         )
         card.remove_requested.connect(self._on_card_remove)
@@ -303,10 +309,28 @@ class QueuePanel(QWidget):
         )
         h_row.addWidget(self._count_lbl)
 
-        clear_done_btn = PushButton(t("clear_completed"))
-        clear_done_btn.setFixedHeight(26)
-        clear_done_btn.setStyleSheet(f"""
-            PushButton {{
+        # ── Global Pause/Resume ───────────────────────────────────────────────
+        self._pause_resume_btn = ToolButton(FluentIcon.PAUSE)
+        self._pause_resume_btn.setFixedSize(26, 26)
+        self._pause_resume_btn.setToolTip(t("pause_all"))
+        self._is_paused_state = False
+        self._pause_resume_btn.clicked.connect(self._on_global_pause_resume_click)
+        self._pause_resume_btn.setStyleSheet(f"""
+            ToolButton {{
+                background: transparent;
+                border: 1px solid {_BORDER};
+                border-radius: 6px;
+                color: {ACCENT_COLOR};
+            }}
+            ToolButton:hover {{ background: rgba(255,255,255,0.05); }}
+        """)
+        h_row.addWidget(self._pause_resume_btn)
+
+        # ── Cleanup Dropdown ──────────────────────────────────────────────────
+        self._cleanup_btn = DropDownPushButton(t("clear_options"))
+        self._cleanup_btn.setFixedHeight(26)
+        self._cleanup_btn.setStyleSheet(f"""
+            DropDownPushButton {{
                 background: transparent;
                 border: 1px solid {_BORDER};
                 border-radius: 6px;
@@ -314,19 +338,18 @@ class QueuePanel(QWidget):
                 font-size: 11px;
                 padding: 0 8px;
             }}
-            PushButton:hover {{
+            DropDownPushButton:hover {{
                 border-color: {ACCENT_COLOR};
                 color: {ACCENT_COLOR};
             }}
         """)
-        clear_done_btn.clicked.connect(self._clear_completed)
-        h_row.addWidget(clear_done_btn)
-
-        self._clear_all_btn = PushButton(t("clear_all"))
-        self._clear_all_btn.setFixedHeight(26)
-        self._clear_all_btn.setStyleSheet(clear_done_btn.styleSheet())
-        self._clear_all_btn.clicked.connect(self.clear)
-        h_row.addWidget(self._clear_all_btn)
+        
+        menu = RoundMenu(parent=self)
+        menu.addAction(Action(t("clear_all"), triggered=self.clear))
+        menu.addAction(Action(t("clear_selected"), triggered=self.clear_selected))
+        menu.addAction(Action(t("clear_completed"), triggered=self._clear_completed))
+        self._cleanup_btn.setMenu(menu)
+        h_row.addWidget(self._cleanup_btn)
 
         root.addWidget(header)
 
@@ -426,11 +449,7 @@ class QueuePanel(QWidget):
 
     def _clear_completed(self) -> None:
         """Remove all cards whose status is 'done'."""
-        to_remove = []
-        for card in self._cards:
-            style = card._dot.styleSheet()  # noqa: SLF001
-            if "#34d399" in style:   # _SUCCESS colour
-                to_remove.append(card)
+        to_remove = [c for c in self._cards if c.get_status() == "done"]
         for card in to_remove:
             self._cards.remove(card)
             card.deleteLater()
@@ -438,6 +457,32 @@ class QueuePanel(QWidget):
             self._empty_widget.setVisible(True)
         self._update_header()
         self._on_selection_change()
+
+    def clear_selected(self) -> None:
+        """Remove all checked cards."""
+        to_remove = [c for c in self._cards if c.is_selected()]
+        for card in to_remove:
+            self._cards.remove(card)
+            card.deleteLater()
+        if not self._cards:
+            self._empty_widget.setVisible(True)
+        self._update_header()
+        self._on_selection_change()
+
+    def set_pause_resume_state(self, is_paused: bool) -> None:
+        """Update the global button icon and tooltip based on app state."""
+        self._is_paused_state = is_paused
+        if is_paused:
+            self._pause_resume_btn.setIcon(FluentIcon.PLAY)
+            self._pause_resume_btn.setToolTip(t("resume_all"))
+        else:
+            self._pause_resume_btn.setIcon(FluentIcon.PAUSE)
+            self._pause_resume_btn.setToolTip(t("pause_all"))
+
+    def _on_global_pause_resume_click(self) -> None:
+        # Toggle then emit
+        new_state = not self._is_paused_state
+        self.pause_resume_triggered.emit(new_state)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

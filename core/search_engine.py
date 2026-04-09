@@ -57,6 +57,7 @@ from playlist_parser import SourcePlatform, classify_url, _best_thumbnail
 from utils.logger import SilentLogger as _SilentLogger
 from utils.time_format import seconds_to_str as _seconds_to_str
 from utils.yt_dlp_opts import build_search_ydl_opts as _build_search_opts
+from utils.artwork_cleaner import clean_artwork_url
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ class SearchResult:
     album:         str            = ""
     item_count:    Optional[int]  = None   # tracks in album/playlist
     browse_id:     str            = ""     # YTM browseId for drill-down
+    release_type:  str            = ""     # Spotify album_type (album/single/compilation)
 
 
 class SearchError(Exception):
@@ -112,7 +114,7 @@ def _seconds_to_duration(sec: Optional[int]) -> str:
     return _seconds_to_str(sec) if sec is not None else ""
 
 
-def _pick_thumbnail(thumbnails: list[dict]) -> str:
+def _pick_thumbnail(thumbnails: list[dict], platform: SourcePlatform = SourcePlatform.YOUTUBE_MUSIC) -> str:
     """
     Return the URL of the best (highest-resolution) thumbnail from a YTM
     thumbnail list.  YTM thumbnails are sorted smallest-to-largest.
@@ -120,7 +122,8 @@ def _pick_thumbnail(thumbnails: list[dict]) -> str:
     if not thumbnails:
         return ""
     # YTM lists thumbnails smallest → largest; take the last
-    return thumbnails[-1].get("url", "") if thumbnails else ""
+    raw_url = thumbnails[-1].get("url", "") if thumbnails else ""
+    return clean_artwork_url(raw_url, platform)
 
 
 def _ytdlp_entry_to_result(
@@ -182,7 +185,7 @@ def _ytdlp_entry_to_result(
         url=url,
         platform=platform,
         kind=kind,
-        thumbnail_url=_best_thumbnail(entry),
+        thumbnail_url=clean_artwork_url(_best_thumbnail(entry), platform),
         duration_sec=duration_sec,
         duration_str=_seconds_to_duration(duration_sec),
         view_count=view_count,
@@ -940,8 +943,20 @@ class SearchEngine:
 
                 dur    = item.get("duration_sec")
                 thumb  = item.get("thumbnail_url") or item.get("image_url") or ""
-                s_url  = item.get("url") or item.get("spotify_url") or ""
-                kind   = kind_map.get(kind_str, ResultKind.TRACK)
+                # Robust URL resolution from proxy response
+                s_url = item.get("url") or item.get("spotify_url") or ""
+                if not s_url:
+                    ext_urls = item.get("external_urls") or {}
+                    if isinstance(ext_urls, dict):
+                        s_url = ext_urls.get("spotify") or ""
+                
+                if not s_url:
+                    # Try to reconstruct from uri or id
+                    s_id = item.get("id") or (item.get("uri") or "").split(":")[-1]
+                    if s_id and kind_str in ("track", "album", "playlist", "artist"):
+                        s_url = f"https://open.spotify.com/{kind_str}/{s_id}"
+
+                kind = kind_map.get(kind_str, ResultKind.TRACK)
 
                 res_url = (
                     f"ytsearch1:{artist} {title} audio"
@@ -960,6 +975,7 @@ class SearchEngine:
                     duration_sec=dur,
                     duration_str=_seconds_to_duration(dur) if dur else "",
                     album=item.get("album") or item.get("album_name") or "",
+                    release_type=item.get("album_type", ""),
                 )
                 if kind in (ResultKind.ALBUM, ResultKind.PLAYLIST):
                     raw_count = item.get("total_tracks") or item.get("item_count")

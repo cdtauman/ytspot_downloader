@@ -17,6 +17,7 @@ Changelog v3
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import threading
@@ -37,6 +38,7 @@ from utils.impersonate import (
 )
 from utils.yt_dlp_opts import build_base_ydl_opts as _build_base_opts
 
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Enumerations
@@ -120,6 +122,9 @@ class DownloadRequest:
 
     # Playlist sub-folder routing
     playlist_name:   Optional[str] = None
+
+    # Custom Thumbnail Overrides
+    thumbnail_url:   Optional[str] = None
 
     # NEW v3 feature flags (all default to off for backward compat)
     sponsorblock:       bool = False   # cut non-music segments
@@ -259,18 +264,33 @@ class DownloadEngine:
                         ydl.download([url])
                         break
                     except Exception as exc:
-                        if "WinError 5" in str(exc) and attempt < max_retries - 1:
-                            # Transient file lock (common with media players on Windows)
+                        exc_str = str(exc)
+                        is_locked = "WinError 5" in exc_str or "WinError 32" in exc_str
+                        if is_locked and attempt < max_retries - 1:
+                            # Transient file lock (common on Windows during network drops or media player scans)
+                            logger.warning(f"[Downloader] File locked, retrying in 2s... (Attempt {attempt+1}/{max_retries})")
                             time.sleep(2)
                             continue
                         raise
 
-            # ── Finalized: emit FINISHED once here ────────────────────────────
+            # ── Finalized: Run custom pipeline before emitting FINISHED ──────────────
             final_path = getattr(request, "_final_output_path", "")
+            if final_path and os.path.exists(final_path):
+                # Notify UI we are processing
+                self._fire(request, DownloadProgress(
+                    status=DownloadStatus.PROCESSING,
+                    url=url,
+                    title=request.forced_title or "",
+                    output_path=final_path,
+                ))
+                
+                # Execute steps
+                self._run_final_pipeline(request, final_path)
+
             self._fire(request, DownloadProgress(
                 status=DownloadStatus.FINISHED,
                 url=url,
-                title=request.forced_title or "",  # Simplified, real title handled in hook
+                title=request.forced_title or "",
                 fraction=1.0,
                 output_path=final_path,
             ))
@@ -328,8 +348,17 @@ class DownloadEngine:
 
         # Output template
         if req.clean_filename:
-            title   = _sanitize_filename(req.forced_title  or "%(title)s")
-            idx_prefix = f"{req.forced_index:02d} " if (req.forced_index is not None and req.forced_index > 0) else ""
+            raw_title = req.forced_title or "%(title)s"
+            # Strip parenthetical suffixes: e.g. "Song (Remix)" → "Song" (only if it matches common patterns)
+            import re as _re
+            # Keep the name as-is if it's Hebrew to avoid over-stripping
+            clean_title = raw_title
+            if not any('\u0590' <= c <= '\u05FF' for c in raw_title):
+                clean_title = _re.sub(r'\s*\([^)]*\)\s*$', '', raw_title).strip() or raw_title
+            
+            title = _sanitize_filename(clean_title)
+            idx_prefix = f"{req.forced_index:02d} - " if (req.forced_index is not None and req.forced_index > 0) else ""
+            # IMPORTANT: For clean_filename, we ONLY use the title, NO artist.
             outtmpl = str(out_dir / f"{idx_prefix}{title}.%(ext)s")
         elif req.forced_title or req.forced_artist:
             artist     = _sanitize_filename(req.forced_artist or "Unknown Artist")
@@ -484,79 +513,81 @@ class DownloadEngine:
 
     def _make_pp_hook(self, req: DownloadRequest) -> Callable[[dict], None]:
         """Post-processor hook fires after every FFmpeg stage."""
-
         def hook(d: dict) -> None:
             if d.get("status") != "finished":
                 return
 
+            pp_key = (d.get("postprocessor", "") or "").lower()
             output_path: str = d.get("info_dict", {}).get("filepath", "") or ""
+            
+            import logging
+            l = logging.getLogger(__name__)
+            l.debug(f"[Downloader] PP Hook: status=finished, pp={pp_key}, path={output_path}")
 
-            # ── Post-processing pipeline ──────────────────────────────────────
             if output_path:
-                self._run_post_pipeline(req, output_path)
-                # Store for the final emission after ydl.download() returns
-                req._final_output_path = output_path  # noqa: SLF001
+                output_path = os.path.abspath(output_path)
+                # Capture the most recent valid file path
+                if not getattr(req, "_final_output_path", None) or os.path.exists(output_path):
+                    req._final_output_path = output_path  # noqa: SLF001
 
         return hook
 
-    def _run_post_pipeline(self, req: DownloadRequest, output_path: str) -> None:
+    def _run_final_pipeline(self, req: DownloadRequest, final_path: str) -> None:
         """
-        Run optional post-processing steps on the finished file.
-
-        Each step is individually guarded and logs its own errors so one
-        failing step never prevents the others from running.
+        Execute all custom post-processing steps sequentially.
+        Called after yt-dlp has completely finished.
         """
-        title  = req.forced_title  or ""
-        artist = req.forced_artist or ""
+        if not os.path.exists(final_path):
+            logger.warning(f"[Downloader] Final path does not exist, skipping pipeline: {final_path}")
+            return
 
-        # 1. Square thumbnail crop (before MusicBrainz, which might re-embed art)
-        if req.square_thumbnails:
+        logger.info(f"[Downloader] Starting final post-processing for: {Path(final_path).name}")
+
+        # 1. Custom Square Thumbnail (priority for Spotify/YTM)
+        if req.square_thumbnails and req.thumbnail_url:
+            logger.debug(f"[Downloader] Injecting custom thumbnail from Spotify...")
             try:
-                from core.thumbnail_cropper import crop_embedded_thumbnail
-                crop_embedded_thumbnail(output_path)
+                from core.thumbnail_cropper import embed_custom_thumbnail
+                ok = embed_custom_thumbnail(final_path, req.thumbnail_url)
+                if ok:
+                    logger.debug(f"[Downloader] Custom thumbnail injected successfully.")
+                else:
+                    logger.debug(f"[Downloader] Failed to inject custom thumbnail.")
             except Exception as exc:
-                import logging
-                logging.getLogger(__name__).error(
-                    "[Downloader] ThumbnailCropper error: %s", exc
-                )
+                logger.error(f"[Downloader] Thumbnail error: {exc}")
 
         # 2. MusicBrainz enrichment
-        if req.musicbrainz and title:
+        if req.musicbrainz:
             try:
+                logger.debug(f"[Downloader] Fetching MusicBrainz metadata...")
                 from core.musicbrainz_enricher import enrich_file
-                enrich_file(
-                    output_path,
-                    title=title,
-                    artist=artist,
-                    duration_s=req.forced_duration,
-                )
+                enrich_file(final_path, title=req.forced_title, artist=req.forced_artist)
+                logger.debug("[Downloader] MusicBrainz metadata enriched.")
             except Exception as exc:
-                import logging
-                logging.getLogger(__name__).error(
-                    "[Downloader] MusicBrainz error: %s", exc
-                )
+                logger.error(f"[Downloader] MusicBrainz error: {exc}")
 
         # 3. Lyrics embedding
-        if req.embed_lyrics and title:
+        if req.embed_lyrics:
             try:
+                logger.debug(f"[Downloader] Fetching lyrics...")
                 from core.lyrics_embedder import embed_lyrics
-                embed_lyrics(output_path, title=title, artist=artist)
+                embed_lyrics(final_path, title=req.forced_title, artist=req.forced_artist)
+                logger.debug("[Downloader] Lyrics embedded.")
             except Exception as exc:
-                import logging
-                logging.getLogger(__name__).error(
-                    "[Downloader] LyricsEmbedder error: %s", exc
-                )
+                logger.error(f"[Downloader] Lyrics error: {exc}")
 
-        # 4. ReplayGain analysis (last – reads final audio content)
+        # 4. ReplayGain analysis
         if req.replay_gain:
             try:
+                logger.debug(f"[Downloader] Analyzing ReplayGain...")
                 from core.replay_gain import analyse_and_embed
-                analyse_and_embed(output_path)
+                analyse_and_embed(final_path)
+                logger.debug("[Downloader] ReplayGain added.")
             except Exception as exc:
-                import logging
-                logging.getLogger(__name__).error(
-                    "[Downloader] ReplayGain error: %s", exc
-                )
+                logger.error(f"[Downloader] ReplayGain error: {exc}")
+
+        logger.info(f"[Downloader] Post-processing finished for: {Path(final_path).name}")
+
 
     # ── Signal dispatcher ──────────────────────────────────────────────────────
 
@@ -581,3 +612,4 @@ class DownloadEngine:
                 req.on_progress(progress)
             except Exception:
                 pass
+

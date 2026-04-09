@@ -113,12 +113,20 @@ def _extract_items(data: dict, artist_name: str, item_type: str) -> List[Dict]:
                 else:
                     return
 
+                # 3. Extract thumbnail
+                thumb_url = ""
+                thumbnails = renderer.get("thumbnail", {}).get("thumbnails", [])
+                if thumbnails:
+                    # Prefer the largest available thumbnail
+                    thumb_url = thumbnails[-1].get("url", "")
+
                 if final_id and title and final_id not in seen:
                     seen.add(final_id)
                     results.append({
                         "id": final_id,
                         "url": final_url,
                         "title": title,
+                        "thumbnail_url": thumb_url,
                         "type": item_type,
                         "artist": artist_name,
                         "parent_artist": artist_name,

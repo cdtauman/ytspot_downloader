@@ -61,6 +61,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "fetching_status": "🔍  Fetching…",
         "fetch_cancelled": "🚫  Fetch cancelled.",
         "starting_downloads": "⬇  Starting {n} download{plural}…",
+        "download_progress_count": "⬇  Downloading {current} / {total}…",
         "cancelling": "🚫  Cancelling…",
         "tracks_loaded": "✅  {n} track{plural} loaded  ·  {summary}",
         "added_to_queue": "✅  Added to queue: {title}",
@@ -206,7 +207,11 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no_tracks_loaded": "No tracks loaded",
         "select_deselect_all": "Select / Deselect All",
         "clear_completed": "Clear completed",
+        "clear_selected": "Clear selected",
         "clear_all": "Clear all",
+        "clear_options": "Clear...",
+        "pause_all": "Pause All",
+        "resume_all": "Resume All",
         "sel_of_n": "{sel} / {n} selected",
         "queue_empty_hint": (
             "Paste a YouTube or Spotify URL above\n"
@@ -223,6 +228,15 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "browser_cookies":      "Browser Cookies Source",
         "browser_cookies_desc": "Extract cookies from your browser to bypass bot checks and age gates",
         "disabled":             "Disabled",
+
+        # ── Release types ───────────────────────────────────────────────────────
+        "release_album":        "Album",
+        "release_single":       "Single",
+        "release_ep":           "EP",
+        "release_playlist":     "Playlist",
+        "release_compilation":  "Compilation",
+        "tracks":               "tracks",
+        "items":                "items",
     },
 
     "he": {
@@ -273,6 +287,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "fetching_status": "🔍  טוען…",
         "fetch_cancelled": "🚫  הטעינה בוטלה.",
         "starting_downloads": "⬇  מתחיל הורדה של {n} פריטים…",
+        "download_progress_count": "⬇  מוריד {current} מתוך {total}…",
         "cancelling": "🚫  מבטל…",
         "tracks_loaded": "✅  {n} פריטים נטענו  ·  {summary}",
         "added_to_queue": "✅  נוסף לתור: {title}",
@@ -418,7 +433,11 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no_tracks_loaded": "אין פריטים בתור",
         "select_deselect_all": "בחר / בטל בחירה הכל",
         "clear_completed": "נקה שהושלמו",
+        "clear_selected": "נקה שנבחרו",
         "clear_all": "נקה הכל",
+        "clear_options": "נקה...",
+        "pause_all": "השהה הכל",
+        "resume_all": "המשך הכל",
         "sel_of_n": "{sel} / {n} נבחרו",
         "queue_empty_hint": (
             "הדבק קישור YouTube או Spotify למעלה\n"
@@ -435,6 +454,15 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "browser_cookies":      "מקור עוגיות דפדפן",
         "browser_cookies_desc": "חלץ עוגיות מהדפדפן שלך לעקיפת זיהוי רובוטים ובדיקות גיל",
         "disabled":             "מושבת",
+
+        # ── Release types ───────────────────────────────────────────────────────
+        "release_album":        "אלבום",
+        "release_single":       "סינגל",
+        "release_ep":           "EP",
+        "release_playlist":     "פלייליסט",
+        "release_compilation":  "אוסף",
+        "tracks":               "שירים",
+        "items":                "פריטים",
     },
 }
 

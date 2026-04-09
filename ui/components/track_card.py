@@ -46,8 +46,8 @@ _SUCCESS     = SUCCESS_COLOR
 _ERROR       = ERROR_COLOR
 _WARNING     = WARNING_COLOR
 _RADIUS      = 10
-_THUMB_W     = 96
-_THUMB_H     = 54
+_THUMB_W     = 64
+_THUMB_H     = 64
 
 _STATUS_COLORS: dict[str, str] = {
     "queued":      _TEXT_3,
@@ -98,8 +98,8 @@ class TrackCard(QFrame):
     # ── Signals ───────────────────────────────────────────────────────────────
     remove_requested  = Signal(int)    # queue_index
     selection_changed = Signal()      # checkbox toggled
-    pause_requested   = Signal(int)    # NEW – queue_index
-    resume_requested  = Signal(int)    # NEW – queue_index
+    pause_requested   = Signal(int)    # queue_index
+    resume_requested  = Signal(int)    # queue_index
     reorder_requested = Signal(int, int)  # (from_index, to_index)
 
     # ── Constructor ───────────────────────────────────────────────────────────
@@ -116,6 +116,7 @@ class TrackCard(QFrame):
         parent_artist: str         = "",
         release_type:  str         = "",
         album_index:   int         = 0,
+        thumbnail_url: str         = "",
         parent:       QWidget      = None,
     ) -> None:
         super().__init__(parent)
@@ -127,11 +128,20 @@ class TrackCard(QFrame):
         self.parent_artist = parent_artist
         self.release_type  = release_type
         self.album_index   = album_index
-        # Ensure platform is a string (might be SourcePlatform enum)
-        plat_str = str(platform.value if hasattr(platform, "value") else platform).lower()
+        self.thumbnail_url = thumbnail_url
+        # Ensure platform is a string
+        if hasattr(platform, "value"):
+            plat_str = platform.value
+        else:
+            plat_str = str(platform).lower()
         self._platform = plat_str
         self._status   = "queued"
         self._drag_start_pos: Optional[QPoint] = None
+        
+        # Action buttons (pause/resume are hidden by default)
+        self._pause_btn:  Optional[ToolButton] = None
+        self._resume_btn: Optional[ToolButton] = None
+        self._remove_btn: Optional[ToolButton] = None
 
         self._build(title, artist, duration, plat_str)
         self._apply_shadow()
@@ -163,7 +173,8 @@ class TrackCard(QFrame):
         # Thumbnail
         self._thumb_lbl = QLabel()
         self._thumb_lbl.setFixedSize(_THUMB_W, _THUMB_H)
-        self._thumb_lbl.setScaledContents(True)
+        self._thumb_lbl.setScaledContents(False)
+        self._thumb_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._thumb_lbl.setPixmap(_make_placeholder_pixmap())
         self._thumb_lbl.setStyleSheet(
             f"border-radius: 6px; border: 1px solid {_BORDER};"
@@ -231,30 +242,6 @@ class TrackCard(QFrame):
         btn_col.setSpacing(4)
         btn_col.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        # Pause button (shown while downloading)
-        self._pause_btn = ToolButton()
-        self._pause_btn.setText("⏸")
-        self._pause_btn.setFixedSize(28, 28)
-        self._pause_btn.setVisible(False)
-        self._pause_btn.setToolTip("Pause download")
-        self._pause_btn.clicked.connect(
-            lambda: self.pause_requested.emit(self.queue_index)
-        )
-        self._pause_btn.setStyleSheet(self._action_btn_style("#f59e0b"))
-        btn_col.addWidget(self._pause_btn)
-
-        # Resume button (shown while paused)
-        self._resume_btn = ToolButton()
-        self._resume_btn.setText("▶")
-        self._resume_btn.setFixedSize(28, 28)
-        self._resume_btn.setVisible(False)
-        self._resume_btn.setToolTip("Resume download")
-        self._resume_btn.clicked.connect(
-            lambda: self.resume_requested.emit(self.queue_index)
-        )
-        self._resume_btn.setStyleSheet(self._action_btn_style(ACCENT_COLOR))
-        btn_col.addWidget(self._resume_btn)
-
         # Remove button (shown on hover)
         self._remove_btn = ToolButton()
         self._remove_btn.setText("✕")
@@ -266,7 +253,27 @@ class TrackCard(QFrame):
         )
         self._remove_btn.setStyleSheet(self._action_btn_style(_ERROR))
         btn_col.addWidget(self._remove_btn)
-
+ 
+        # Pause button (hidden by default)
+        self._pause_btn = ToolButton()
+        self._pause_btn.setText("⏸")
+        self._pause_btn.setFixedSize(28, 28)
+        self._pause_btn.setVisible(False)
+        self._pause_btn.setToolTip("Pause download")
+        self._pause_btn.clicked.connect(lambda: self.pause_requested.emit(self.queue_index))
+        self._pause_btn.setStyleSheet(self._action_btn_style(ACCENT_COLOR))
+        btn_col.addWidget(self._pause_btn)
+ 
+        # Resume button (hidden by default)
+        self._resume_btn = ToolButton()
+        self._resume_btn.setText("▶")
+        self._resume_btn.setFixedSize(28, 28)
+        self._resume_btn.setVisible(False)
+        self._resume_btn.setToolTip("Resume download")
+        self._resume_btn.clicked.connect(lambda: self.resume_requested.emit(self.queue_index))
+        self._resume_btn.setStyleSheet(self._action_btn_style(SUCCESS_COLOR))
+        btn_col.addWidget(self._resume_btn)
+ 
         outer.addLayout(btn_col)
 
     @staticmethod
@@ -330,8 +337,35 @@ class TrackCard(QFrame):
     def set_selected(self, checked: bool) -> None:
         self._check.setChecked(checked)
 
+    @property
+    def platform(self) -> str:
+        """Return the platform identifier (e.g., 'spotify', 'youtube')."""
+        return self._platform
+
+    def get_status(self) -> str:
+        return self._status
+
     def set_thumbnail(self, pixmap: QPixmap) -> None:
-        self._thumb_lbl.setPixmap(pixmap)
+        """Load and center-crop the thumbnail to prevent stretching."""
+        if pixmap.isNull():
+            return
+            
+        target_w = self._thumb_lbl.width()
+        target_h = self._thumb_lbl.height()
+        
+        # 1. Scale to cover the target area (KeepAspectRatioByExpanding)
+        scaled = pixmap.scaled(
+            target_w, target_h,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation
+        )
+        
+        # 2. Center crop
+        x = (scaled.width()  - target_w) // 2
+        y = (scaled.height() - target_h) // 2
+        cropped = scaled.copy(x, y, target_w, target_h)
+        
+        self._thumb_lbl.setPixmap(cropped)
 
     def set_progress(self, fraction: float) -> None:
         self._progress_bar.setValue(int(fraction * 1000))
@@ -350,16 +384,13 @@ class TrackCard(QFrame):
             f"color: {color}; background: transparent; font-size: 10px;"
         )
 
-        is_downloading = status == "downloading"
-        is_paused      = status == "paused"
-        is_terminal    = status in ("done", "error", "cancelled")
-
-        self._pause_btn.setVisible(is_downloading)
-        self._resume_btn.setVisible(is_paused)
-
-        if is_terminal:
-            self._progress_bar.setVisible(False)
-
+        # Update button visibility
+        self._pause_btn.setVisible(status == "downloading")
+        self._resume_btn.setVisible(status == "paused")
+        # Remove button is only for queued, but we keep it available until started
+        # self._remove_btn.setVisible(status == "queued") 
+        # (handeled by enter/leaveEvent for better UX)
+ 
         # Disable checkbox once download is in flight
         self._check.setEnabled(status == "queued")
 

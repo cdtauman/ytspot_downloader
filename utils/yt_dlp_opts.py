@@ -122,6 +122,7 @@ def build_base_ydl_opts(
         "socket_timeout":   socket_timeout,
         "nocheckcertificate": False,
         "abort_on_unavailable_fragment": False,
+        "concurrent_fragment_downloads": 5,
 
         # ── JavaScript runtimes (YouTube PO-token) ────────────────────────────
         "js_runtimes": {

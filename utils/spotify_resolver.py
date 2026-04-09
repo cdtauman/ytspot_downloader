@@ -53,6 +53,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
+import logging
 from typing import Callable, Optional
 
 
@@ -67,6 +68,9 @@ _REQUEST_UA   = (
     "Chrome/136.0.0.0 Safari/537.36"
 )
 
+
+# ── Global Logger ─────────────────────────────────────────────────────────────
+logger = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # SpotifyResolver
@@ -126,13 +130,19 @@ class SpotifyResolver:
         ValueError  – url does not match a recognised Spotify pattern.
         RuntimeError – network / parse failure.
         """
-        print(f"[DEBUG-CLIENT] SpotifyResolver.resolve: url={url}")
+        logger.debug(f"SpotifyResolver.resolve: url={url}")
+        # Clean URL: strip query params and trailing slashes for clean matching
+        clean_url = url.split("?")[0].rstrip("/")
         match = re.search(
             r"open\.spotify\.com/(track|album|playlist|artist)/([A-Za-z0-9]+)",
-            url,
+            clean_url,
         )
         if not match:
-            print(f"[DEBUG-CLIENT] SpotifyResolver: URL Match FAILED for {url}")
+            # Try a more permissive regex if the above fails
+            match = re.search(r"/(track|album|playlist|artist)/([A-Za-z0-9_-]+)", url)
+
+        if not match:
+            logger.debug(f"SpotifyResolver: URL Match FAILED for {url}")
             raise ValueError(f"Invalid or unsupported Spotify URL: {url!r}")
 
         entity_type = match.group(1)
@@ -145,7 +155,14 @@ class SpotifyResolver:
             proxy_token = proxy_token or cfg_token
 
         if proxy_url and "your-future-server" not in proxy_url.lower():
-            return cls._resolve_proxy(url, proxy_url, proxy_token, on_item)
+            try:
+                return cls._resolve_proxy(url, proxy_url, proxy_token, on_item)
+            except RuntimeError as err:
+                if "Rate Limit" in str(err) or "429" in str(err):
+                    if entity_type == "artist":
+                        logger.warning("[SpotifyResolver] Spotify Rate Limited. Falling back to local YTM resolution for artist...")
+                        return cls._resolve_artist_ytm_fallback(url, entity_id, on_item)
+                raise
 
         raise RuntimeError(
             "Spotify Proxy is not configured.\n\n"
@@ -414,62 +431,181 @@ class SpotifyResolver:
             headers["X-App-Token"] = proxy_token
 
         full_url = f"{endpoint}?{urllib.parse.urlencode(params)}"
-        print(f"[DEBUG-CLIENT] Proxy Fetching: {full_url}")
+        logger.debug(f"Proxy Fetching: {full_url}")
         # Set dynamic timeout: artists can take much longer (up to 10 mins)
         match_type = re.search(r"open\.spotify\.com/(track|album|playlist|artist)/", url)
         entity_type = match_type.group(1) if match_type else "track"
         timeout = 600 if entity_type == "artist" else 120
-        
         req = urllib.request.Request(full_url, headers=headers)
         
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                print(f"[DEBUG-CLIENT] Proxy Status Code: {resp.status}")
+                logger.debug(f"Proxy Status Code: {resp.status}")
                 raw_data = json.loads(resp.read().decode())
         except urllib.error.HTTPError as he:
             if he.code == 429:
                 msg = "Spotify Rate Limit exceeded (Too Many Requests). Please wait a few minutes and try again."
-                print(f"[DEBUG-CLIENT] {msg}")
+                logger.error(f"[SpotifyResolver] {msg}")
                 raise RuntimeError(msg) from he
-            print(f"[DEBUG-CLIENT] Proxy HTTP ERROR: {he.code} {he.reason}")
+            logger.error(f"[SpotifyResolver] Proxy HTTP ERROR: {he.code} {he.reason}")
             raise RuntimeError(f"Proxy resolution failed (HTTP {he.code}): {he.reason}") from he
         except Exception as exc:
-            print(f"[DEBUG-CLIENT] Proxy ERROR: {exc}")
+            logger.error(f"[SpotifyResolver] Proxy ERROR: {exc}")
             raise RuntimeError(f"Proxy resolution failed: {exc}") from exc
 
         # New format: {"status": "success", "data": {"metadata": {...}, "items": [...]}}
         data = raw_data.get("data") if isinstance(raw_data, dict) else raw_data
         
-        if isinstance(data, dict) and "items" in data:
-            items = data["items"]
-        elif isinstance(data, dict) and "results" in data:
-            items = data["results"]
+        # Support multiple possible keys for the main track list
+        items = []
+        if isinstance(data, dict):
+            # 1. Direct 'items' or 'results' or 'tracks'
+            potential_items = data.get("items") or data.get("results") or data.get("tracks") or data.get("data")
+            
+            if isinstance(potential_items, list):
+                items = potential_items
+            elif isinstance(potential_items, dict):
+                # 2. Nested: { tracks: { items: [...] } }
+                items = potential_items.get("items") or potential_items.get("results") or []
         elif isinstance(data, list):
             items = data
-        else:
-            # Fallback for single track or unknown format
-            if isinstance(data, dict) and "title" in data:
-                items = [data]
-            else:
-                items = []
 
-        # Ensure all items have the required fields and emit them
+        if not items and isinstance(data, dict) and "title" in data:
+            # Fallback for single track or unknown flat format
+            items = [data]
+
+        metadata = (data.get("metadata") or data) if isinstance(data, dict) else {}
+        
+        # Smart parent detection: For albums, prefer the 'artist' field over the 'name' (which is the album title)
+        is_album = metadata.get("type") == "album" or entity_type == "album"
+        parent_artist_name = ""
+        if is_album:
+            parent_artist_name = metadata.get("artist") or metadata.get("name") or ""
+        else:
+            parent_artist_name = metadata.get("name") or metadata.get("owner") or metadata.get("artist") or ""
+
+        # Ensure all items are normalized and collected
+        normalized_list: list[dict] = []
         for item in items:
             # Reconstruct the expected dict format if keys are different
             # Server returns: title, artist, yt_query, image_url, album, duration_sec
             normalized = {
-                "title":         item.get("title") or "Unknown Title",
-                "artist":        item.get("artist") or "Unknown Artist",
-                "url":           item.get("yt_query") or item.get("url") or "",
-                "duration_sec":  item.get("duration_sec"),
+                "title":         item.get("title") or item.get("name") or "Unknown Title",
+                "artist":        item.get("artist") or item.get("author") or "Unknown Artist",
+                "url":           item.get("yt_query") or item.get("url") or item.get("spotify_url") or "",
+                "duration_sec":  item.get("duration_sec") or item.get("duration"),
                 "thumbnail_url": item.get("image_url") or item.get("thumbnail_url") or "",
-                "spotify_url":   item.get("spotify_url") or "",
-                "album":         item.get("album") or "",
+                "spotify_url":   item.get("spotify_url") or url or "",
+                "album":         item.get("album") or item.get("album_name") or "",
+                "album_type":    item.get("album_type") or item.get("type", "album"),
+                "release_type":  item.get("album_type") or item.get("type", "album"),
+                "album_index":   item.get("track_number") or item.get("index") or 0,
+                "parent_artist": parent_artist_name,
             }
+            normalized_list.append(normalized)
             if on_item:
                 on_item(normalized)
 
-        return items
+        return normalized_list
+
+    @classmethod
+    def _resolve_artist_ytm_fallback(
+        cls,
+        spotify_url: str,
+        artist_id: str,
+        on_item: Optional[Callable[[dict], None]] = None,
+    ) -> list[dict]:
+        """
+        Fallback: Resolve artist discography using YouTube Music when Spotify is rate-limited.
+        1. Get artist name from Spotify Embed (public).
+        2. resolve_artist_via_ytm using that name.
+        """
+        # Step 1: Scrape the artist name from the public page
+        artist_name = "Unknown Artist"
+        try:
+            req = urllib.request.Request(spotify_url, headers={"User-Agent": _REQUEST_UA, "Accept-Language": "he-IL"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                html = resp.read().decode("utf-8", errors="replace")
+                artist_name = cls._extract_artist_name_from_html(html)
+        except Exception as exc:
+            logger.error(f"[SpotifyResolver] Failed to public-scrape artist name: {exc}")
+
+        if artist_name == "Unknown Artist":
+            # If we still don't have a name, we can't search YTM safely
+            raise RuntimeError("Spotify Rate Limited and could not resolve artist name for fallback.")
+
+        logger.info(f"[SpotifyResolver] Falling back to YTM discography for: {artist_name}")
+        
+        # Step 2: Use the YTM scraper logic (we should ideally have a shared utility for this)
+        # For now, we utilize ytmusicapi which is already a dependency of the downloader
+        try:
+            from ytmusicapi import YTMusic
+            ytm = YTMusic()
+            
+            # Search for the artist
+            search = ytm.search(artist_name, filter="artists")
+            if not search:
+                return []
+            
+            ytm_artist_id = search[0]["browseId"]
+            actual_artist_name = search[0].get("artist") or artist_name
+            
+            artist_data = ytm.get_artist(ytm_artist_id)
+            all_tracks = []
+            release_items = []
+
+            # Categories to pull
+            for key in ["albums", "singles"]:
+                section = artist_data.get(key, {})
+                params = section.get("params")
+                items = []
+                if params:
+                    try:
+                        items = ytm.get_artist_albums(ytm_artist_id, params)
+                    except Exception:
+                        items = section.get("results", [])
+                else:
+                    items = section.get("results", [])
+                
+                for itm in items:
+                    if "browseId" in itm:
+                        release_items.append((itm["browseId"], itm.get("title")))
+
+            # Normalize to Spotify-like format
+            from utils.artwork_cleaner import clean_artwork_url
+            from playlist_parser import SourcePlatform
+
+            for alb_id, alb_title in release_items:
+                try:
+                    album = ytm.get_album(alb_id)
+                    raw_image = album.get("thumbnails", [{}])[-1].get("url", "")
+                    image_url = clean_artwork_url(raw_image, SourcePlatform.YOUTUBE_MUSIC)
+                    
+                    for idx, t in enumerate(album.get("tracks", [])):
+                        normalized = {
+                            "title":         t["title"],
+                            "artist":        actual_artist_name,
+                            "url":           f"ytsearch1:{actual_artist_name} {t['title']} audio",
+                            "duration_sec":  t.get("duration_seconds"),
+                            "thumbnail_url": image_url,
+                            "spotify_url":   "", # No Spotify URL for YTM items
+                            "album":         alb_title,
+                            "album_type":    "album",
+                            "release_type":  "album",
+                            "album_index":   idx + 1,
+                            "parent_artist": actual_artist_name,
+                        }
+                        all_tracks.append(normalized)
+                        if on_item:
+                            on_item(normalized)
+                    time.sleep(0.05) # small delay
+                except Exception:
+                    continue
+
+            return all_tracks
+        except Exception as exc:
+            logger.error(f"[SpotifyResolver] YTM Fallback failed: {exc}")
+            raise RuntimeError(f"Spotify Rate Limited and YTM fallback failed: {exc}") from exc
 
     # ──────────────────────────────────────────────────────────────────────────
     # Spotify Web API transport
@@ -586,6 +722,7 @@ class SpotifyResolver:
         duration_ms:  int,
         thumbnail_url: str,
         spotify_url:  str,
+        album_type:   str = "single",
     ) -> dict:
         """Build the standard output dict for one resolved track."""
         duration_sec = int(duration_ms / 1000) if duration_ms else None
@@ -597,6 +734,7 @@ class SpotifyResolver:
             "duration_sec":  duration_sec,
             "thumbnail_url": thumbnail_url,
             "spotify_url":   spotify_url,
+            "album_type":    album_type,
         }
 
     @classmethod
@@ -611,8 +749,9 @@ class SpotifyResolver:
         album      = track.get("album") or {}
         images     = album.get("images") or []
         thumb      = cls._best_image(images)
+        a_type     = album.get("album_type", "single")
 
-        return cls._make_dict(title, artist, duration_ms, thumb, spotify_url)
+        return cls._make_dict(title, artist, duration_ms, thumb, spotify_url, album_type=a_type)
 
     @classmethod
     def _track_dict_from_album_track(
@@ -633,7 +772,7 @@ class SpotifyResolver:
         duration_ms = int(track.get("duration_ms", 0))
         spotify_url = (track.get("external_urls") or {}).get("spotify", "")
 
-        return cls._make_dict(title, artist, duration_ms, album_art, spotify_url)
+        return cls._make_dict(title, artist, duration_ms, album_art, spotify_url, album_type="album")
 
     # ──────────────────────────────────────────────────────────────────────────
     # Helpers
@@ -686,3 +825,18 @@ class SpotifyResolver:
             return cfg.proxy_server_url.strip(), cfg.spotify_app_api_key.strip()
         except Exception:
             return "", ""
+
+    @staticmethod
+    def _extract_artist_name_from_html(html: str) -> str:
+        """Helper to parse artist name from Spotify HTML."""
+        # Look for <title>Artist Name | Spotify</title> or similar
+        m = re.search(r"<title>\s*(.*?)\s*\|\s*Spotify\s*</title>", html, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        
+        # Alternative: meta og:title
+        m2 = re.search(r'property=["\']og:title["\']\s+content=["\'](.*?)["\']', html, re.IGNORECASE)
+        if m2:
+            return m2.group(1).strip()
+            
+        return "Unknown Artist"

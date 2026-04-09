@@ -31,6 +31,7 @@ Typical usage
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from dataclasses import dataclass, field
@@ -48,6 +49,9 @@ from utils.impersonate import ImpersonateTarget as _ImpersonateTarget, CURL_CFFI
 from utils.time_format import seconds_to_str as _seconds_to_str
 from utils.logger import SilentLogger as _SilentLogger
 from utils.yt_dlp_opts import build_parse_ydl_opts as _build_parse_ydl_opts
+from utils.artwork_cleaner import clean_artwork_url
+
+logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -55,9 +59,9 @@ from utils.yt_dlp_opts import build_parse_ydl_opts as _build_parse_ydl_opts
 # ──────────────────────────────────────────────────────────────────────────────
 
 class SourcePlatform(Enum):
-    YOUTUBE         = auto()
-    YOUTUBE_MUSIC   = auto()
-    SPOTIFY         = auto()
+    YOUTUBE         = "youtube"
+    YOUTUBE_MUSIC   = "ytmusic"
+    SPOTIFY         = "spotify"
     GENERIC         = auto()   # any yt-dlp-supported site that isn't YouTube/Spotify
     UNKNOWN         = auto()   # not a valid http/https URL
 
@@ -98,7 +102,10 @@ class TrackMeta:
     platform:       SourcePlatform = SourcePlatform.UNKNOWN
 
     # ── State used by the GUI (not set by the parser) ─────────────────────────
-    selected:       bool  = True        # pre-tick all items in the UI
+    release_type:  str  = "" # "album", "single", "playlist", etc.
+    album_index:   int  = 0  # 1-based position within an album/EP
+    selected:      bool = True
+        # pre-tick all items in the UI
 
     # ── Helpers ──────────────────────────────────────────────────────────────
     @staticmethod
@@ -164,10 +171,24 @@ def classify_url(url: str) -> tuple[SourcePlatform, UrlKind]:
     """
     if _YTM_RE.search(url):
         platform = SourcePlatform.YOUTUBE_MUSIC
-        if "/browse/" in url or "/channel/" in url:
-            kind = UrlKind.ARTIST
+        # YTM Browse IDs usually start with UC (Artist/Channel) or FDbrowse (Custom sections)
+        # Album/Playlist Browse IDs usually start with MPSP, MPRE, or occur in a playlist list= context.
+        is_browse = "/browse/" in url or "/channel/" in url
+        has_list = _YT_PLAYLIST_RE.search(url)
+        
+        if is_browse:
+            # Check for common Album ID prefixes in the URL path segment after /browse/
+            path_segments = urlparse(url).path.split("/")
+            browse_id = path_segments[-1] if path_segments else ""
+            if browse_id.startswith(("MPRE", "MPSP", "OLAK")):
+                kind = UrlKind.ALBUM
+            elif browse_id.startswith(("UC", "FDbrowse", "channel")):
+                kind = UrlKind.ARTIST
+            else:
+                # Ambiguous browse URL, default to PLAYLIST/ALBUM for fallback standard parsing
+                kind = UrlKind.ALBUM if has_list else UrlKind.ARTIST
         else:
-            kind = UrlKind.PLAYLIST if _YT_PLAYLIST_RE.search(url) else UrlKind.SINGLE_VIDEO
+            kind = UrlKind.PLAYLIST if has_list else UrlKind.SINGLE_VIDEO
         return platform, kind
 
     if "youtube.com" in url or "youtu.be" in url:
@@ -277,8 +298,10 @@ def _entry_to_track(
         album=(entry.get("album") or entry.get("playlist_title") or album or "").strip(),
         duration_sec=duration_sec,
         duration_str=TrackMeta.format_duration(duration_sec),
-        thumbnail_url=_best_thumbnail(entry),
+        thumbnail_url=clean_artwork_url(_best_thumbnail(entry), platform),
         platform=platform,
+        release_type=entry.get("release_type", ""),
+        album_index=entry.get("album_index", 0) or entry.get("playlist_index", 0),
         selected=True,
     )
 
@@ -334,7 +357,7 @@ class PlaylistParser:
         """
         self._cancel.clear()
         platform, kind = classify_url(url)
-        print(f"[DEBUG-CLIENT] PlaylistParser.parse: url={url}, platform={platform.name}, kind={kind.name}")
+        logger.debug(f"PlaylistParser.parse: url={url}, platform={platform.name}, kind={kind.name}")
         result = ParseResult(url=url, kind=kind, platform=platform)
 
         self._notify(on_progress, f"Analysing URL… ({platform.name})")
@@ -549,6 +572,9 @@ class PlaylistParser:
                 title=track_data["title"],
                 artist=track_data["artist"],
                 album=track_data.get("album", ""),
+                parent_artist=track_data.get("parent_artist") or (track_data["artist"] if kind == UrlKind.ARTIST else ""),
+                release_type="playlist" if kind == UrlKind.PLAYLIST else (track_data.get("release_type") or track_data.get("album_type", "")),
+                album_index=track_data.get("album_index", 0),
                 duration_sec=track_data.get("duration_sec"),
                 thumbnail_url=track_data.get("thumbnail_url", ""),
                 platform=SourcePlatform.SPOTIFY,
@@ -619,6 +645,19 @@ class PlaylistParser:
         album    = result.playlist_title
         platform = result.platform
 
+        # Try to detect if this is an album from metadata
+        is_album = (
+            info.get("_type") == "playlist" and (
+                "album" in result.playlist_title.lower() or 
+                info.get("webpage_url_basename", "").startswith(("OLAK", "MPRE"))
+            )
+        ) or result.kind == UrlKind.ALBUM
+
+        if is_album:
+            detected_type = "album"
+        else:
+            detected_type = "playlist"
+
         self._notify(
             on_progress,
             f'Found playlist "{result.playlist_title}" '
@@ -646,6 +685,11 @@ class PlaylistParser:
 
             try:
                 track = _entry_to_track(entry, raw_index, platform, album)
+                if not track.release_type:
+                    track.release_type = detected_type
+                if not track.album_index and detected_type == "album":
+                    track.album_index = raw_index
+                    
                 result.tracks.append(track)
                 if on_item:
                     on_item(track, raw_index, result.total_count)

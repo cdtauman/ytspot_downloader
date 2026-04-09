@@ -41,7 +41,7 @@ from qfluentwidgets import (
 from config import AppConfig
 from core.history_db import DownloadRecord, HistoryDB
 from core.services import ServiceContainer
-from core.search_engine import SearchResult
+from core.search_engine import SearchResult, ResultKind
 from core.update_checker import ReleaseInfo
 from core.offline_monitor import OfflineMonitor
 from downloader import (
@@ -202,6 +202,7 @@ class AppWindow(FluentWindow):
         self._index_to_card: dict[int,  TrackCard] = {}
         self._key_to_card:   dict[str,  TrackCard] = {}
         self._card_progress: dict[str,  float]     = {}
+        self._thumb_workers: set[ThumbnailWorker] = set()
 
         # Pause state: card_key → DownloadRequest (for resuming)
         self._paused_requests: dict[str, DownloadRequest] = {}
@@ -329,6 +330,7 @@ class AppWindow(FluentWindow):
         self._options_bar.options_changed.connect(self._on_options_changed)
 
         self._queue_panel.selection_changed.connect(self._on_selection_changed)
+        self._queue_panel.pause_resume_triggered.connect(self._on_global_pause_resume)
         self._queue_panel.card_removed.connect(self._on_card_removed)
 
         self._dl_bar.download_clicked.connect(self._on_download)
@@ -520,6 +522,7 @@ class AppWindow(FluentWindow):
 
     def _restore_queue_state(self, saved: list[dict]) -> None:
         """Re-populate the queue from serialised TrackMeta-like dicts."""
+        logger.debug("PlaylistParser.parse: restoring %d items", len(saved))
         from playlist_parser import TrackMeta
         for item in saved:
             try:
@@ -691,8 +694,13 @@ class AppWindow(FluentWindow):
         jobs: list[tuple[str, DownloadRequest]] = []
         self._key_to_card.clear()
 
+        # We will determine `clean_filename` per-card instead of globally
+        unique_artists = set(c.artist for c in selected if c.artist)
+        is_multi_batch = len(unique_artists) > 1
+
         for card in selected:
             track_playlist_name: Optional[str] = None
+            is_parent_discography = False
             if self._cfg.playlist_subfolders:
                 # 1. Check for YTM Discography specific metadata first
                 parent = (card.parent_artist or "").strip()
@@ -703,40 +711,47 @@ class AppWindow(FluentWindow):
                     # Robust categorization
                     is_live = "live" in card.title.lower() or "הופעה" in card.title
 
-                    if kind == "album": category = "אלבומים"
-                    elif kind == "performance" or is_live: category = "הופעות חיות"
-                    elif kind == "video": category = "סרטונים"
-                    else: category = "סינגלים וגרסאות EP"
+                    # Platform-specific categorization
+                    is_spotify = card.platform == SourcePlatform.SPOTIFY.value
+                    
+                    if kind == "album": 
+                        category = "אלבומים"
+                    elif not is_spotify and (kind == "performance" or is_live):
+                        category = "הופעות חיות"
+                    elif not is_spotify and kind == "video":
+                        category = "סרטונים"
+                    elif not is_spotify and kind == "playlist":
+                        category = "פלייליסטים"
+                    else:
+                        category = "סינגלים ו-EP"
                     
                     # Hierarchy: Artist / Category / [Album if exists]
-                    # Flatten singles/performances: Only albums get a subfolder.
+                    # Flatten singles/performances: Only real albums get a subfolder.
                     if kind == "album" and album:
                         clean_album = album.replace("Album - ", "").replace("Album -", "").strip()
                         track_playlist_name = f"{parent}/{category}/{clean_album}"
                     else:
                         track_playlist_name = f"{parent}/{category}"
                     
-                    # Force card.artist to match the parent to ensure individual track 
-                    # subfolders are not created by external artists in collaborators.
-                    card.artist = parent
+                    # Only set discography mode if we are actually coming from an Artist-level kind
+                    # or if the parent is clearly different from the album name to avoid A/Category/A.
+                    is_parent_discography = (getattr(self, "_last_url_kind", None) == UrlKind.ARTIST)
                 
                 # 2. Fallback to existing logic for other URL kinds
                 elif is_multi:
+                    # General playlist or artist discography without parent mapping
                     if self._last_url_kind == UrlKind.ARTIST:
                         album_part = card.album if card.album else "Singles & EPs"
                         track_playlist_name = f"{card.artist}/{album_part}"
-                    elif self._last_url_kind == UrlKind.ALBUM:
-                        artist_part = card.artist if card.artist else "Unknown Artist"
-                        track_playlist_name = f"{artist_part}/{self._last_playlist_title}"
                     else:
-                        track_playlist_name = self._last_playlist_title
+                        # General playlist: just the playlist title as folder
+                        track_playlist_name = self._last_playlist_title or "Playlist"
                 elif card.artist:
                     album_part = card.album if card.album else "Singles & EPs"
-                    track_playlist_name = f"{card.artist}/{album_part}"
-                elif self._last_playlist_title:
-                    track_playlist_name = self._last_playlist_title
-
-            # Duplicate detection
+                    # Keep output_dir as the base root from config
+            # Hierarchy (Artist / Category / Album) is now handled entirely by playlist_name 
+            # via _get_dynamic_folder to avoid redundancies like Artist/Artist
+            output_dir = str(Path(self._cfg.output_dir))
             if self._cfg.duplicate_action != "overwrite":
                 from core.duplicate_checker import find_duplicate
                 dup = find_duplicate(
@@ -763,6 +778,16 @@ class AppWindow(FluentWindow):
                             card.set_status("done")
                             continue
 
+            # Smart clean filename:
+            # 1. If the batch has multiple different artists, we MUST keep artist name to avoid confusion.
+            # 2. If it's a "Single Artist" batch (e.g. Odeya playlist), we can use clean filenames.
+            # 3. Exception: If the track artist doesn't match the parent artist, keep it.
+            is_clean = not is_multi_batch
+            if is_multi_batch and card.artist and card.parent_artist:
+                # If this specific track artist matches parent, we can still clean it
+                if card.artist.strip().lower() == card.parent_artist.strip().lower():
+                    is_clean = True
+
             req = DownloadRequest(
                 url=card.track_url,
                 output_dir=output_dir,
@@ -775,16 +800,22 @@ class AppWindow(FluentWindow):
                 forced_title=card.title,
                 forced_artist=card.artist,
                 forced_album=card.album,
-                forced_index=card.album_index if (self._cfg.playlist_index_prefix and card.release_type == "album") else None,
+                forced_index=(
+                    card.album_index if (card.release_type == "album" and card.album_index > 0)
+                    else (None if card.release_type == "playlist" 
+                          else (card.queue_index if (self._cfg.playlist_index_prefix and not is_parent_discography) else None))
+                ),
                 cookies_file=self._cfg.cookies_file or None,
-                playlist_name=self._get_dynamic_folder(card, track_playlist_name),
+                cookies_browser=self._cfg.cookies_browser or None,
+                playlist_name=self._get_dynamic_folder(card, track_playlist_name, is_parent_discography),
+                thumbnail_url=card.thumbnail_url,
                 # v3 feature flags
                 sponsorblock=self._cfg.sponsorblock_enabled,
                 embed_lyrics=self._cfg.lyrics_enabled,
                 replay_gain=self._cfg.replay_gain_enabled,
                 musicbrainz=self._cfg.musicbrainz_enabled,
                 square_thumbnails=self._cfg.square_thumbnails,
-                clean_filename=bool(card.parent_artist),
+                clean_filename=is_clean,
             )
             key = str(id(card))
             self._key_to_card[key] = card
@@ -808,6 +839,7 @@ class AppWindow(FluentWindow):
         self._dl_worker = DownloadWorker(
             jobs=jobs,
             engine=self._engine,
+            config=self._cfg,
             db=self._db,
             max_workers=self._cfg.max_parallel_downloads,
             parent=self,
@@ -818,6 +850,7 @@ class AppWindow(FluentWindow):
         self._dl_worker.overall_progress.connect(self._status_bar.set_progress)
         self._dl_worker.metrics.connect(self._status_bar.set_metrics)
         self._dl_worker.status_msg.connect(self._status_bar.set_status)
+        self._dl_worker.job_count_changed.connect(self._on_job_count_changed)
         self._dl_worker.job_error.connect(self._on_track_error)
         self._dl_worker.all_finished.connect(self._on_all_downloads_finished)
         self._dl_worker.start()
@@ -838,10 +871,36 @@ class AppWindow(FluentWindow):
             if card._status != "downloading":
                 card.set_status("downloading")
 
+    def _on_global_pause_resume(self, pause: bool) -> None:
+        if pause:
+            if self._dl_worker:
+                self._dl_worker.cancel()
+            self._queue_panel.set_pause_resume_state(True)
+            self._status_bar.set_status(t("cancelling"))
+        else:
+            # Resume: find cards that are 'queued', 'paused', 'cancelled', or 'error'
+            to_resume = []
+            for card in self._queue_panel.get_all_cards():
+                if card.get_status() in ("queued", "paused", "cancelled", "error") and card.is_selected():
+                    to_resume.append(card)
+            
+            if to_resume:
+                self._queue_panel.set_pause_resume_state(False)
+                # Re-trigger download for these items
+                # We can't easily call _on_download because it reads selected cards.
+                # Let's just use the existing _on_download logic.
+                self._on_download()
+            else:
+                self._panel_queue.set_pause_resume_state(False)
+
     def _on_track_status(self, key: str, status: str) -> None:
         card = self._key_to_card.get(key)
         if card:
             card.set_status(status)
+
+    def _on_job_count_changed(self, current: int, total: int) -> None:
+        if current < total:
+            self._status_bar.set_status(t("download_progress_count", current=current + 1, total=total))
 
     def _on_track_finished(self, key: str, output_path: str) -> None:
         card = self._key_to_card.get(key)
@@ -868,6 +927,7 @@ class AppWindow(FluentWindow):
         self._dl_bar.set_downloading(False)
         self._status_bar.set_cancel_visible(False)
         self._status_bar.set_metrics("", "")
+        self._queue_panel.set_pause_resume_state(False)
         # Clear saved queue state once all done
         self._cfg.queue_state = []
         self._cfg.save()
@@ -888,7 +948,7 @@ class AppWindow(FluentWindow):
         """
         Entry point for fetching content from a URL (single or playlist).
         """
-        print(f"[DEBUG-CLIENT] AppWindow._on_fetch: url={url}")
+        logger.debug(f"[AppWindow] _on_fetch: url={url}")
         if not url.strip():
             return
         if self._fetch_worker and self._fetch_worker.isRunning():
@@ -937,6 +997,7 @@ class AppWindow(FluentWindow):
             parent_artist=get("parent_artist", ""),
             release_type=get("release_type", ""),
             album_index=get("album_index", 0),
+            thumbnail_url=get("thumbnail_url", ""),
         )
 
         # Connect AppWindow-specific handlers
@@ -951,6 +1012,11 @@ class AppWindow(FluentWindow):
         thumb_url = get("thumbnail_url", "")
         if thumb_url:
             tw = ThumbnailWorker(idx, thumb_url, parent=self)
+            self._thumb_workers.add(tw)
+            
+            # Cleanup on finish
+            tw.finished.connect(lambda t=tw: self._thumb_workers.discard(t))
+            
             # Use card local variable in lambda
             tw.thumbnail_ready.connect(lambda idx, data, c=card: self._set_card_thumb(c, data))
             tw.start()
@@ -1001,7 +1067,7 @@ class AppWindow(FluentWindow):
             parent=self
         )
         self._search_worker.result_ready.connect(
-            self._search_panel.add_result
+            self._on_search_result_ready
         )
         self._search_worker.finished.connect(
             lambda: self._search_panel.set_searching(False)
@@ -1012,6 +1078,17 @@ class AppWindow(FluentWindow):
         self._search_panel.set_searching(True)
         self._search_worker.start()
 
+    def _on_search_result_ready(self, result: SearchResult) -> None:
+        """Add a search result card and immediately start fetching its thumbnail."""
+        card = self._search_panel.add_result(result)
+        if result.thumbnail_url:
+            tw = ThumbnailWorker(0, result.thumbnail_url, parent=self)
+            # Route the raw bytes to the card's set_thumbnail method
+            tw.thumbnail_ready.connect(
+                lambda _, data, c=card: c.set_thumbnail(data)
+            )
+            tw.start()
+
     def _on_add_search_result_to_queue(self, result: SearchResult) -> None:
         from playlist_parser import TrackMeta
         meta = TrackMeta(
@@ -1021,13 +1098,23 @@ class AppWindow(FluentWindow):
             duration_str=result.duration_str,
             thumbnail_url=result.thumbnail_url,
             platform=result.platform,
+            album=result.album,
+            release_type=result.release_type,
         )
         self._add_track_to_queue(meta)
         self.switchTo(self._queue_wrapper)
 
     def _on_search_drill_down(self, result: SearchResult) -> None:
+        """User clicked 'Drill Down' (Mshicha) on a search result card."""
+        logger.debug(f"[AppWindow] _on_search_drill_down: kind={result.kind.value}, url={result.url}")
         self._url_bar.set_url(result.url)
         self.switchTo(self._queue_wrapper)
+        
+        # Clear previous playlist/album metadata context to ensure fresh fetch
+        self._last_playlist_title = result.title if result.kind in (ResultKind.ALBUM, ResultKind.PLAYLIST) else ""
+        self._last_url_kind = UrlKind.PLAYLIST if result.kind == ResultKind.PLAYLIST else \
+                            (UrlKind.ALBUM if result.kind == ResultKind.ALBUM else UrlKind.ARTIST)
+                            
         self._on_fetch(result.url)
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -1126,30 +1213,48 @@ class AppWindow(FluentWindow):
     def _on_options_changed(self) -> None:
         pass
 
-    def _get_dynamic_folder(self, card, fallback: Optional[str] = None) -> str:
+    def _get_dynamic_folder(self, card, fallback: Optional[str] = None, is_discography: bool = False) -> str:
         """
-        Constructs a folder path like 'Artist / Album' while avoiding redundancy.
-        Prioritizes structured fallback (e.g. from YTM scraper) to enforce hierarchy.
+        Constructs a folder path like 'Artist / Category / Album' while avoiding redundancy.
+        Includes a de-duplication pass to prevent paths like 'Name / אלבומים / Name'.
         """
-        if fallback:
-            # Clean any 'Album - ' prefix from the overall path parts
-            # Handles 'Artist / Category / Album - Title' -> 'Artist / Category / Title'
-            clean_path = fallback.replace("Album - ", "").replace("Album -", "").strip()
-            return clean_path
-
-        artist = (card.artist or "").strip()
+        artist = (card.parent_artist or card.artist or "").strip()
         album  = (card.album or "").strip()
-        
-        # Clean 'Album - ' prefix if present in the simple artist/album fallback
-        if album.lower().startswith("album - "):
-            album = album[8:].strip()
+        rel_type = (card.release_type or "album").lower()
 
-        # 1. Both present and distinct
-        if artist and album and artist.lower() != album.lower():
-            return f"{artist}/{album}"
-            
-        # 2. Prefer artist if available, then album
-        return artist or album or ""
+        # Grouping names (Hebrew as requested)
+        CAT_ALBUMS  = "אלבומים"
+        CAT_SINGLES = "סינגלים ו-EP"
+
+        path_parts = []
+        
+        # 1. Root Artist segment (Only for non-albums in Discography)
+        if is_discography and artist and rel_type != "album":
+            path_parts.append(artist)
+
+        # 2. Category & Album Folder
+        if is_discography:
+            if rel_type == "album":
+                # User requested flattened albums: skip Artist/Albums prefix
+                if album:
+                    path_parts.append(album.replace("Album - ", "").strip())
+            else:
+                path_parts.append(CAT_SINGLES)
+        elif album:
+            # For non-discography (single album), just use Album Name directly
+            path_parts.append(album.replace("Album - ", "").strip())
+        elif artist:
+            # Fallback for single tracks
+            path_parts.append(artist)
+
+        # 3. Smart De-duplication Pass (Case-insensitive)
+        seen = []
+        for part in path_parts:
+            # Check if this part is a case-insensitive duplicate of the last or root
+            if not seen or part.lower() != seen[-1].lower():
+                seen.append(part)
+
+        return "/".join(seen)
 
     def _update_dl_bar(self) -> None:
         cards    = self._queue_panel.get_all_cards()

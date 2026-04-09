@@ -54,6 +54,40 @@ def crop_embedded_thumbnail(file_path: str) -> bool:
         return False
 
 
+def embed_custom_thumbnail(file_path: str, url: str) -> bool:
+    """Download an image from the given URL, crop to square, and embed it."""
+    if not url.startswith("http"):
+        return False
+    try:
+        from PIL import Image
+        import urllib.request
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            img_bytes = resp.read()
+    except Exception as exc:
+        logger.error("[ThumbnailCropper] Failed to download %s: %s", url, exc)
+        return False
+
+    path = Path(file_path)
+    suffix = path.suffix.lower()
+
+    # Pass the fresh image bytes directly.
+    try:
+        cropped = _centre_crop(img_bytes, Image)
+        logger.debug(f"[ThumbnailCropper] Cropped image to square ({len(img_bytes)} -> {len(cropped)} bytes)")
+        if suffix == ".mp3":
+            res = _inject_mp3_cover(path, cropped)
+            return res
+        elif suffix == ".flac":
+            res = _inject_flac_cover(path, cropped)
+            return res
+        elif suffix in (".m4a", ".mp4", ".aac"):
+            res = _inject_m4a_cover(path, cropped)
+            return res
+    except Exception as exc:
+        logger.error("[ThumbnailCropper] Failed injecting custom thumb for %s: %s", path.name, exc)
+    return False
+
 def _centre_crop(img_bytes: bytes, Image) -> bytes:
     """Crop image bytes to a centred square and return JPEG bytes."""
     img = Image.open(io.BytesIO(img_bytes))
@@ -69,6 +103,45 @@ def _centre_crop(img_bytes: bytes, Image) -> bytes:
     return buf.getvalue()
 
 
+def _inject_mp3_cover(path: Path, cropped: bytes) -> bool:
+    from mutagen.id3 import ID3, APIC, ID3NoHeaderError
+    try:
+        tags = ID3(str(path))
+    except ID3NoHeaderError:
+        return False
+    tags.delall("APIC")
+    tags.add(APIC(
+        encoding=3, mime="image/jpeg", type=3, desc="", data=cropped
+    ))
+    # v2_version=3 forces ID3v2.3 which has maximum compatibility with Windows Explorer
+    tags.save(str(path), v2_version=3)
+    logger.info("[ThumbnailCropper] Injected custom APIC (v2.3) in %s", path.name)
+    return True
+
+def _inject_flac_cover(path: Path, cropped: bytes) -> bool:
+    from mutagen.flac import FLAC, Picture
+    audio = FLAC(str(path))
+    audio.clear_pictures()
+    new_pic = Picture()
+    new_pic.type = 3
+    new_pic.mime = "image/jpeg"
+    new_pic.desc = "Front Cover"
+    new_pic.data = cropped
+    audio.add_picture(new_pic)
+    audio.save()
+    logger.info("[ThumbnailCropper] Injected custom FLAC picture in %s", path.name)
+    return True
+
+def _inject_m4a_cover(path: Path, cropped: bytes) -> bool:
+    from mutagen.mp4 import MP4, MP4Cover
+    audio = MP4(str(path))
+    if audio.tags is None:
+        audio.add_tags()
+    audio.tags["covr"] = [MP4Cover(cropped, imageformat=MP4Cover.FORMAT_JPEG)]
+    audio.save()
+    logger.info("[ThumbnailCropper] Injected custom M4A cover in %s", path.name)
+    return True
+
 def _crop_mp3(path: Path, Image) -> bool:
     from mutagen.id3 import ID3, APIC, ID3NoHeaderError
 
@@ -83,21 +156,9 @@ def _crop_mp3(path: Path, Image) -> bool:
         return False
 
     key = apic_keys[0]
-    apic: APIC = tags[key]
+    apic = tags[key]
     cropped = _centre_crop(apic.data, Image)
-
-    tags.delall("APIC")
-    tags.add(APIC(
-        encoding=3,
-        mime="image/jpeg",
-        type=3,           # Cover (front)
-        desc="Cover",
-        data=cropped,
-    ))
-    tags.save(str(path))
-    logger.info("[ThumbnailCropper] Cropped APIC in %s", path.name)
-    return True
-
+    return _inject_mp3_cover(path, cropped)
 
 def _crop_flac(path: Path, Image) -> bool:
     from mutagen.flac import FLAC, Picture
@@ -107,31 +168,11 @@ def _crop_flac(path: Path, Image) -> bool:
     if not pics:
         return False
 
-    new_pics: list[Picture] = []
-    changed = False
-
     for pic in pics:
         if pic.type == 3:   # Cover (front)
             cropped = _centre_crop(pic.data, Image)
-            new_pic = Picture()
-            new_pic.type  = 3
-            new_pic.mime  = "image/jpeg"
-            new_pic.desc  = pic.desc
-            new_pic.data  = cropped
-            new_pics.append(new_pic)
-            changed = True
-        else:
-            new_pics.append(pic)
-
-    if changed:
-        audio.clear_pictures()
-        for p in new_pics:
-            audio.add_picture(p)
-        audio.save()
-        logger.info("[ThumbnailCropper] Cropped FLAC picture in %s", path.name)
-
-    return changed
-
+            return _inject_flac_cover(path, cropped)
+    return False
 
 def _crop_m4a(path: Path, Image) -> bool:
     from mutagen.mp4 import MP4, MP4Cover
@@ -144,12 +185,5 @@ def _crop_m4a(path: Path, Image) -> bool:
     if not covers:
         return False
 
-    new_covers: list[MP4Cover] = []
-    for cover in covers:
-        cropped = _centre_crop(bytes(cover), Image)
-        new_covers.append(MP4Cover(cropped, imageformat=MP4Cover.FORMAT_JPEG))
-
-    audio.tags["covr"] = new_covers
-    audio.save()
-    logger.info("[ThumbnailCropper] Cropped M4A cover in %s", path.name)
-    return True
+    cropped = _centre_crop(bytes(covers[0]), Image)
+    return _inject_m4a_cover(path, cropped)

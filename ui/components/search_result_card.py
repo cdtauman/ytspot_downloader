@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import BodyLabel, CaptionLabel, PrimaryPushButton, PushButton
 
 from core.search_engine import ResultKind, SearchResult
+from ui.i18n import t
 from ui.theme_manager import (
     ACCENT_COLOR,
     BG_DARK, SURFACE_DARK, SURFACE2_DARK, BORDER_DARK,
@@ -48,8 +49,8 @@ _TEXT       = TEXT_DARK        # "#eeeef5"
 _TEXT_2     = TEXT2_DARK       # "#8888a8"
 _TEXT_3     = TEXT3_DARK       # "#4a4a66"
 _RADIUS     = 8
-_THUMB_W    = 80
-_THUMB_H    = 45
+_THUMB_W    = 60
+_THUMB_H    = 60
 
 _PLATFORM_COLORS: dict[str, tuple[str, str]] = {
     "YOUTUBE":  ("#cc2200", "#ffffff"),   # deeper YouTube red
@@ -119,15 +120,27 @@ class SearchResultCard(QFrame):
             return
         pixmap = QPixmap()
         if pixmap.loadFromData(raw_bytes):
-            pixmap = pixmap.scaled(
-                _THUMB_W, _THUMB_H,
+            # Premium center-crop logic
+            target_w = _THUMB_W
+            target_h = _THUMB_H
+            
+            # 1. Scale to cover the target area
+            scaled = pixmap.scaled(
+                target_w, target_h,
                 Qt.AspectRatioMode.KeepAspectRatioByExpanding,
                 Qt.TransformationMode.SmoothTransformation,
             )
-            x = (pixmap.width()  - _THUMB_W) // 2
-            y = (pixmap.height() - _THUMB_H) // 2
-            pixmap = pixmap.copy(x, y, _THUMB_W, _THUMB_H)
-            self._thumb_label.setPixmap(pixmap)
+            
+            # 2. Center crop
+            x = (scaled.width()  - target_w) // 2
+            y = (scaled.height() - target_h) // 2
+            cropped = scaled.copy(x, y, target_w, target_h)
+            
+            self._thumb_label.setPixmap(cropped)
+            # Clear text if it was showing an icon
+            self._thumb_label.setText("")
+            # Apply border radius if it was lost (though QLabel usually keeps it)
+            self._thumb_label.update()
 
     # ── Build ──────────────────────────────────────────────────────────────────
 
@@ -214,35 +227,21 @@ class SearchResultCard(QFrame):
         row.addWidget(btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
     def _build_thumb(self, kind: ResultKind) -> QLabel:
-        """Return a thumbnail label; for non-track kinds show a styled icon."""
+        """Return a thumbnail label; initialized with placeholder."""
         lbl = QLabel()
         lbl.setFixedSize(_THUMB_W, _THUMB_H)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        if kind == ResultKind.TRACK:
-            lbl.setPixmap(_placeholder_pixmap())
-            lbl.setStyleSheet("border-radius: 4px; background: #1a1a20;")
-        elif kind == ResultKind.ARTIST:
-            # Circular avatar style
-            icon = _KIND_ICONS.get(kind, "?")
-            lbl.setText(icon)
-            lbl.setStyleSheet(f"""
-                background: #1e1e30;
-                border-radius: {_THUMB_H // 2}px;
-                border: 1px solid {_BORDER};
-                font-size: 22px;
-            """)
+        # Start with placeholder; actual image will be loaded by ThumbnailWorker
+        lbl.setPixmap(_placeholder_pixmap())
+        
+        if kind == ResultKind.ARTIST:
+            lbl.setStyleSheet(f"border-radius: {_THUMB_H // 2}px; border: 1px solid {_BORDER}; background: #1a1a20;")
         else:
-            # Album / Playlist / Channel – square with icon
-            icon = _KIND_ICONS.get(kind, "?")
-            lbl.setText(icon)
-            lbl.setStyleSheet(f"""
-                background: #1a1a28;
-                border-radius: 6px;
-                border: 1px solid {_BORDER};
-                font-size: 22px;
-            """)
+            lbl.setStyleSheet(f"border-radius: 6px; border: 1px solid {_BORDER}; background: #1a1a20;")
+            
         return lbl
+
 
     @staticmethod
     def _build_sub_text(r: SearchResult, kind: ResultKind) -> str:
@@ -263,11 +262,27 @@ class SearchResultCard(QFrame):
 
         if kind in (ResultKind.ALBUM, ResultKind.PLAYLIST):
             parts = []
+            
+            # 1. Release type (Album/Single/EP/Playlist)
+            if r.release_type:
+                # Heuristic: Spotify often marks 4-6 tracks as 'single', we call them 'EP'
+                display_type = r.release_type
+                if display_type == "single" and r.item_count and 4 <= r.item_count <= 6:
+                    display_type = "ep"
+                
+                parts.append(t(f"release_{display_type}"))
+            elif kind == ResultKind.PLAYLIST:
+                parts.append(t("release_playlist"))
+            
+            # 2. Artist
             if r.artist:
                 parts.append(r.artist)
+                
+            # 3. Item count
             if r.item_count:
-                label = "tracks" if kind == ResultKind.ALBUM else "items"
-                parts.append(f"{r.item_count} {label}")
+                label_key = "tracks" if kind == ResultKind.ALBUM else "items"
+                parts.append(f"{r.item_count} {t(label_key)}")
+                
             return "  ·  ".join(parts) if parts else kind.name.capitalize()
 
         if kind == ResultKind.CHANNEL:
