@@ -575,7 +575,7 @@ class SpotifyResolver:
 
             # Normalize to Spotify-like format
             from utils.artwork_cleaner import clean_artwork_url
-            from playlist_parser import SourcePlatform
+            from core.playlist_parser import SourcePlatform
 
             for alb_id, alb_title in release_items:
                 try:

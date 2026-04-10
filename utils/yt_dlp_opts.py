@@ -32,9 +32,30 @@ Usage
 
 from __future__ import annotations
 
+import random
 from typing import Any, Optional
 
 from utils.impersonate import ImpersonateTarget, CURL_CFFI_AVAILABLE
+
+
+# ── Browser UA pool for randomization ────────────────────────────────────────
+# Kept realistic and up-to-date.  All entries pass YouTube's bot checks.
+_UA_POOL: list[str] = [
+    # Chrome on Windows (various recent versions)
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    # Chrome on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+    # Firefox on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0",
+    # Firefox on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:138.0) Gecko/20100101 Firefox/138.0",
+    # Edge on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
+]
 
 
 # ── Chrome 136 fingerprint (single source of truth) ───────────────────────────
@@ -72,13 +93,14 @@ CHROME_USER_AGENT: str = _CHROME_136_HEADERS["User-Agent"]
 
 def build_base_ydl_opts(
     *,
-    cookies_file:    Optional[str]  = None,
-    cookies_browser: Optional[str]  = None,
-    logger:          Any            = None,
-    quiet:           bool           = True,
-    retries:         int            = 10,
-    age_limit:       int            = 18,
-    socket_timeout:  int            = 20,
+    cookies_file:         Optional[str]  = None,
+    cookies_browser:      Optional[str]  = None,
+    logger:               Any            = None,
+    quiet:                bool           = True,
+    retries:              int            = 10,
+    age_limit:            int            = 18,
+    socket_timeout:       int            = 20,
+    randomize_user_agent: bool           = False,
 ) -> dict[str, Any]:
     """
     Return a base yt-dlp options dict with YTSpot's standard bot-bypass,
@@ -136,6 +158,10 @@ def build_base_ydl_opts(
         "quiet":       quiet,
         "no_warnings": False,
     }
+
+    # ── User-Agent rotation (anti-ban) ───────────────────────────────────────
+    if randomize_user_agent:
+        opts["http_headers"]["User-Agent"] = random.choice(_UA_POOL)
 
     # ── Logger (optional) ─────────────────────────────────────────────────────
     if logger is not None:

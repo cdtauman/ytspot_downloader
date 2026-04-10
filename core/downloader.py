@@ -128,13 +128,14 @@ class DownloadRequest:
     thumbnail_url:   Optional[str] = None
 
     # NEW v3 feature flags (all default to off for backward compat)
-    sponsorblock:       bool = False   # cut non-music segments
-    resumable:          bool = False   # pick up .part file if present
-    embed_lyrics:       bool = False   # fetch + embed lyrics after download
-    replay_gain:        bool = False   # ReplayGain analysis after download
-    musicbrainz:        bool = False   # MusicBrainz tag enrichment after download
-    square_thumbnails:  bool = False   # crop embedded art to 1:1 square
-    clean_filename:     bool = False   # NEW - use minimal filename (Title only)
+    sponsorblock:           bool = False   # cut non-music segments
+    resumable:              bool = False   # pick up .part file if present
+    embed_lyrics:           bool = False   # fetch + embed lyrics after download
+    replay_gain:            bool = False   # ReplayGain analysis after download
+    musicbrainz:            bool = False   # MusicBrainz tag enrichment after download
+    square_thumbnails:      bool = False   # crop embedded art to 1:1 square
+    clean_filename:         bool = False   # use minimal filename (Title only)
+    randomize_user_agent:   bool = False   # rotate UA string per download (anti-ban)
 
     # Per-request cancellation (parallel downloads)
     cancel_event: Optional[threading.Event] = field(default=None, repr=False)
@@ -389,6 +390,7 @@ class DownloadEngine:
             cookies_browser=req.cookies_browser or None,
             quiet=True,
             retries=10,
+            randomize_user_agent=req.randomize_user_agent,
         )
 
         opts["outtmpl"]           = outtmpl

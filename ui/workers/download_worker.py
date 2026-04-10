@@ -36,7 +36,7 @@ from core.download_orchestrator import (
     OrchestratorCallbacks,
 )
 from core.history_db import HistoryDB
-from downloader import DownloadEngine, DownloadRequest
+from core.downloader import DownloadEngine, DownloadRequest
 from error_handler import ErrorInfo
 
 logger = logging.getLogger(__name__)

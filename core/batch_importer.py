@@ -62,7 +62,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
-from playlist_parser import classify_url, SourcePlatform
+from core.playlist_parser import classify_url, SourcePlatform
 
 
 # ──────────────────────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ from typing import Optional
 from PySide6.QtCore import QThread, Signal
 
 from error_handler import classify_error, ErrorInfo
-from playlist_parser import (
+from core.playlist_parser import (
     ParseResult,
     PlaylistParser,
     SourcePlatform,

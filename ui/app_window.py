@@ -44,11 +44,11 @@ from core.services import ServiceContainer
 from core.search_engine import SearchResult, ResultKind
 from core.update_checker import ReleaseInfo
 from core.offline_monitor import OfflineMonitor
-from downloader import (
+from core.downloader import (
     AudioQuality, DownloadEngine, DownloadRequest, MediaType, VideoQuality,
 )
 from error_handler import classify_error, ErrorInfo, ErrorSeverity, probe_connectivity
-from playlist_parser import ParseResult, SourcePlatform, UrlKind, classify_url
+from core.playlist_parser import ParseResult, SourcePlatform, UrlKind, classify_url
 
 # ── Workers ────────────────────────────────────────────────────────────────────
 from ui.workers.fetch_worker     import FetchWorker
@@ -524,7 +524,7 @@ class AppWindow(FluentWindow):
     def _restore_queue_state(self, saved: list[dict]) -> None:
         """Re-populate the queue from serialised TrackMeta-like dicts."""
         logger.debug("PlaylistParser.parse: restoring %d items", len(saved))
-        from playlist_parser import TrackMeta
+        from core.playlist_parser import TrackMeta
         for item in saved:
             try:
                 meta = TrackMeta(
@@ -824,6 +824,7 @@ class AppWindow(FluentWindow):
                 musicbrainz=self._cfg.musicbrainz_enabled,
                 square_thumbnails=self._cfg.square_thumbnails,
                 clean_filename=is_clean,
+                randomize_user_agent=self._cfg.randomize_user_agent,
             )
             key = str(id(card))
             self._key_to_card[key] = card
@@ -1113,7 +1114,7 @@ class AppWindow(FluentWindow):
             tw.start()
 
     def _on_add_search_result_to_queue(self, result: SearchResult) -> None:
-        from playlist_parser import TrackMeta
+        from core.playlist_parser import TrackMeta
         meta = TrackMeta(
             title=result.title,
             artist=result.artist,

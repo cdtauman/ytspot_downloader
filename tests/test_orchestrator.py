@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from downloader import (
+from core.downloader import (
     DownloadEngine,
     DownloadProgress,
     DownloadRequest,
