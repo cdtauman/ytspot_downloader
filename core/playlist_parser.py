@@ -88,8 +88,8 @@ class TrackMeta:
     title:          str   = "Unknown Title"
     artist:         str   = ""          # uploader / artist name
     album:          str   = ""          # album / playlist title
-    parent_artist:  str   = ""          # NEW - cleaned root artist for organization
-    release_type:   str   = ""          # NEW - "album", "single", or "performance"
+    parent_artist:  str   = ""          # cleaned root artist for organization
+    release_type:   str   = ""          # "album", "single", "playlist", or "performance"
 
     # ── Timing ───────────────────────────────────────────────────────────────
     duration_sec:   Optional[int]   = None   # None = live / unknown
@@ -102,10 +102,7 @@ class TrackMeta:
     platform:       SourcePlatform = SourcePlatform.UNKNOWN
 
     # ── State used by the GUI (not set by the parser) ─────────────────────────
-    release_type:  str  = "" # "album", "single", "playlist", etc.
-    album_index:   int  = 0  # 1-based position within an album/EP
-    selected:      bool = True
-        # pre-tick all items in the UI
+    selected:       bool = True         # pre-tick all items in the UI
 
     # ── Helpers ──────────────────────────────────────────────────────────────
     @staticmethod
@@ -380,11 +377,13 @@ class PlaylistParser:
                 on_item=on_item,
                 on_progress=on_progress,
                 on_error=on_error,
+                cookies_file=cookies_file,
             )
 
         # ── Standard yt-dlp resolution ──
         return self._parse_standard_yt(
-            url, result, on_item, on_progress, on_error
+            url, result, on_item, on_progress, on_error,
+            cookies_file=cookies_file,
         )
 
     def parse_async(
@@ -444,6 +443,7 @@ class PlaylistParser:
         on_item:         Optional[Callable] = None,
         on_progress:     Optional[Callable] = None,
         on_error:        Optional[Callable] = None,
+        cookies_file:    Optional[str] = None,
     ) -> ParseResult:
         """
         Specialised resolver for YTM browse/artist URLs.
@@ -458,13 +458,14 @@ class PlaylistParser:
         if not releases:
             # Fallback to standard yt-dlp if scraping fails or no releases found
             self._notify(on_progress, "No structured sections found, falling back to general uploads…")
-            return self._parse_standard_yt(url, result, on_item, on_progress, on_error)
+            return self._parse_standard_yt(url, result, on_item, on_progress, on_error,
+                                           cookies_file=cookies_file)
 
         total_releases = len(releases)
         self._notify(on_progress, f"Found {total_releases} Albums/Singles to resolve.")
-        
+
         idx_counter = [0]
-        ydl_opts = self._build_opts(None)  # Use default options for individual albums
+        ydl_opts = self._build_opts(cookies_file or None)
         
         for r_idx, release in enumerate(releases, 1):
             if self._cancel.is_set():
@@ -514,11 +515,12 @@ class PlaylistParser:
         on_item:         Optional[Callable],
         on_progress:     Optional[Callable],
         on_error:        Optional[Callable],
+        *,
+        cookies_file:    Optional[str] = None,
     ) -> ParseResult:
         """Standard yt-dlp extraction logic for YouTube and Generic URLs."""
         logger = _SilentLogger()
-        # Note: cookies_file support could be passed through if needed
-        ydl_opts = self._build_opts(None, logger)
+        ydl_opts = self._build_opts(cookies_file or None, logger)
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -733,8 +735,8 @@ class PlaylistParser:
         if callback:
             try:
                 callback(message)
-            except Exception:  # noqa: BLE001
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("[PlaylistParser] _notify callback raised: %s", exc)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

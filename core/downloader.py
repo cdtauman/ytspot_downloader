@@ -92,6 +92,7 @@ class DownloadProgress:
     eta_seconds:       Optional[float]   = None
     fraction:          float             = 0.0
     error_message:     str               = ""
+    warning_message:   str               = ""   # non-fatal post-processing failures
     output_path:       str               = ""
 
 
@@ -148,6 +149,11 @@ class DownloadRequest:
     on_error:    Optional[Callable[[DownloadProgress], None]] = field(
         default=None, repr=False
     )
+
+    # Internal: set by yt-dlp post-processor hook to record the final output path.
+    # Declared here (not set dynamically) so type-checkers and frozen-dataclass
+    # tools can see it.
+    _final_output_path: str = field(default="", init=False, repr=False)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -264,8 +270,10 @@ class DownloadEngine:
                         ydl.download([url])
                         break
                     except Exception as exc:
-                        exc_str = str(exc)
-                        is_locked = "WinError 5" in exc_str or "WinError 32" in exc_str
+                        # Check for Windows file-lock errors by winerror code (locale-safe)
+                        # winerror 5 = ACCESS_DENIED, winerror 32 = SHARING_VIOLATION
+                        winerror = getattr(exc, "winerror", None)
+                        is_locked = winerror in (5, 32)
                         if is_locked and attempt < max_retries - 1:
                             # Transient file lock (common on Windows during network drops or media player scans)
                             logger.warning(f"[Downloader] File locked, retrying in 2s... (Attempt {attempt+1}/{max_retries})")
@@ -274,7 +282,7 @@ class DownloadEngine:
                         raise
 
             # ── Finalized: Run custom pipeline before emitting FINISHED ──────────────
-            final_path = getattr(request, "_final_output_path", "")
+            final_path = request._final_output_path  # noqa: SLF001
             if final_path and os.path.exists(final_path):
                 # Notify UI we are processing
                 self._fire(request, DownloadProgress(
@@ -284,14 +292,22 @@ class DownloadEngine:
                     output_path=final_path,
                 ))
                 
-                # Execute steps
-                self._run_final_pipeline(request, final_path)
+                # Execute steps; collect non-fatal failures for the UI
+                pp_failures = self._run_final_pipeline(request, final_path)
+            else:
+                pp_failures = []
+
+            warning_msg = ""
+            if pp_failures:
+                warning_msg = "Post-processing partial failure: " + "; ".join(pp_failures)
+                logger.warning(f"[Downloader] {warning_msg}")
 
             self._fire(request, DownloadProgress(
                 status=DownloadStatus.FINISHED,
                 url=url,
                 title=request.forced_title or "",
                 fraction=1.0,
+                warning_message=warning_msg,
                 output_path=final_path,
             ))
 
@@ -412,12 +428,14 @@ class DownloadEngine:
             "writethumbnail": req.embed_thumbnail,
         }
 
-        if req.forced_title or req.forced_artist:
+        if req.forced_title or req.forced_artist or req.forced_album:
             meta_args: list[str] = []
             if req.forced_title:
                 meta_args.extend(["-metadata", f"title={req.forced_title}"])
             if req.forced_artist:
                 meta_args.extend(["-metadata", f"artist={req.forced_artist}"])
+            if req.forced_album:
+                meta_args.extend(["-metadata", f"album={req.forced_album}"])
             opts["postprocessor_args"] = {
                 "FFmpegMetadata":      meta_args,
                 "FFmpegExtractAudio":  meta_args,
@@ -448,12 +466,14 @@ class DownloadEngine:
             opts["subtitleslangs"]  = ["en"]
             opts["subtitlesformat"] = "vtt"
 
-        if req.forced_title or req.forced_artist:
+        if req.forced_title or req.forced_artist or req.forced_album:
             meta_args = []
             if req.forced_title:
                 meta_args.extend(["-metadata", f"title={req.forced_title}"])
             if req.forced_artist:
                 meta_args.extend(["-metadata", f"artist={req.forced_artist}"])
+            if req.forced_album:
+                meta_args.extend(["-metadata", f"album={req.forced_album}"])
             opts["postprocessor_args"] = {
                 "FFmpegMetadata":        meta_args,
                 "FFmpegVideoConvertor":  meta_args,
@@ -527,7 +547,7 @@ class DownloadEngine:
             if output_path:
                 output_path = os.path.abspath(output_path)
                 # Capture the most recent valid file path
-                if not getattr(req, "_final_output_path", None) or os.path.exists(output_path):
+                if not req._final_output_path or os.path.exists(output_path):  # noqa: SLF001
                     req._final_output_path = output_path  # noqa: SLF001
 
         return hook
@@ -542,6 +562,7 @@ class DownloadEngine:
             return
 
         logger.info(f"[Downloader] Starting final post-processing for: {Path(final_path).name}")
+        failures: list[str] = []
 
         # 1. Custom Square Thumbnail (priority for Spotify/YTM)
         if req.square_thumbnails and req.thumbnail_url:
@@ -552,9 +573,11 @@ class DownloadEngine:
                 if ok:
                     logger.debug(f"[Downloader] Custom thumbnail injected successfully.")
                 else:
-                    logger.debug(f"[Downloader] Failed to inject custom thumbnail.")
+                    logger.warning(f"[Downloader] Failed to inject custom thumbnail.")
+                    failures.append("thumbnail crop")
             except Exception as exc:
                 logger.error(f"[Downloader] Thumbnail error: {exc}")
+                failures.append(f"thumbnail: {exc}")
 
         # 2. MusicBrainz enrichment
         if req.musicbrainz:
@@ -565,6 +588,7 @@ class DownloadEngine:
                 logger.debug("[Downloader] MusicBrainz metadata enriched.")
             except Exception as exc:
                 logger.error(f"[Downloader] MusicBrainz error: {exc}")
+                failures.append(f"MusicBrainz: {exc}")
 
         # 3. Lyrics embedding
         if req.embed_lyrics:
@@ -575,6 +599,7 @@ class DownloadEngine:
                 logger.debug("[Downloader] Lyrics embedded.")
             except Exception as exc:
                 logger.error(f"[Downloader] Lyrics error: {exc}")
+                failures.append(f"lyrics: {exc}")
 
         # 4. ReplayGain analysis
         if req.replay_gain:
@@ -585,8 +610,10 @@ class DownloadEngine:
                 logger.debug("[Downloader] ReplayGain added.")
             except Exception as exc:
                 logger.error(f"[Downloader] ReplayGain error: {exc}")
+                failures.append(f"ReplayGain: {exc}")
 
         logger.info(f"[Downloader] Post-processing finished for: {Path(final_path).name}")
+        return failures
 
 
     # ── Signal dispatcher ──────────────────────────────────────────────────────
@@ -600,16 +627,16 @@ class DownloadEngine:
         if error and req.on_error:
             try:
                 req.on_error(progress)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("[Downloader] on_error callback raised: %s", exc, exc_info=True)
         elif progress.status == DownloadStatus.FINISHED and req.on_finished:
             try:
                 req.on_finished(progress)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("[Downloader] on_finished callback raised: %s", exc, exc_info=True)
         elif req.on_progress:
             try:
                 req.on_progress(progress)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("[Downloader] on_progress callback raised: %s", exc, exc_info=True)
 

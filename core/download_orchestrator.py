@@ -33,13 +33,14 @@ from dataclasses import dataclass
 from typing import Optional, Protocol, Tuple
 
 from core.history_db import DownloadRecord, HistoryDB
-from downloader import (
+from core.downloader import (
     DownloadEngine,
     DownloadProgress,
     DownloadRequest,
     DownloadStatus,
     MediaType,
 )
+from core.retry_policy import DEFAULT_POLICY, retry_download
 from error_handler import classify_error, ErrorInfo
 
 logger = logging.getLogger(__name__)
@@ -300,11 +301,14 @@ class DownloadOrchestrator:
             self._safe_cb("on_track_finished", key, p.output_path or "")
             self._safe_cb("on_overall_progress", min(overall, 1.0))
             self._safe_cb("on_job_count_changed", self._completed, self._total)
+            if p.warning_message:
+                self._safe_cb("on_status_message", f"⚠ {p.warning_message}")
             logger.info("[Orchestrator] Track done: %s → %s", key, p.output_path)
             self._persist_record(req, p)
 
         def on_error(p: DownloadProgress) -> None:
-            self._failed += 1
+            with self._progress_lock:
+                self._failed += 1
             err = classify_error(
                 Exception(p.error_message or "Unknown download error")
             )
@@ -315,9 +319,31 @@ class DownloadOrchestrator:
 
         req.on_progress = on_progress
         req.on_finished = on_finished
-        req.on_error    = on_error
 
-        self._engine.download(req)
+        # ── Retry wrapper ─────────────────────────────────────────────────────
+        # engine.download() signals failure via req.on_error callback (not
+        # by raising).  We intercept it to raise a catchable exception so
+        # retry_download() can apply retriable-error detection and backoff.
+        _err: list[str] = []
+
+        def _capture_error(p: DownloadProgress) -> None:
+            _err.append(p.error_message or "Unknown download error")
+
+        def _attempt() -> None:
+            _err.clear()
+            req.on_error = _capture_error
+            self._engine.download(req)
+            if _err:
+                raise RuntimeError(_err[0])
+
+        final_error = retry_download(_attempt, cancel_event=cancel_ev, job_key=key)
+
+        if final_error and final_error != "Cancelled":
+            on_error(DownloadProgress(
+                status=DownloadStatus.ERROR,
+                url=req.url,
+                error_message=final_error,
+            ))
 
     # ── History persistence ───────────────────────────────────────────────────
 
@@ -350,4 +376,4 @@ class DownloadOrchestrator:
         try:
             fn(*args)
         except Exception:  # noqa: BLE001
-            logger.debug("[Orchestrator] Callback %s raised", method, exc_info=True)
+            logger.warning("[Orchestrator] Callback %s raised unexpectedly", method, exc_info=True)

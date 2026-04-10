@@ -53,7 +53,7 @@ import yt_dlp
 from bs4 import BeautifulSoup
 from ytmusicapi import YTMusic
 
-from playlist_parser import SourcePlatform, classify_url, _best_thumbnail
+from core.playlist_parser import SourcePlatform, classify_url, _best_thumbnail
 from utils.logger import SilentLogger as _SilentLogger
 from utils.time_format import seconds_to_str as _seconds_to_str
 from utils.yt_dlp_opts import build_search_ydl_opts as _build_search_opts

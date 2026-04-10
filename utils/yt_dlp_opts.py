@@ -178,7 +178,9 @@ def build_search_ydl_opts(
     opts.update({
         "extract_flat":  True,
         "skip_download": True,
-        "ignoreerrors":  True,
+        # ignoreerrors intentionally omitted: we want real errors to propagate
+        # so the caller (SearchEngine) can surface them to the user instead of
+        # silently returning empty results.
         "playlistend":   max_results,
     })
     return opts

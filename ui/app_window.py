@@ -197,6 +197,7 @@ class AppWindow(FluentWindow):
         self._dl_worker:      Optional[DownloadWorker] = None
         self._search_worker:  Optional[SearchWorker]  = None
         self._scraper_worker: Optional[ScraperWorker] = None
+        self._resume_workers: list[DownloadWorker]    = []  # per-track resume workers (prevent GC)
 
         # Card routing
         self._index_to_card: dict[int,  TrackCard] = {}
@@ -532,7 +533,7 @@ class AppWindow(FluentWindow):
                     url=item.get("url", ""),
                     duration_str=item.get("duration_str", ""),
                     thumbnail_url=item.get("thumbnail_url", ""),
-                    platform=SourcePlatform.YOUTUBE,
+                    platform=SourcePlatform[item.get("platform", "YOUTUBE")],
                 )
                 self._add_track_to_queue(meta)
             except Exception as exc:
@@ -548,6 +549,7 @@ class AppWindow(FluentWindow):
                 "url":          c.track_url,
                 "duration_str": "",
                 "thumbnail_url": "",
+                "platform":     getattr(c, "platform_name", "YOUTUBE"),
             }
             for c in cards
         ]
@@ -633,7 +635,8 @@ class AppWindow(FluentWindow):
         card.set_status("queued")
         card.set_progress(0.0)
 
-        # Start a single-job DownloadWorker for this track
+        # Start a single-job DownloadWorker for this track.
+        # Store in _resume_workers to prevent premature garbage collection.
         self._key_to_card[key] = card
         resume_worker = DownloadWorker(
             jobs=[(key, req)],
@@ -642,11 +645,15 @@ class AppWindow(FluentWindow):
             max_workers=1,
             parent=self,
         )
+        self._resume_workers.append(resume_worker)
         resume_worker.track_progress.connect(self._on_track_progress)
         resume_worker.track_status.connect(self._on_track_status)
         resume_worker.track_finished.connect(self._on_track_finished)
         resume_worker.job_error.connect(self._on_track_error)
         resume_worker.all_finished.connect(self._on_all_downloads_finished)
+        resume_worker.all_finished.connect(
+            lambda w=resume_worker: self._resume_workers.remove(w) if w in self._resume_workers else None
+        )
         resume_worker.start()
 
     def _active_request_for_key(self, key: str) -> Optional[DownloadRequest]:
@@ -800,6 +807,7 @@ class AppWindow(FluentWindow):
                 forced_title=card.title,
                 forced_artist=card.artist,
                 forced_album=card.album,
+                forced_duration=getattr(card, "duration_sec", None),
                 forced_index=(
                     card.album_index if (card.release_type == "album" and card.album_index > 0)
                     else (None if card.release_type == "playlist" 
@@ -891,7 +899,7 @@ class AppWindow(FluentWindow):
                 # Let's just use the existing _on_download logic.
                 self._on_download()
             else:
-                self._panel_queue.set_pause_resume_state(False)
+                self._queue_panel.set_pause_resume_state(False)
 
     def _on_track_status(self, key: str, status: str) -> None:
         card = self._key_to_card.get(key)
@@ -1035,6 +1043,17 @@ class AppWindow(FluentWindow):
             self._last_playlist_title = result.playlist_title
         if hasattr(result, "kind"):
             self._last_url_kind = result.kind
+
+        # Surface any fetch-time error that was caught inside PlaylistParser
+        # (e.g. unsupported URL, geo-block, Spotify proxy not configured).
+        # These are stored in result.error rather than raising an exception,
+        # so without this check they would be silently discarded.
+        if hasattr(result, "error") and result.error and not getattr(result, "tracks", None):
+            err = classify_error(Exception(result.error))
+            self._status_bar.set_status(err.status_line())
+            MessageBox(err.headline, err.detail, self).exec()
+            return
+
         n = len(self._queue_panel.get_all_cards())
         self._status_bar.set_status(
             t("fetch_done", n=n, plural=("" if n == 1 else "s"))
@@ -1043,6 +1062,12 @@ class AppWindow(FluentWindow):
     def _on_fetch_error(self, msg: str) -> None:
         self._url_bar.set_fetching(False)
         self._status_bar.set_cancel_visible(False)
+        err = classify_error(Exception(msg))
+        self._status_bar.set_status(err.status_line())
+        MessageBox(err.headline, err.detail, self).exec()
+
+    def _on_search_error(self, msg: str) -> None:
+        self._search_panel.set_searching(False)
         err = classify_error(Exception(msg))
         self._status_bar.set_status(err.status_line())
         MessageBox(err.headline, err.detail, self).exec()
@@ -1072,9 +1097,7 @@ class AppWindow(FluentWindow):
         self._search_worker.finished.connect(
             lambda: self._search_panel.set_searching(False)
         )
-        self._search_worker.error.connect(
-            lambda msg: self._search_panel.set_searching(False)
-        )
+        self._search_worker.error.connect(self._on_search_error)
         self._search_panel.set_searching(True)
         self._search_worker.start()
 

@@ -50,6 +50,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -95,6 +96,7 @@ class SpotifyResolver:
     # ── Class-level token cache ───────────────────────────────────────────────
     _token:        str   = ""
     _token_expiry: float = 0.0     # epoch seconds
+    _token_lock:   threading.Lock = threading.Lock()
 
     # ──────────────────────────────────────────────────────────────────────────
     # Public API
@@ -618,8 +620,9 @@ class SpotifyResolver:
         Uses the client_credentials flow (no user login required).
         """
         # Return cached token if still valid (with a 30-second safety margin)
-        if cls._token and time.time() < (cls._token_expiry - 30):
-            return cls._token
+        with cls._token_lock:
+            if cls._token and time.time() < (cls._token_expiry - 30):
+                return cls._token
 
         client_id, client_secret = cls._get_credentials()
         if not client_id or not client_secret:
@@ -654,14 +657,15 @@ class SpotifyResolver:
         except Exception as exc:
             raise RuntimeError(f"Spotify token request error: {exc}") from exc
 
-        cls._token        = token_data.get("access_token", "")
-        expires_in        = int(token_data.get("expires_in", 3600))
-        cls._token_expiry = time.time() + expires_in
+        with cls._token_lock:
+            cls._token        = token_data.get("access_token", "")
+            expires_in        = int(token_data.get("expires_in", 3600))
+            cls._token_expiry = time.time() + expires_in
 
-        if not cls._token:
-            raise RuntimeError("Spotify returned an empty access token.")
+            if not cls._token:
+                raise RuntimeError("Spotify returned an empty access token.")
 
-        return cls._token
+            return cls._token
 
     @classmethod
     def _api_get(cls, endpoint: str, params: Optional[dict] = None) -> dict:
@@ -697,8 +701,9 @@ class SpotifyResolver:
                     continue
                 if exc.code == 401:
                     # Token expired mid-flight – clear cache and retry once
-                    cls._token = ""
-                    cls._token_expiry = 0.0
+                    with cls._token_lock:
+                        cls._token = ""
+                        cls._token_expiry = 0.0
                     if attempt == 0:
                         token = cls._get_access_token()
                         req.add_header("Authorization", f"Bearer {token}")

@@ -36,7 +36,7 @@ from typing import Optional
 
 from config import AppConfig
 from core.history_db import HistoryDB
-from downloader import DownloadEngine
+from core.downloader import DownloadEngine
 
 logger = logging.getLogger(__name__)
 
