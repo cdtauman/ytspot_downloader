@@ -298,6 +298,9 @@ class AppWindow(FluentWindow):
             self._on_clipboard_setting_change
         )
         self._settings_panel.accessibility_changed.connect(self._apply_accessibility)
+        self._settings_panel.login_fix_requested.connect(
+            lambda: self._run_cookie_wizard_ui(prompt_for_url=True)
+        )
         self._settings_panel.settings_saved.connect(
             lambda: self._options_bar.apply_config(self._cfg)
         )
@@ -313,7 +316,7 @@ class AppWindow(FluentWindow):
 
     def _connect_signals(self) -> None:
         # ── URL bar → FetchController ──────────────────────────────────────────
-        self._url_bar.fetch_requested.connect(self._fetch_ctrl.fetch)
+        self._url_bar.fetch_requested.connect(self._start_fetch)
         self._url_bar.batch_import_requested.connect(self._fetch_ctrl.batch_import)
         self._url_bar.scrape_requested.connect(self._on_scrape)
 
@@ -363,6 +366,7 @@ class AppWindow(FluentWindow):
         self._download_ctrl.show_error_dialog.connect(self._on_track_error_ui)
         self._download_ctrl.batch_finished.connect(self._on_all_downloads_finished)
         self._download_ctrl.batch_started.connect(self._save_queue_state)
+        self._download_ctrl.browser_lock_warning.connect(self._on_browser_lock_warning)
 
         # ── History panel ──────────────────────────────────────────────────────
         self._history_panel.redownload_requested.connect(self._on_redownload)
@@ -471,7 +475,7 @@ class AppWindow(FluentWindow):
                 try:
                     classify_url(url)
                     self._url_bar.set_url(url)
-                    self._fetch_ctrl.fetch(url)
+                    self._start_fetch(url)
                     break
                 except Exception:
                     continue
@@ -615,10 +619,114 @@ class AppWindow(FluentWindow):
             parent=self,
         )
 
-    def _on_track_error_ui(self, err: object) -> None:
-        if hasattr(err, "headline"):
-            MessageBox(err.headline, err.detail, self).exec()
+    def _on_track_error_ui(self, err: object, failing_url: str = "") -> None:
+        """Throttled error reporter to prevent 'messagebox storms' on batch failures."""
+        import time
+        now = time.time()
+        # Suppress popups if we showed one in the last 5 seconds
+        if hasattr(self, "_last_error_time") and (now - self._last_error_time < 5.0):
+            return
+            
+        self._last_error_time = now
+        
+        headline = "Download failed"
+        detail = str(err)
 
+        if hasattr(err, "headline"):
+            headline = err.headline
+            detail = err.detail
+        elif hasattr(err, "error_message"):
+            detail = err.error_message
+            
+        msg = MessageBox(headline, detail, self)
+        
+        # 1. Handle Login/Sign-in blocks — offer the wizard
+        if any(x in detail for x in ["Please sign in", "sign in", "PO Token", 
+                                      "account cookies", "אימות", "חשבון", "Cookies",
+                                      "DPAPI", "Chrome", "bot", "visitor_data"]):
+            msg.yesButton.setText("🔑 פתח אשף התחברות (מומלץ)")
+            msg.cancelButton.setText("סגור")
+            if msg.exec():
+                self._run_cookie_wizard_ui()
+                
+        # 2. Handle Signature / Manual "Puzzle" solving
+        elif any(x in detail for x in ["Signature", "n challenge"]):
+            msg.yesButton.setText("🔧 תיקון ידני בדפדפן")
+            msg.cancelButton.setText("סגור")
+            if msg.exec() and failing_url:
+                from core.cookie_wizard import run_cookie_wizard
+                run_cookie_wizard(self, start_url=failing_url)
+        else:
+            msg.cancelButton.hide()
+            msg.exec()
+
+    def _run_cookie_wizard_ui(self, prompt_for_url: bool = False) -> None:
+        from qfluentwidgets import InfoBar
+        from PySide6.QtWidgets import QInputDialog
+        from PySide6.QtCore import QThread, Signal as QSignal
+
+        target_url = "https://www.youtube.com"
+        if prompt_for_url:
+            url, ok = QInputDialog.getText(
+                self, "אשף התחברות לאתרים", "הזן את כתובת האתר שברצונך להתחבר אליו:",
+                text=target_url
+            )
+            if not ok or not url:
+                return
+            target_url = url
+            
+        # Run the wizard in a background thread so the Qt UI stays responsive.
+        class WizardThread(QThread):
+            done = QSignal(bool)
+            def __init__(self, url): 
+                super().__init__()
+                self._url = url
+            def run(self):
+                from core.cookie_wizard import run_cookie_wizard
+                result = run_cookie_wizard(start_url=self._url)
+                self.done.emit(result)
+
+        self._wizard_thread = WizardThread(target_url)
+        
+        def on_wizard_done(success: bool):
+            if success:
+                InfoBar.success(
+                    title="ההתחברות הצליחה",
+                    content="פרטי ההתחברות לאתר נשמרו. ניתן להתחיל להוריד מחדש.",
+                    parent=self,
+                    duration=6000
+                )
+                # Switch to file mode automatically if it was on browser mode
+                if self._cfg.cookies_browser:
+                    self._cfg.cookies_browser = ""
+                    self._cfg.save()
+                    self._options_bar.apply_config(self._cfg)
+            else:
+                InfoBar.warning(
+                    title="האשף נסגר ללא שמירה",
+                    content="לא נשמרו cookies. ייתכן שהאשף נסגר לפני ההתחברות.",
+                    parent=self,
+                    duration=5000
+                )
+        
+        self._wizard_thread.done.connect(on_wizard_done)
+        self._wizard_thread.start()
+
+    def _on_browser_lock_warning(self, browser_name: str) -> None:
+        """Friendly warning for 'Simple Users' when Chrome/Edge etc is open."""
+        title = f"{browser_name} פתוח"
+        content = (
+            f"דפדפן {browser_name} פתוח כרגע.\n\n"
+            "ווינדוס לא מאפשר לתוכנה לגשת ל-Cookies בזמן שהדפדפן פתוח.\n"
+            "כדי שההורדה תעבוד, עליך לסגור את כל חלונות הדפדפן ולנסות שוב."
+        )
+        msg = MessageBox(title, content, self)
+        msg.yesButton.setText("סגרתי, נסה שוב")
+        msg.cancelButton.setText("ביטול")
+        if msg.exec():
+            # Retry download flow (trigger the button click logic)
+            self._on_download()
+      
     def _on_job_count_changed(self, current: int, total: int) -> None:
         if current < total:
             self._status_bar.set_status(
@@ -640,6 +748,61 @@ class AppWindow(FluentWindow):
     # ──────────────────────────────────────────────────────────────────────────
     # Fetch flow  (delegates to FetchController; AppWindow updates routing state)
     # ──────────────────────────────────────────────────────────────────────────
+
+    def _start_fetch(self, url: str) -> None:
+        """Entry point for all fetching, intercepting channel URLs to ask what to scrape."""
+        platform, kind = classify_url(url)
+        if platform == SourcePlatform.YOUTUBE and kind == UrlKind.ARTIST:
+            # Pop up custom dialog for channel scraping options
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QHBoxLayout
+            from qfluentwidgets import PrimaryPushButton, PushButton, SubtitleLabel
+
+            dialog = QDialog(self)
+            dialog.setWindowTitle("אפשרויות סריקת ערוץ")
+            dialog.setFixedSize(350, 250)
+            
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(SubtitleLabel("בחר מה ברצונך להוריד מהערוץ:"))
+            
+            cb_videos = QCheckBox("סרטונים")
+            cb_shorts = QCheckBox("קצרים")
+            cb_releases = QCheckBox("פריטי תוכן")
+            cb_playlists = QCheckBox("פלייליסטים")
+            
+            # Default to videos
+            cb_videos.setChecked(True)
+            
+            layout.addWidget(cb_videos)
+            layout.addWidget(cb_shorts)
+            layout.addWidget(cb_releases)
+            layout.addWidget(cb_playlists)
+            
+            btn_layout = QHBoxLayout()
+            ok_btn = PrimaryPushButton("התחל גירוד")
+            cancel_btn = PushButton("ביטול")
+            btn_layout.addWidget(ok_btn)
+            btn_layout.addWidget(cancel_btn)
+            
+            layout.addLayout(btn_layout)
+            
+            ok_btn.clicked.connect(dialog.accept)
+            cancel_btn.clicked.connect(dialog.reject)
+            
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                channel_tabs = []
+                if cb_videos.isChecked(): channel_tabs.append("סרטונים")
+                if cb_shorts.isChecked(): channel_tabs.append("קצרים")
+                if cb_releases.isChecked(): channel_tabs.append("פריטי תוכן")
+                if cb_playlists.isChecked(): channel_tabs.append("פלייליסטים")
+                
+                if not channel_tabs:
+                    channel_tabs = ["סרטונים"]
+                    
+                self._fetch_ctrl.fetch(url, channel_tabs)
+            else:
+                self._status_bar.set_status("בוטל על ידי המשתמש")
+        else:
+            self._fetch_ctrl.fetch(url)
 
     def _on_fetch_finished(self, result) -> None:
         if hasattr(result, "playlist_title") and result.playlist_title:
@@ -718,7 +881,7 @@ class AppWindow(FluentWindow):
         )
         self._url_bar.set_url(result.url)
         self.switchTo(self._queue_wrapper)
-        self._fetch_ctrl.fetch(result.url)
+        self._start_fetch(result.url)
 
     def _on_search_error(self, msg: str) -> None:
         err = classify_error(Exception(msg))
@@ -748,6 +911,8 @@ class AppWindow(FluentWindow):
             release_type=get("release_type", ""),
             album_index=get("album_index", 0),
             thumbnail_url=get("thumbnail_url", ""),
+            category=get("category", ""),
+            total_tracks=get("total_tracks", 0),
         )
 
         card.remove_requested.connect(self._on_card_removed)

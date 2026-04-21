@@ -103,44 +103,71 @@ def _centre_crop(img_bytes: bytes, Image) -> bytes:
     return buf.getvalue()
 
 
+def _retry_access(action_fn, path: Path, max_retries: int = 5, delay: float = 1.2):
+    """Helper to retry metadata access (load/save) when Windows file locks occur."""
+    import time
+    if not path.exists():
+        logger.debug(f"[ThumbnailCropper] Skipping retry: file not found {path.name}")
+        return None
+        
+    last_exc = None
+    for i in range(max_retries):
+        try:
+            return action_fn()
+        except (PermissionError, IOError, OSError, Exception) as exc:
+            last_exc = exc
+            if i < max_retries - 1:
+                logger.warning(f"[ThumbnailCropper] File access blocked ({path.name}), retry {i+1}/{max_retries}...")
+                time.sleep(delay * (i + 1))
+    logger.error(f"[ThumbnailCropper] Failed after {max_retries} retries: {last_exc}")
+    return None
+
 def _inject_mp3_cover(path: Path, cropped: bytes) -> bool:
     from mutagen.id3 import ID3, APIC, ID3NoHeaderError
-    try:
-        tags = ID3(str(path))
-    except ID3NoHeaderError:
-        return False
-    tags.delall("APIC")
-    tags.add(APIC(
-        encoding=3, mime="image/jpeg", type=3, desc="", data=cropped
-    ))
-    # v2_version=3 forces ID3v2.3 which has maximum compatibility with Windows Explorer
-    tags.save(str(path), v2_version=3)
-    logger.info("[ThumbnailCropper] Injected custom APIC (v2.3) in %s", path.name)
-    return True
+    def task():
+        try:
+            tags = ID3(str(path))
+        except ID3NoHeaderError:
+            return False
+        tags.delall("APIC")
+        tags.add(APIC(
+            encoding=3, mime="image/jpeg", type=3, desc="", data=cropped
+        ))
+        tags.save(str(path), v2_version=3)
+        return True
+    
+    res = _retry_access(task, path)
+    return bool(res)
 
 def _inject_flac_cover(path: Path, cropped: bytes) -> bool:
     from mutagen.flac import FLAC, Picture
-    audio = FLAC(str(path))
-    audio.clear_pictures()
-    new_pic = Picture()
-    new_pic.type = 3
-    new_pic.mime = "image/jpeg"
-    new_pic.desc = "Front Cover"
-    new_pic.data = cropped
-    audio.add_picture(new_pic)
-    audio.save()
-    logger.info("[ThumbnailCropper] Injected custom FLAC picture in %s", path.name)
-    return True
+    def task():
+        audio = FLAC(str(path))
+        audio.clear_pictures()
+        new_pic = Picture()
+        new_pic.type = 3
+        new_pic.mime = "image/jpeg"
+        new_pic.desc = "Front Cover"
+        new_pic.data = cropped
+        audio.add_picture(new_pic)
+        audio.save()
+        return True
+    
+    res = _retry_access(task, path)
+    return bool(res)
 
 def _inject_m4a_cover(path: Path, cropped: bytes) -> bool:
     from mutagen.mp4 import MP4, MP4Cover
-    audio = MP4(str(path))
-    if audio.tags is None:
-        audio.add_tags()
-    audio.tags["covr"] = [MP4Cover(cropped, imageformat=MP4Cover.FORMAT_JPEG)]
-    audio.save()
-    logger.info("[ThumbnailCropper] Injected custom M4A cover in %s", path.name)
-    return True
+    def task():
+        audio = MP4(str(path))
+        if audio.tags is None:
+            audio.add_tags()
+        audio.tags["covr"] = [MP4Cover(cropped, imageformat=MP4Cover.FORMAT_JPEG)]
+        audio.save()
+        return True
+    
+    res = _retry_access(task, path)
+    return bool(res)
 
 def _crop_mp3(path: Path, Image) -> bool:
     from mutagen.id3 import ID3, APIC, ID3NoHeaderError

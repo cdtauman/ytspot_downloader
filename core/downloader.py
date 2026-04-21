@@ -39,6 +39,44 @@ from utils.impersonate import (
 from utils.yt_dlp_opts import build_base_ydl_opts as _build_base_opts
 
 logger = logging.getLogger(__name__)
+ 
+class SilentLogger:
+    """Captures yt-dlp output and avoids polluting the console."""
+    def debug(self, msg: str) -> None:
+        if msg.startswith("[debug] "):
+            return
+        logger.debug(f"[yt-dlp] {msg}")
+
+    def info(self, msg: str) -> None:
+        pass
+
+    def warning(self, msg: str) -> None:
+        # Filter technical noise that clutters the console
+        if any(x in msg for x in [
+            "No supported JavaScript runtime",
+            "Signature solving failed",
+            "n challenge solving failed",
+            "Incomplete data received",
+            "re-fetching using API",
+            "Some formats may be missing"
+        ]):
+            return
+        logger.warning(f"[yt-dlp] {msg}")
+
+    def error(self, msg: str) -> None:
+        # Filter some redundancy in error messages
+        if "Signature solving failed" in msg and "EJS" in msg:
+            return
+        logger.error(f"[yt-dlp] {msg}")
+
+def _get_app_cookies_path() -> Path:
+    """Returns the platform-specific path where the wizard saves cookies."""
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    else:
+        base = Path.home()
+    return base / ".ytspot" / "app_cookies.txt"
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Enumerations
@@ -136,6 +174,7 @@ class DownloadRequest:
     square_thumbnails:      bool = False   # crop embedded art to 1:1 square
     clean_filename:         bool = False   # use minimal filename (Title only)
     randomize_user_agent:   bool = False   # rotate UA string per download (anti-ban)
+    is_solo:                bool = False   # single track download flag (no folder, no index, no artist name)
 
     # Per-request cancellation (parallel downloads)
     cancel_event: Optional[threading.Event] = field(default=None, repr=False)
@@ -161,20 +200,94 @@ class DownloadRequest:
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _get_app_cookies_path() -> Path:
+    import os
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA", Path.home()))
+    else:
+        base = Path.home()
+    return base / ".ytspot" / "app_cookies.txt"
+
+
+def _strip_ansi_codes(text: str) -> str:
+    """Remove [0;31m style escape codes from strings."""
+    if not text: return ""
+    import re as _re
+    return _re.sub(r'\x1b\[[0-9;]*[mK]', '', text)
+
+
+def _get_friendly_error(raw_err: str) -> str:
+    """Analyze technical yt-dlp error and add Hebrew tips."""
+    clean = _strip_ansi_codes(raw_err)
+
+    if "Sign in to confirm you’re not a bot" in clean or "Sign in to confirm your age" in clean or "Confirm you're not a bot" in clean:
+        return (
+            f"{clean}\n\n"
+            "💡 יוטיוב דורש אימות (חשבון גוגל) כדי להמשיך בהורדה.\n\n"
+            "יש לך שתי אפשרויות:\n"
+            "1. התחברות מהירה: לחץ על 'תיקון התחברות' כדי להתחבר לחשבון גוגל ישירות מהתוכנה (הכי פשוט).\n"
+            "2. ייצוא קוקיז: השתמש בתוסף 'Get cookies.txt LOCALLY' לדפדפן כדי לייצא קובץ טקסט ולהגדיר אותו בהגדרות.\n"
+            "קישור לתוסף: https://chromewebstore.google.com/detail/get-cookiestxt-locally/ccmgnabidkenghhcidlkgeimdbgefecl\n"
+        )
+
+    if "Could not copy Chrome cookie database" in clean or "Failed to decrypt with DPAPI" in clean:
+        return (
+            f"{clean}\n\n"
+            "💡 טיפ: דפדפן Chrome נעול או מוצפן. סגור את הדפדפן לגמרי ונסה שוב.\n"
+            "אם זה לא עוזר, השתמש בלחצן 'תיקון התחברות (פשוט)' כדי לעקוף את ההצפנה של כרום."
+        )
+
+    if "Signature solving failed" in clean or "n challenge solving failed" in clean:
+        return (
+            f"{clean}\n\n"
+            "💡 טיפ: חסר רכיב להרצת JavaScript (נחוץ לפתרון ה'חידות' של יוטיוב).\n"
+            "יש להריץ בטרמינל את הפקודות הבאות:\n"
+            "1. pip install quickjs\n"
+            "2. pip install -U yt-dlp"
+        )
+
+    if "Requested format is not available" in clean or "Please sign in" in clean:
+        return (
+            f"{clean}\n\n"
+            "💡 טיפ: יוטיוב דורש רכיב אימות נוסף (PO Token) או התחברות לחשבון.\n"
+            "ייתכן שתצטרך לעדכן את קובץ ה-Cookies שלך דרך 'אשף ההתחברות' או להשתמש בלחצן 'תיקון ידני בדפדפן' כדי לחמם את ה-Token."
+        )
+
+    if "HTTP Error 403" in clean or "Forbidden" in clean:
+        return f"{clean}\n\n💡 טיפ: שגיאת גישה (403). ייתכן שצריך לעדכן את קובץ ה-Cookies או להחליף כתובת IP."
+
+    return clean
+
+
 def _sanitize_filename(name: str) -> str:
-    return re.sub(r'[\\/:*?"<>|]', "_", name).strip()
+    if not name: return "Unknown"
+    # Replace restricted Windows characters with safer alternatives
+    # Use two single quotes for double quotes (common practice for "שיר לממ''ד")
+    # Replace colon with hyphen space for better flow
+    name = name.replace('"', "''").replace(":", " - ").replace("/", "-").replace("\\", "-").replace("|", "-")
+    # Remove remaining truly forbidden characters
+    name = re.sub(r'[*?<>:]', " ", name)
+    name = re.sub(r'\s+', " ", name) # Collapse multiple spaces
+    name = re.sub(r'[\x00-\x1f]', "", name)
+    return name.strip(". ")
 
 
 def _sanitize_folder_name(name: str) -> str:
     if not name:
         return "Playlist"
-    path  = name.replace("\\", "/")
-    parts = path.split("/")
+    # Replace colon with hyphen for safe path
+    # Split by forward slash to handle hierarchical subfolders (e.g. Artist/Album)
+    path_parts = name.replace("\\", "/").split("/")
     clean: list[str] = []
-    for part in parts:
-        p = re.sub(r'[\x00-\x1f]', "", part)
-        p = re.sub(r'[:*?"<>|]', "_", p)
-        p = p.replace("/", "_").replace("\\", "_").strip(". ")
+    for part in path_parts:
+        if not part: continue
+        # Sanitize individual segment
+        p = part.replace('"', "''").replace(":", " - ").replace("|", "-")
+        # Remove truly forbidden chars and control chars
+        p = re.sub(r'[*?<> ]', " ", p)
+        p = re.sub(r'\s+', " ", p)
+        p = re.sub(r'[\x00-\x1f]', "", p)
+        p = p.strip(". ")
         if p and p != "..":
             clean.append(p[:100])
     return "/".join(clean) if clean else "Playlist"
@@ -319,7 +432,7 @@ class DownloadEngine:
                 title=request.forced_title or "",
             ))
         except yt_dlp.utils.DownloadError as exc:
-            err_msg = str(exc)
+            err_msg = _get_friendly_error(str(exc))
             self._fire(request, DownloadProgress(
                 status=DownloadStatus.ERROR,
                 url=url,
@@ -327,11 +440,12 @@ class DownloadEngine:
                 error_message=err_msg,
             ), error=True)
         except Exception as exc:
+            err_msg = _get_friendly_error(f"Unexpected error: {exc}")
             self._fire(request, DownloadProgress(
                 status=DownloadStatus.ERROR,
                 url=url,
                 title=request.forced_title or "",
-                error_message=f"Unexpected error: {exc}",
+                error_message=err_msg,
             ), error=True)
 
     def download_async(
@@ -364,47 +478,76 @@ class DownloadEngine:
         out_dir.mkdir(parents=True, exist_ok=True)
 
         # Output template
-        if req.clean_filename:
-            raw_title = req.forced_title or "%(title)s"
-            # Strip parenthetical suffixes: e.g. "Song (Remix)" → "Song" (only if it matches common patterns)
-            import re as _re
-            # Keep the name as-is if it's Hebrew to avoid over-stripping
+        raw_title = req.forced_title or "%(title)s"
+        import re as _re
+        
+        # Comprehensive clean: strip common parenthetical labels and promotional suffixes
+        # WE EXCLUDE 'Remix', 'Edit', 'Acoustic', 'Live' to prevent collisions in EPs
+        clean_title = _re.sub(r'\s*[([].*?(Official|Video|Clip|Audio|Prod|By|Remaster|Lyrics|HD|4K|Direct|Vevo|Studio).*?[)\]]', '', raw_title, flags=_re.IGNORECASE)
+        # Strip anything in parents at the end
+        clean_title = _re.sub(r'\s*\([^)]*\)\s*$', '', clean_title).strip()
+        # Strip trailing hyphens or dashes followed by common tags
+        clean_title = _re.sub(r'\s*-\s*(Club Edit|Official|Prod|Original).*$', '', clean_title, flags=_re.IGNORECASE).strip()
+        
+        if not clean_title:
             clean_title = raw_title
-            if not any('\u0590' <= c <= '\u05FF' for c in raw_title):
-                clean_title = _re.sub(r'\s*\([^)]*\)\s*$', '', raw_title).strip() or raw_title
-            
-            title = _sanitize_filename(clean_title)
-            idx_prefix = f"{req.forced_index:02d} - " if (req.forced_index is not None and req.forced_index > 0) else ""
+
+        title = _sanitize_filename(clean_title)
+
+        if req.is_solo:
+            # Solo download: No artist, no index, just the clean title.
+            outtmpl = str(out_dir / f"{title}.%(ext)s")
+        elif req.clean_filename:
             # IMPORTANT: For clean_filename, we ONLY use the title, NO artist.
+            idx_prefix = f"{req.forced_index:02d} - " if (req.forced_index is not None and req.forced_index > 0) else ""
             outtmpl = str(out_dir / f"{idx_prefix}{title}.%(ext)s")
         elif req.forced_title or req.forced_artist:
+            idx_prefix = f"{req.forced_index:02d} - " if (req.forced_index is not None and req.forced_index > 0) else ""
             artist     = _sanitize_filename(req.forced_artist or "Unknown Artist")
-            title      = _sanitize_filename(req.forced_title  or "Unknown Title")
-            idx_prefix = f"{req.forced_index:02d} " if req.forced_index is not None else ""
+            # In the 'Artist - Title' format, we still use the cleaned title
             outtmpl    = str(out_dir / f"{idx_prefix}{artist} - {title}.%(ext)s")
         else:
             outtmpl = str(out_dir / "%(playlist_index)s%(title)s.%(ext)s")
 
+        # Automatic pickup of wizard cookies
+        cookies_file = req.cookies_file
+        if not cookies_file and not req.cookies_browser:
+            wizard_cookies = _get_app_cookies_path()
+            if wizard_cookies.exists():
+                cookies_file = str(wizard_cookies)
+
         opts: dict[str, Any] = _build_base_opts(
-            cookies_file=req.cookies_file or None,
+            cookies_file=cookies_file or None,
             cookies_browser=req.cookies_browser or None,
+            logger=SilentLogger(),
             quiet=True,
             retries=10,
             randomize_user_agent=req.randomize_user_agent,
         )
 
         opts["outtmpl"]           = outtmpl
-        opts["restrictfilenames"] = True
+        opts["restrictfilenames"] = False
         opts["windowsfilenames"]  = True
         opts["ignoreerrors"]      = False
         opts["playliststart"]     = req.playlist_start
         if req.playlist_end:
             opts["playlistend"]   = req.playlist_end
 
-        opts["extractor_args"] = {"youtube": {"skip": ["webpage"]}}
+        # Use clients that are supported by this version of yt-dlp.
+        # android_vr: works without PO Token (JS-less).  web_safari: fallback.
+        # tv_downgraded: good fallback when authenticated.
+        opts["extractor_args"] = {
+            "youtube": {
+                "player_client": ["android_vr", "tv_downgraded", "web_safari"]
+            }
+        }
+        # Small sleep between requests to avoid YouTube rate-limiting
+        opts["sleep_interval"]     = 2
+        opts["max_sleep_interval"] = 5
         opts["progress_hooks"]      = [self._make_progress_hook(req)]
         opts["postprocessor_hooks"] = [self._make_pp_hook(req)]
-        opts["no_warnings"]         = False
+        opts["no_warnings"]         = True
+        opts["nomarkwatched"]       = True  # Prevent downloads from appearing in YouTube history
 
         return opts
 
@@ -559,6 +702,10 @@ class DownloadEngine:
         Execute all custom post-processing steps sequentially.
         Called after yt-dlp has completely finished.
         """
+        # 0. Stability delay to ensure file system is ready (mitigates ffprobe locking)
+        import time as _time
+        _time.sleep(1.5) 
+
         if not os.path.exists(final_path):
             logger.warning(f"[Downloader] Final path does not exist, skipping pipeline: {final_path}")
             return

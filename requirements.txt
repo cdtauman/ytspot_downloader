@@ -30,3 +30,4 @@ Pillow>=10.3.0             # Image handling for high-res thumbnails
 python-dotenv>=1.0.1       # Environment variables (.env)
 certifi>=2025.1.1          # Ensure SSL certificates are up to date
 keyboard>=0.13.5           # Global hotkeys (optional, graceful fallback)
+playwright>=1.42.0         # Headless browser for scraping platform logic

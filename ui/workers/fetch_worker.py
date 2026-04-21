@@ -74,14 +74,16 @@ class FetchWorker(QThread):
         cookies_file: Optional[str] = None,
         proxy_url:    Optional[str] = None,
         proxy_token:  Optional[str] = None,
+        channel_tabs: Optional[list[str]] = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
         self._url     = url
         self._cookies = cookies_file
         self._proxy_url = proxy_url
-        self._proxy_token = proxy_token
-        self._parser  = PlaylistParser()
+        self._proxy_token  = proxy_token
+        self._channel_tabs = channel_tabs
+        self._parser       = PlaylistParser()
 
     def cancel(self) -> None:
         """
@@ -108,6 +110,7 @@ class FetchWorker(QThread):
                 "album":         track.album,
                 "parent_artist": track.parent_artist,
                 "release_type":  track.release_type,
+                "category":      track.category,
                 "album_index":   track.album_index,
             }, idx, total or 0)
 
@@ -125,6 +128,7 @@ class FetchWorker(QThread):
                 cookies_file=self._cookies,
                 proxy_url=self._proxy_url,
                 proxy_token=self._proxy_token,
+                channel_tabs=self._channel_tabs,
                 on_item=on_item,
                 on_progress=on_progress,
                 on_error=on_error,

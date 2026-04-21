@@ -100,6 +100,9 @@ class TrackMeta:
 
     # ── Platform ─────────────────────────────────────────────────────────────
     platform:       SourcePlatform = SourcePlatform.UNKNOWN
+    
+    # ── Custom Categories ───────────────────────────────────────────────────
+    category:       str   = ""          # override for custom yt/scraper tabs
 
     # ── State used by the GUI (not set by the parser) ─────────────────────────
     selected:       bool = True         # pre-tick all items in the UI
@@ -345,6 +348,7 @@ class PlaylistParser:
         cookies_file:    Optional[str]                               = None,
         proxy_url:       Optional[str]                               = None,
         proxy_token:     Optional[str]                               = None,
+        channel_tabs:    Optional[list[str]]                         = None,
         on_item:         Optional[Callable[[TrackMeta, int, Optional[int]], None]] = None,
         on_progress:     Optional[Callable[[str], None]]             = None,
         on_error:        Optional[Callable[[str], None]]             = None,
@@ -359,32 +363,113 @@ class PlaylistParser:
 
         self._notify(on_progress, f"Analysing URL… ({platform.name})")
 
-        # ── Spotify resolution ────────────────────────────────────────────────
-        if platform == SourcePlatform.SPOTIFY:
-            return self._parse_spotify(
-                url, result, kind,
-                proxy_url=proxy_url,
-                proxy_token=proxy_token,
-                on_item=on_item,
-                on_progress=on_progress,
-                on_error=on_error,
-            )
-
-        # ── YouTube Music Artist resolution ───────────────────────────────
-        if platform == SourcePlatform.YOUTUBE_MUSIC and kind == UrlKind.ARTIST:
-            return self._parse_ytm_artist(
-                url, result,
-                on_item=on_item,
-                on_progress=on_progress,
-                on_error=on_error,
-                cookies_file=cookies_file,
-            )
-
-        # ── Standard yt-dlp resolution ──
-        return self._parse_standard_yt(
-            url, result, on_item, on_progress, on_error,
-            cookies_file=cookies_file,
+        # ── DISPATCH TO MODULAR SCRAPERS ──────────────────────────────────────
+        from core.scraper import (
+            scrape_spotify_playlist, scrape_spotify_album, scrape_spotify_artist,
+            scrape_ytm_playlist, scrape_ytm_album, scrape_ytm_artist,
+            scrape_youtube_playlist, scrape_youtube_channel
         )
+
+        idx_counter = [0]
+        def _on_scraper_item(track_data: dict) -> None:
+            if self._cancel.is_set(): return
+            idx_counter[0] += 1
+            idx = idx_counter[0]
+            track = TrackMeta(
+                index=idx,
+                url=track_data.get("url", ""),
+                title=track_data.get("title", f"Item {idx}"),
+                artist=track_data.get("artist", ""),
+                album=track_data.get("album", ""),
+                parent_artist=track_data.get("parent_artist") or "",
+                release_type=track_data.get("release_type", ""),
+                category=track_data.get("category", ""),
+                album_index=track_data.get("album_index", 0),
+                thumbnail_url=track_data.get("thumbnail_url", ""),
+                duration_str=track_data.get("duration_str", ""),
+                duration_sec=track_data.get("duration_sec"),
+                platform=platform,
+                selected=True,
+            )
+            result.tracks.append(track)
+            if on_item:
+                try: on_item(track, idx, None)
+                except Exception: pass
+
+        try:
+            # ── SPOTIFY ──────────────────────────────────────────────────────
+            if platform == SourcePlatform.SPOTIFY:
+                from core.scraper import (
+                    scrape_spotify_playlist, scrape_spotify_album, 
+                    scrape_spotify_artist, scrape_spotify_track
+                )
+                if kind == UrlKind.SINGLE_VIDEO:
+                    title, _ = scrape_spotify_track(url, on_item=_on_scraper_item)
+                elif kind == UrlKind.PLAYLIST:
+                    title, _ = scrape_spotify_playlist(url, on_item=_on_scraper_item)
+                elif kind == UrlKind.ALBUM:
+                    title, _ = scrape_spotify_album(url, on_item=_on_scraper_item)
+                elif kind == UrlKind.ARTIST:
+                    title, _ = scrape_spotify_artist(url, on_item=_on_scraper_item)
+                    title = f"{title} (Discography)"
+                else:
+                    title, _ = scrape_spotify_track(url, on_item=_on_scraper_item)
+                result.playlist_title = title
+
+            # ── YOUTUBE MUSIC ────────────────────────────────────────────────
+            elif platform == SourcePlatform.YOUTUBE_MUSIC:
+                from core.scraper import (
+                    scrape_ytm_playlist, scrape_ytm_album, 
+                    scrape_ytm_artist, scrape_ytm_track
+                )
+                if kind == UrlKind.SINGLE_VIDEO:
+                    title, _ = scrape_ytm_track(url, on_item=_on_scraper_item)
+                elif kind == UrlKind.PLAYLIST:
+                    title, _ = scrape_ytm_playlist(url, on_item=_on_scraper_item)
+                elif kind == UrlKind.ALBUM:
+                    title, _ = scrape_ytm_album(url, on_item=_on_scraper_item)
+                elif kind == UrlKind.ARTIST:
+                    title, _ = scrape_ytm_artist(url, on_item=_on_scraper_item)
+                    title = f"{title} (Discography)"
+                else:
+                    title, _ = scrape_ytm_track(url, on_item=_on_scraper_item)
+                result.playlist_title = title
+
+            # ── YOUTUBE ──────────────────────────────────────────────────────
+            elif platform == SourcePlatform.YOUTUBE:
+                from core.scraper import (
+                    scrape_youtube_playlist, scrape_youtube_channel, scrape_youtube_track
+                )
+                if kind == UrlKind.SINGLE_VIDEO:
+                    title, _ = scrape_youtube_track(url, on_item=_on_scraper_item)
+                elif kind == UrlKind.PLAYLIST:
+                    title, _ = scrape_youtube_playlist(url, on_item=_on_scraper_item)
+                elif kind == UrlKind.ARTIST:
+                    tabs = channel_tabs if channel_tabs else ["סרטונים"]
+                    title, _ = scrape_youtube_channel(url, tabs, on_item=_on_scraper_item)
+                else:
+                    title, _ = scrape_youtube_track(url, on_item=_on_scraper_item)
+                result.playlist_title = title
+
+            # ── GENERIC / OTHER ──────────────────────────────────────────────
+            else:
+                from core.scraper import scrape_youtube_playlist
+                title, _ = scrape_youtube_playlist(url, on_item=_on_scraper_item)
+
+                result.playlist_title = title
+            result.total_count = len(result.tracks)
+            if result.total_count == 1:
+                result.playlist_title = result.tracks[0].title
+            
+            self._notify(on_progress, f"Successfully resolved {result.total_count} items.")
+
+        except Exception as exc:
+            result.error = str(exc)
+            if on_error:
+                try: on_error(str(exc))
+
+                except Exception: pass
+        return result
 
     def parse_async(
         self,
@@ -433,300 +518,7 @@ class PlaylistParser:
             logger=logger or _SilentLogger(),
         )
 
-    # ── Spotify-specific parsing ───────────────────────────────────────────────
-
-    def _parse_ytm_artist(
-        self,
-        url:             str,
-        result:          ParseResult,
-        *,
-        on_item:         Optional[Callable] = None,
-        on_progress:     Optional[Callable] = None,
-        on_error:        Optional[Callable] = None,
-        cookies_file:    Optional[str] = None,
-    ) -> ParseResult:
-        """
-        Specialised resolver for YTM browse/artist URLs.
-        Scrapes album/single shelves and resolves them individually to preserve
-        correct folder organization (Artist/Album).
-        """
-        from utils.ytm_scraper import fetch_ytm_artist_releases
-        
-        self._notify(on_progress, "Analyzing YouTube Music artist catalog…")
-        releases = fetch_ytm_artist_releases(url)
-        
-        if not releases:
-            # Fallback to standard yt-dlp if scraping fails or no releases found
-            self._notify(on_progress, "No structured sections found, falling back to general uploads…")
-            return self._parse_standard_yt(url, result, on_item, on_progress, on_error,
-                                           cookies_file=cookies_file)
-
-        total_releases = len(releases)
-        self._notify(on_progress, f"Found {total_releases} Albums/Singles to resolve.")
-
-        idx_counter = [0]
-        ydl_opts = self._build_opts(cookies_file or None)
-        
-        for r_idx, release in enumerate(releases, 1):
-            if self._cancel.is_set():
-                result.cancelled = True
-                break
-            
-            msg = f"Resolving {release['type']} {r_idx}/{total_releases}: {release['title']} …"
-            self._notify(on_progress, msg)
-            
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(release["url"], download=False)
-                    if info:
-                        entries    = list(info.get("entries") or [])
-                        
-                        # Fix: Singles and Performances are often returned as single entities, not playlists.
-                        if not entries and info.get("id"):
-                            entries = [info]
-                            
-                        album_name = info.get("title") or release["title"]
-                        
-                        for t_idx, entry in enumerate(entries, 1):
-                            if entry is None or self._cancel.is_set(): 
-                                continue
-                            idx_counter[0] += 1
-                            idx = idx_counter[0]
-                            track = _entry_to_track(entry, idx, result.platform, album_name)
-                            # NEW: Propagate scraper metadata
-                            track.parent_artist = release.get("parent_artist", "")
-                            track.release_type  = release.get("type", "")
-                            track.album_index   = t_idx # Relative index in album/EP
-                            
-                            result.tracks.append(track)
-                            if on_item:
-                                on_item(track, idx, None)
-            except Exception as exc:
-                self._notify(on_error, f"Failed to resolve {release['title']}: {exc}")
-
-        result.total_count    = len(result.tracks)
-        result.playlist_title = f"Discography ({result.total_count} tracks)"
-        return result
-
-    def _parse_standard_yt(
-        self,
-        url:             str,
-        result:          ParseResult,
-        on_item:         Optional[Callable],
-        on_progress:     Optional[Callable],
-        on_error:        Optional[Callable],
-        *,
-        cookies_file:    Optional[str] = None,
-    ) -> ParseResult:
-        """Standard yt-dlp extraction logic for YouTube and Generic URLs."""
-        logger = _SilentLogger()
-        ydl_opts = self._build_opts(cookies_file or None, logger)
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-            if info is None:
-                detail = "; ".join(logger.errors + logger.warnings) or "No details available."
-                result.error = f"yt-dlp returned no data for this URL. Detail: {detail}"
-                return result
-        except yt_dlp.utils.DownloadError as exc:
-            result.error = str(exc)
-            return result
-        except Exception as exc:
-            result.error = f"Unexpected extraction error: {exc}"
-            return result
-
-        is_playlist = info.get("_type") in ("playlist", "multi_video") or "entries" in info
-        if is_playlist:
-            result.kind = UrlKind.PLAYLIST
-            self._process_playlist(info, result, on_item, on_progress, on_error)
-        else:
-            self._process_single(info, result, on_item, on_progress)
-        return result
-
-    def _parse_spotify(
-        self,
-        url:         str,
-        result:      ParseResult,
-        kind:        UrlKind,
-        proxy_url:   Optional[str] = None,
-        proxy_token: Optional[str] = None,
-        on_item:     Optional[Callable] = None,
-        on_progress: Optional[Callable] = None,
-        on_error:    Optional[Callable] = None,
-    ) -> ParseResult:
-        """
-        Resolve a Spotify URL via SpotifyResolver and populate ParseResult.
-        Supports progressive on_item callbacks so the UI updates as tracks arrive.
-        """
-        from utils.spotify_resolver import SpotifyResolver
-
-        idx_counter = [0]   # mutable cell for the closure
-
-        def _on_spotify_item(track_data: dict) -> None:
-            if self._cancel.is_set():
-                return
-            idx_counter[0] += 1
-            idx = idx_counter[0]
-            track = TrackMeta(
-                index=idx,
-                url=track_data["url"],
-                title=track_data["title"],
-                artist=track_data["artist"],
-                album=track_data.get("album", ""),
-                parent_artist=track_data.get("parent_artist") or (track_data["artist"] if kind == UrlKind.ARTIST else ""),
-                release_type="playlist" if kind == UrlKind.PLAYLIST else (track_data.get("release_type") or track_data.get("album_type", "")),
-                album_index=track_data.get("album_index", 0),
-                duration_sec=track_data.get("duration_sec"),
-                thumbnail_url=track_data.get("thumbnail_url", ""),
-                platform=SourcePlatform.SPOTIFY,
-                selected=True,
-            )
-            result.tracks.append(track)
-            # total_count may not be known yet for artists; pass None
-            if on_item:
-                try:
-                    on_item(track, idx, None)
-                except Exception:  # noqa: BLE001
-                    pass
-
-        try:
-            self._notify(on_progress, "Resolving Spotify link…")
-            items = SpotifyResolver.resolve(
-                url,
-                on_item=_on_spotify_item,
-                proxy_url=proxy_url,
-                proxy_token=proxy_token,
-            )
-
-            # Update summary fields after full resolution
-            result.total_count = len(result.tracks)
-            if kind == UrlKind.ARTIST:
-                result.playlist_title = f"Artist Discography ({result.total_count} tracks)"
-            elif result.total_count == 1 and result.tracks:
-                result.playlist_title = result.tracks[0].title
-            else:
-                result.playlist_title = f"Spotify ({result.total_count} tracks)"
-
-            self._notify(
-                on_progress,
-                f"Resolved {result.total_count} tracks from Spotify."
-            )
-        except Exception as exc:
-            result.error = str(exc)
-            if on_error:
-                try:
-                    on_error(str(exc))
-                except Exception:  # noqa: BLE001
-                    pass
-
-        return result
-
-    # ── Processing helpers ─────────────────────────────────────────────────────
-
-    def _process_playlist(
-        self,
-        info:        dict,
-        result:      ParseResult,
-        on_item:     Optional[Callable],
-        on_progress: Optional[Callable],
-        on_error:    Optional[Callable],
-    ) -> None:
-        entries          = list(info.get("entries") or [])
-        result.playlist_title = (
-            info.get("title")
-            or info.get("playlist_title")
-            or info.get("id")
-            or "Unknown Playlist"
-        )
-        result.playlist_id    = info.get("id") or ""
-        result.total_count    = info.get("playlist_count") \
-                                or info.get("n_entries") \
-                                or len(entries)
-
-        album    = result.playlist_title
-        platform = result.platform
-
-        # Try to detect if this is an album from metadata
-        is_album = (
-            info.get("_type") == "playlist" and (
-                "album" in result.playlist_title.lower() or 
-                info.get("webpage_url_basename", "").startswith(("OLAK", "MPRE"))
-            )
-        ) or result.kind == UrlKind.ALBUM
-
-        if is_album:
-            detected_type = "album"
-        else:
-            detected_type = "playlist"
-
-        self._notify(
-            on_progress,
-            f'Found playlist "{result.playlist_title}" '
-            f"– {result.total_count} item(s)"
-        )
-
-        for raw_index, entry in enumerate(entries, start=1):
-            if self._cancel.is_set():
-                result.cancelled = True
-                self._notify(on_progress, "Cancelled by user.")
-                return
-
-            if entry is None:
-                # yt-dlp inserts None for unavailable entries when ignoreerrors=True
-                self._notify(
-                    on_error,
-                    f"Item {raw_index}: unavailable (private / deleted / geo-blocked)."
-                )
-                continue
-
-            self._notify(
-                on_progress,
-                f"Processing item {raw_index} / {result.total_count} …"
-            )
-
-            try:
-                track = _entry_to_track(entry, raw_index, platform, album)
-                if not track.release_type:
-                    track.release_type = detected_type
-                if not track.album_index and detected_type == "album":
-                    track.album_index = raw_index
-                    
-                result.tracks.append(track)
-                if on_item:
-                    on_item(track, raw_index, result.total_count)
-            except Exception as exc:  # noqa: BLE001
-                self._notify(
-                    on_error,
-                    f"Item {raw_index}: failed to parse metadata – {exc}"
-                )
-
-        self._notify(
-            on_progress,
-            f"Done. Resolved {len(result.tracks)} / {result.total_count} items."
-        )
-
-    def _process_single(
-        self,
-        info:        dict,
-        result:      ParseResult,
-        on_item:     Optional[Callable],
-        on_progress: Optional[Callable],
-    ) -> None:
-        platform = result.platform
-        track    = _entry_to_track(info, 1, platform)
-
-        result.playlist_title = track.title
-        result.total_count    = 1
-        result.tracks.append(track)
-
-        self._notify(on_progress, f'Single item: "{track.title}"')
-
-        if on_item:
-            try:
-                on_item(track, 1, 1)
-            except Exception:  # noqa: BLE001
-                pass
+    # Internal processing methods have been moved to core.scraper for modularity.
 
     # ── Utility ────────────────────────────────────────────────────────────────
 

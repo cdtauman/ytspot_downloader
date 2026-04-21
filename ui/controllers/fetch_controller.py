@@ -52,7 +52,7 @@ class FetchController(QObject):
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    def fetch(self, url: str) -> None:
+    def fetch(self, url: str, channel_tabs: Optional[list[str]] = None) -> None:
         """Start a FetchWorker for the given URL."""
         from ui.workers.fetch_worker import FetchWorker
         from ui.i18n import t
@@ -72,6 +72,7 @@ class FetchController(QObject):
             cookies_file=self._cfg.cookies_file,
             proxy_url=self._cfg.proxy_server_url,
             proxy_token=self._cfg.spotify_app_api_key,
+            channel_tabs=channel_tabs,
             parent=self,
         )
         self._fetch_worker.track_found.connect(self._on_track_meta)

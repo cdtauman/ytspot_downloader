@@ -117,6 +117,8 @@ class TrackCard(QFrame):
         release_type:  str         = "",
         album_index:   int         = 0,
         thumbnail_url: str         = "",
+        category:      str         = "",
+        total_tracks:  int         = 0,
         parent:       QWidget      = None,
     ) -> None:
         super().__init__(parent)
@@ -127,6 +129,8 @@ class TrackCard(QFrame):
         self.album       = album
         self.parent_artist = parent_artist
         self.release_type  = release_type
+        self.category      = category
+        self.total_tracks  = total_tracks
         self.album_index   = album_index
         self.thumbnail_url = thumbnail_url
         # Ensure platform is a string

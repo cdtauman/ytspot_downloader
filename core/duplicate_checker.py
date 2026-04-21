@@ -36,8 +36,12 @@ _AUDIO_EXTS: frozenset[str] = frozenset(
 
 
 def _sanitize(name: str) -> str:
-    """Mirror downloader._sanitize_filename for consistent stem comparison."""
-    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
+    """Mirror downloader._sanitize_filename exactly."""
+    if not name: return "Unknown"
+    name = name.replace('"', "''").replace(":", " - ").replace("/", "-").replace("\\", "-").replace("|", "-")
+    name = re.sub(r'[*?<> ]', " ", name)
+    name = re.sub(r'\s+', " ", name)
+    name = re.sub(r'[\x00-\x1f]', "", name)
     return name.strip(". ")[:200]
 
 

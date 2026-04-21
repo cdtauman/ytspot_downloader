@@ -1,0 +1,127 @@
+def scrape_spotify_artist(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
+    """
+    Dedicated entry for Spotify Artist discographies.
+    Iterates over /album and /single URLs for categorical accuracy.
+    """
+    items = []
+    artist_name = ""
+    seen_track_uids = set()
+    artist_url = url
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
+        context = browser.new_context(viewport={"width": 1280, "height": 1000}, user_agent=_USER_AGENT)
+        page = context.new_page()
+        page.route("**/*", _block_heavy_resources)
+        
+        urls = [
+            (artist_url.rstrip("/") + "/discography/album", "אלבומים"),
+            (artist_url.rstrip("/") + "/discography/single", "סינגלים ו-EP")
+        ]
+        
+        for target_url, cat_name in urls:
+            try:
+                page.goto(target_url, wait_until="load", timeout=30000)
+                
+                # 1. Fetch Artist Name (only once)
+                if not artist_name:
+                    try:
+                        header_selector = "main h1, [data-testid='artist-page-header-name'], [data-testid='artist-name']"
+                        page.wait_for_selector(header_selector, timeout=8000)
+                        artist_name = page.locator(header_selector).first.inner_text().strip()
+                    except:
+                        artist_name = page.title().split("|")[0].strip()
+                    
+                    artist_name = re.sub(r"^Spotify\s*[-–]\s*", "", artist_name, flags=re.IGNORECASE)
+                    artist_name = re.sub(r"\s*[-–]\s*Discography.*$", "", artist_name, flags=re.IGNORECASE)
+                    artist_name = re.sub(r"\s*\(Discography\).*$", "", artist_name, flags=re.IGNORECASE)
+                    artist_name = artist_name.strip()
+                # 2. Toggle to List View
+                try:
+                    view_toggle = page.locator("[aria-controls='sort-and-view-picker']").first
+                    if view_toggle.count():
+                        view_toggle.click()
+                        list_option = page.locator("button[role='menuitemradio'] >> text=/List|רשימה/").first
+                        if list_option.count():
+                            list_option.click()
+                            page.wait_for_timeout(800)
+                except: pass
+                # 3. Targeted Accumulation Loop for this URL
+                stagnant_count = 0
+                while stagnant_count < 10:
+                    grids = page.locator("main div[data-testid='track-list']").all()
+                    if not grids: break
+                    added_any = False
+                    last_track = None
+                    for grid in grids:
+                        release_title = grid.get_attribute("aria-label") or ""
+                        if not release_title or release_title == artist_name:
+                             release_title = grid.evaluate("el => el.previousElementSibling?.innerText") or release_title
+                        if not release_title: release_title = "Unknown Release"
+                        visible_tracks = grid.locator("div[data-testid='tracklist-row']").all()
+                        if not visible_tracks: continue
+                        
+                        total_on_page = len(visible_tracks)
+                        try:
+                            rel_container = grid.evaluate_handle("el => el.closest('div:has(h1), div:has(h2), div:has(img), [class*=\"contentSpacing\"]') || el.parentElement")
+                            thumb_url = rel_container.evaluate("el => el.querySelector('img')?.src") or ""
+                            meta_str = rel_container.evaluate("el => Array.from(el.querySelectorAll('span')).find(s => s.innerText.includes('•') || s.innerText.includes('·'))?.innerText || el.innerText || ''")
+                            m_low = meta_str.lower()
+                            site_label = "album" if "album" in target_url else \
+                                         "ep" if "ep" in m_low else \
+                                         "single" if "single" in m_low or "single" in target_url else "release"
+                        except:
+                            site_label = "album" if "album" in target_url else "release"
+                            thumb_url = ""
+                        for t_idx, track_row in enumerate(visible_tracks, 1):
+                            last_track = track_row
+                            try:
+                                title_el = track_row.locator("a[data-testid='internal-track-link'] div").first
+                                if not title_el.count(): title_el = track_row.locator("div[dir='auto']").first
+                                track_title = title_el.inner_text().strip()
+                                
+                                uid = f"{cat_name}_{release_title}_{track_title}"
+                                if uid in seen_track_uids: continue
+                                seen_track_uids.add(uid)
+                                added_any = True
+                                
+                                artist_links = track_row.locator("a[href*='/artist/']").all()
+                                artists = ", ".join([a.inner_text().strip() for a in artist_links]) if artist_links else artist_name
+                                duration_sec, duration_str = 0, ""
+                                try:
+                                    dur_el = track_row.locator("[data-testid='track-duration']").first
+                                    if not dur_el.count():
+                                        dur_el = track_row.locator("div, span").filter(has_text=re.compile(r"^\d{1,2}:\d{2}$")).first
+                                    if dur_el.count():
+                                        duration_str = dur_el.inner_text().strip()
+                                        if ":" in duration_str:
+                                            parts = [int(p) for p in duration_str.split(":")]
+                                            duration_sec = parts[0]*60 + parts[1] if len(parts)==2 else parts[0]*3600 + parts[1]*60 + parts[2]
+                                except: pass
+                                try:
+                                    row_img = track_row.locator("img").first
+                                    final_thumb = row_img.get_attribute("src") if row_img.count() else thumb_url
+                                except: final_thumb = thumb_url
+                                track_dict = {
+                                    "title": track_title, "artist": artists, "album": release_title,
+                                    "parent_artist": artist_name, "category": cat_name,
+                                    "release_type": site_label, "album_index": t_idx,
+                                    "total_tracks": total_on_page,
+                                    "url": f"ytsearch1:{artists} {track_title} audio",
+                                    "platform": "spotify", "thumbnail_url": final_thumb,
+                                    "duration_sec": duration_sec, "duration_str": duration_str or "??:??"
+                                }
+                                items.append(track_dict)
+                                if on_item: on_item(track_dict)
+                            except: pass
+                    if added_any: stagnant_count = 0
+                    else: stagnant_count += 1
+                    
+                    if last_track:
+                        last_track.scroll_into_view_if_needed()
+                        page.wait_for_timeout(400)
+            except Exception as e:
+                logger.error(f"Error scraping {target_url}: {e}")
+        
+        browser.close()
+            
+    return artist_name or "Unknown Artist", items

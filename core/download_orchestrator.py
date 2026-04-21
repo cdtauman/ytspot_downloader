@@ -195,12 +195,14 @@ class DownloadOrchestrator:
                 if i > 0 and delay_range:
                     sleep_time = random.uniform(*delay_range)
                     logger.debug(f"[Orchestrator] Staggering start: sleeping {sleep_time:.2f}s")
-                    # Check for cancellation during sleep
                     sleep_start = time.time()
                     while time.time() - sleep_start < sleep_time:
                         if self._engine._cancel_event.is_set():
                             break
                         time.sleep(0.2)
+
+                if self._engine._cancel_event.is_set():
+                    break
 
                 ev = threading.Event()
                 req.cancel_event = ev

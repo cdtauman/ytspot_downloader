@@ -18,6 +18,7 @@ MessageBox parent in the duplicate-check dialog (unavoidable Qt requirement).
 from __future__ import annotations
 
 import logging
+import threading
 import re
 from pathlib import Path
 from typing import Optional
@@ -81,9 +82,10 @@ class DownloadController(QObject):
     downloading_changed = Signal(bool)
     job_count_changed   = Signal(int, int)
     show_success_bar    = Signal(str)       # output_path
-    show_error_dialog   = Signal(object)    # ErrorInfo
+    show_error_dialog   = Signal(object, str)    # ErrorInfo, Failing URL
     batch_finished      = Signal()
     batch_started       = Signal()
+    browser_lock_warning = Signal(str)  # browser name (e.g. 'Chrome')
 
     def __init__(
         self,
@@ -106,6 +108,9 @@ class DownloadController(QObject):
         self._card_progress: dict = {}
         # key → DownloadRequest snapshot saved at pause time
         self._paused_requests: dict[str, DownloadRequest] = {}
+                
+        self._fatal_error_triggered = False  # Track if a fatal dialog was already shown
+        self._fatal_lock = threading.Lock()  # Synchronize fatal error reporting
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -127,6 +132,16 @@ class DownloadController(QObject):
         if not selected:
             self.status_update.emit(f"\u26a0  {t('no_tracks_selected')}")
             return
+
+        # Reset the fatal error lock for the new batch
+        with self._fatal_lock:
+            self._fatal_error_triggered = False
+        
+        # Simple User Pre-flight Check: is Chrome locking our cookies?
+        if self._cfg.cookies_browser == "chrome":
+            if self._is_process_running("chrome.exe"):
+                self.browser_lock_warning.emit("Chrome")
+                return
 
         is_audio   = opts["is_audio"]
         media_type = MediaType.AUDIO if is_audio else MediaType.VIDEO
@@ -150,6 +165,7 @@ class DownloadController(QObject):
 
         unique_artists  = {c.artist for c in selected if c.artist}
         is_multi_batch  = len(unique_artists) > 1
+        is_solo         = len(selected) == 1
 
         jobs: list[tuple[str, DownloadRequest]] = []
 
@@ -161,38 +177,59 @@ class DownloadController(QObject):
                 parent_artist = (card.parent_artist or "").strip()
                 kind          = (card.release_type  or "").strip()
                 album         = (card.album         or "").strip()
+                platform      = (card.platform      or "").lower()
+                category      = (card.category      or "").strip()
 
                 if parent_artist:
                     is_live     = "live" in card.title.lower() or "הופעה" in card.title
-                    is_spotify  = card.platform == SourcePlatform.SPOTIFY.value
-
+                    is_spotify  = "spotify" in platform
+                    
+                    # ── CATEGORY MAPPING ──────────────────────────────────────
                     if kind == "album":
-                        category = "אלבומים"
-                    elif not is_spotify and (kind == "performance" or is_live):
-                        category = "הופעות חיות"
-                    elif not is_spotify and kind == "video":
-                        category = "סרטונים"
-                    elif not is_spotify and kind == "playlist":
-                        category = "פלייליסטים"
+                         cat_name = "אלבומים"
+                    elif (is_live or kind == "performance") and not is_spotify:
+                        cat_name = "הופעות חיות"
+                    elif category: # Scraper provided category (e.g. "סינגלים ו-EP", "שורטס")
+                        cat_name = category
+                    elif kind == "video":
+                        cat_name = "סרטונים"
+                    elif kind == "playlist":
+                        cat_name = "פלייליסטים"
+                    elif is_spotify:
+                        cat_name = "סינגלים ו-EP"
                     else:
-                        category = "סינגלים ו-EP"
+                        cat_name = "סינגלים וגרסאות EP"
 
-                    if kind == "album" and album:
-                        clean_album = album.replace("Album - ", "").replace("Album -", "").strip()
-                        track_playlist_name = f"{parent_artist}/{category}/{clean_album}"
+                     # ── FOLDER DEPTH LOGIC ────────────────────────────────────
+                    # User wants strict separation:
+                    # 1. 'אלבומים' ALWAYS get a subfolder if an album name is known.
+                    # 2. 'סינגלים ו-EP' only get a subfolder if they have multiple tracks (EP).
+                    # 3. YTM/Other releases use the count heuristic.
+                    
+                    is_grouped = (
+                        (kind == "album") or
+                        (kind == "ep") or
+                        (cat_name == "אלבומים") or
+                        (cat_name == "סינגלים ו-EP" and (card.total_tracks > 1 or kind == "ep")) or
+                        (card.total_tracks > 1 and album)
+                    )
+                    
+                    if is_grouped and album:
+                        track_playlist_name = f"{parent_artist}/{cat_name}/{album}"
                     else:
-                        track_playlist_name = f"{parent_artist}/{category}"
+                        track_playlist_name = f"{parent_artist}/{cat_name}"
 
-                    is_parent_discography = (last_url_kind == UrlKind.ARTIST)
+                    is_parent_discography = True
 
                 elif is_multi:
-                    if last_url_kind == UrlKind.ARTIST:
-                        album_part          = card.album if card.album else "Singles & EPs"
-                        track_playlist_name = f"{card.artist}/{album_part}"
-                    else:
-                        track_playlist_name = last_playlist_title or "Playlist"
+                    # Generic multi-item (Playlist/Album) logic
+                    track_playlist_name = last_playlist_title or "Playlist"
                 elif card.artist:
                     pass  # single track — no subfolder
+
+            # User wants NO folders for solo downloads
+            if is_solo:
+                track_playlist_name = ""
 
             # Always use config output_dir as the base (opts["output_dir"] is verified
             # above only for the mkdir check; the actual base is cfg.output_dir)
@@ -227,11 +264,8 @@ class DownloadController(QObject):
                             card.set_status("done")
                             continue
 
-            # Smart clean filename
-            is_clean = not is_multi_batch
-            if is_multi_batch and card.artist and card.parent_artist:
-                if card.artist.strip().lower() == card.parent_artist.strip().lower():
-                    is_clean = True
+            # Smart clean filename: solo downloads or multi-batch get Title only.
+            is_clean = is_multi_batch or is_solo
 
             req = DownloadRequest(
                 url=card.track_url,
@@ -247,14 +281,16 @@ class DownloadController(QObject):
                 forced_album=card.album,
                 forced_duration=getattr(card, "duration_sec", None),
                 forced_index=(
-                    card.album_index
-                    if (card.release_type == "album" and card.album_index > 0)
-                    else (
-                        None if card.release_type == "playlist"
+                    None if is_solo else (
+                        card.album_index
+                        if (card.release_type in ("album", "ep") and card.album_index > 0)                    
                         else (
-                            card.queue_index
-                            if (self._cfg.playlist_index_prefix and not is_parent_discography)
-                            else None
+                            None if card.release_type == "playlist"
+                            else (
+                                card.queue_index
+                                if (self._cfg.playlist_index_prefix and not is_parent_discography)
+                                else None
+                            )
                         )
                     )
                 ),
@@ -271,6 +307,7 @@ class DownloadController(QObject):
                 square_thumbnails=self._cfg.square_thumbnails,
                 clean_filename=is_clean,
                 randomize_user_agent=self._cfg.randomize_user_agent,
+                is_solo=is_solo,
             )
 
             key = str(id(card))
@@ -442,7 +479,43 @@ class DownloadController(QObject):
         card = self._key_to_card.get(key)
         if card:
             card.set_status("error")
-        self.show_error_dialog.emit(err)
+
+        err_msg = str(err)
+        if hasattr(err, "error_message"):
+            err_msg = err.error_message
+            
+        # Detect fatal errors that should stop the entire batch
+        is_fatal = False
+        fatal_markers = [
+            "confirm you’re not a bot", 
+            "cookie database", 
+            "DPAPI",
+            "HTTP Error 403",
+            "Signature solving failed",
+            "n challenge solving failed",
+            "Requested format is not available",
+            "Please sign in",
+            "YouTube account cookies are no longer valid"
+        ]
+        if any(marker in err_msg for marker in fatal_markers):
+            is_fatal = True
+            
+        # Get the failing URL to pass to the UI
+        failing_url = ""
+        track_req = self._active_request_for_key(key)
+        if track_req:
+            failing_url = track_req.url
+
+        # Storm prevention: only emit the first fatal dialog (Thread Safe)
+        with self._fatal_lock:
+            if not is_fatal or not self._fatal_error_triggered:
+                if is_fatal:
+                    self._fatal_error_triggered = True
+                self.show_error_dialog.emit(err, failing_url)
+        
+        if is_fatal:
+            logger.warning("[DownloadController] Fatal error detected. Cancelling batch.")
+            self.cancel_all()
 
     def _on_batch_done(self) -> None:
         self._dl_worker = None
@@ -452,6 +525,16 @@ class DownloadController(QObject):
         self.batch_finished.emit()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _is_process_running(self, process_name: str) -> bool:
+        """Check if a process is running on Windows using tasklist."""
+        import subprocess
+        try:
+            output = subprocess.check_output('tasklist /FI "IMAGENAME eq ' + process_name + '" /NH', 
+                                            shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore')
+            return process_name.lower() in output.lower()
+        except:
+            return False
 
     def _active_request_for_key(self, key: str) -> Optional[DownloadRequest]:
         """Retrieve the live DownloadRequest for a card key from the active worker."""
@@ -469,28 +552,26 @@ class DownloadController(QObject):
         is_discography: bool = False,
     ) -> str:
         """
-        Construct a folder path like 'Artist / Category / Album' without redundancy.
-        Preserves the de-duplication pass to prevent paths like 'Name/אלבומים/Name'.
+        Construct a folder path. If 'fallback' is provided (from the main loop), it takes priority
+        as it was constructed with full context.
         """
+        if fallback is not None:
+            # Fallback already contains the logic-built path (e.g. "Playlist Name", "Artist/Category/Album", or "" for Solo)
+            return fallback
+
         artist   = (card.parent_artist or card.artist or "").strip()
         album    = (card.album or "").strip()
         rel_type = (card.release_type or "album").lower()
 
-        CAT_ALBUMS  = "אלבומים"  # noqa: F841  (kept for symmetry with original)
-        CAT_SINGLES = "סינגלים ו-EP"
-
         path_parts: list[str] = []
-
-        if is_discography and artist and rel_type != "album":
+        if is_discography and artist:
             path_parts.append(artist)
-
-        if is_discography:
             if rel_type == "album":
-                if album:
-                    path_parts.append(album.replace("Album - ", "").strip())
+                path_parts.append("אלבומים")
             else:
-                path_parts.append(CAT_SINGLES)
-        elif album:
+                path_parts.append("סינגלים ו-EP")
+    
+        if album:
             path_parts.append(album.replace("Album - ", "").strip())
         elif artist:
             path_parts.append(artist)
@@ -498,6 +579,7 @@ class DownloadController(QObject):
         # De-duplication (case-insensitive)
         seen: list[str] = []
         for part in path_parts:
+            if not part: continue
             if not seen or part.lower() != seen[-1].lower():
                 seen.append(part)
 

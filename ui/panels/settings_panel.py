@@ -73,6 +73,7 @@ class SettingsPanel(QScrollArea):
     accent_changed             = Signal(str)
     clipboard_monitor_changed  = Signal(bool)
     accessibility_changed      = Signal(bool)
+    login_fix_requested        = Signal()  # NEW
     settings_saved             = Signal()
 
     def __init__(
@@ -464,6 +465,16 @@ class SettingsPanel(QScrollArea):
         )
         self._clear_cookies_card.clicked.connect(self._on_clear_cookies)
         auth_grp.addSettingCard(self._clear_cookies_card)
+
+        self._login_fix_card = PushSettingCard(
+            text="התחבר עכשיו",
+            icon=FluentIcon.PEOPLE,
+            title="התחברות לאתר חיצוני (קוקיז)",
+            content="התחבר ליוטיוב או לכל אתר אחר ישירות מהתוכנה כדי לשמור פרטי גישה ולעקוף חסימות.",
+            parent=auth_grp,
+        )
+        self._login_fix_card.clicked.connect(self.login_fix_requested)
+        auth_grp.addSettingCard(self._login_fix_card)
 
         layout.addWidget(auth_grp)
 

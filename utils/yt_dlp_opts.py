@@ -174,8 +174,10 @@ def build_base_ydl_opts(
         opts["cookiesfrombrowser"] = (cookies_browser, None, None, None)
 
     # ── TLS browser impersonation (curl_cffi) ─────────────────────────────────
-    if CURL_CFFI_AVAILABLE and ImpersonateTarget is not None:
-        opts["impersonate"] = ImpersonateTarget("chrome")
+    # DISABLED: ImpersonateTarget("chrome") using curl_cffi causes deadlocks 
+    # when executed from within ThreadPoolExecutor on Windows.
+    # if CURL_CFFI_AVAILABLE and ImpersonateTarget is not None:
+    #     opts["impersonate"] = ImpersonateTarget("chrome")
 
     return opts
 
