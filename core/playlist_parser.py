@@ -437,28 +437,33 @@ class PlaylistParser:
 
             # ── YOUTUBE ──────────────────────────────────────────────────────
             elif platform == SourcePlatform.YOUTUBE:
-                from core.scraper import (
-                    scrape_youtube_playlist, scrape_youtube_channel, scrape_youtube_track
+                # Keep a standard yt-dlp parsing path for YouTube and generic URLs.
+                # This preserves P0 error-propagation guarantees and testability.
+                result = self._parse_standard_yt(
+                    url,
+                    platform=platform,
+                    kind=kind,
+                    cookies_file=cookies_file,
+                    on_item=on_item,
+                    on_progress=on_progress,
+                    on_error=on_error,
                 )
-                if kind == UrlKind.SINGLE_VIDEO:
-                    title, _ = scrape_youtube_track(url, on_item=_on_scraper_item)
-                elif kind == UrlKind.PLAYLIST:
-                    title, _ = scrape_youtube_playlist(url, on_item=_on_scraper_item)
-                elif kind == UrlKind.ARTIST:
-                    tabs = channel_tabs if channel_tabs else ["סרטונים"]
-                    title, _ = scrape_youtube_channel(url, tabs, on_item=_on_scraper_item)
-                else:
-                    title, _ = scrape_youtube_track(url, on_item=_on_scraper_item)
-                result.playlist_title = title
 
             # ── GENERIC / OTHER ──────────────────────────────────────────────
             else:
-                from core.scraper import scrape_youtube_playlist
-                title, _ = scrape_youtube_playlist(url, on_item=_on_scraper_item)
+                result = self._parse_standard_yt(
+                    url,
+                    platform=platform,
+                    kind=kind,
+                    cookies_file=cookies_file,
+                    on_item=on_item,
+                    on_progress=on_progress,
+                    on_error=on_error,
+                )
 
-                result.playlist_title = title
-            result.total_count = len(result.tracks)
-            if result.total_count == 1:
+            if result.total_count == 0:
+                result.total_count = len(result.tracks)
+            if result.total_count == 1 and result.tracks:
                 result.playlist_title = result.tracks[0].title
             
             self._notify(on_progress, f"Successfully resolved {result.total_count} items.")
@@ -518,7 +523,60 @@ class PlaylistParser:
             logger=logger or _SilentLogger(),
         )
 
-    # Internal processing methods have been moved to core.scraper for modularity.
+    def _parse_standard_yt(
+        self,
+        url: str,
+        *,
+        platform: SourcePlatform,
+        kind: UrlKind,
+        cookies_file: Optional[str],
+        on_item: Optional[Callable[[TrackMeta, int, Optional[int]], None]] = None,
+        on_progress: Optional[Callable[[str], None]] = None,
+        on_error: Optional[Callable[[str], None]] = None,
+    ) -> ParseResult:
+        """Parse via yt-dlp directly with robust error propagation."""
+        result = ParseResult(url=url, kind=kind, platform=platform)
+        ydl_opts = self._build_opts(cookies_file=cookies_file, logger=_SilentLogger())
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+
+            if not info:
+                result.error = "Failed to extract metadata (empty response from yt-dlp)."
+                return result
+
+            entries = info.get("entries") if isinstance(info, dict) else None
+            if entries:
+                playlist_title = info.get("title") or info.get("playlist_title") or "Unknown Playlist"
+                result.playlist_title = playlist_title
+                for idx, entry in enumerate((e for e in entries if e), start=1):
+                    if self._cancel.is_set():
+                        result.cancelled = True
+                        break
+                    track = _entry_to_track(entry, idx, platform=platform, album=playlist_title)
+                    result.tracks.append(track)
+                    if on_item:
+                        on_item(track, idx, len(entries))
+            else:
+                track = _entry_to_track(info, 1, platform=platform, album="")
+                result.tracks.append(track)
+                result.playlist_title = track.title
+                if on_item:
+                    on_item(track, 1, 1)
+
+            result.total_count = len(result.tracks)
+            return result
+        except Exception as exc:  # noqa: BLE001
+            message = str(exc) or exc.__class__.__name__
+            result.error = message
+            self._notify(on_progress, f"Metadata extraction failed: {message}")
+            if on_error:
+                try:
+                    on_error(message)
+                except Exception:  # noqa: BLE001
+                    pass
+            return result
 
     # ── Utility ────────────────────────────────────────────────────────────────
 
