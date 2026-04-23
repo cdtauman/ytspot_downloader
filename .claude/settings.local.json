@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -x -q --ignore=tests/test_p0_gates.py --tb=short)",
+      "Bash(pip install *)",
+      "Bash(python -c \"from core.offline_monitor import NetworkMonitor; from core.cookie_wizard import run_cookie_wizard; from utils.paths import get_app_cookies_path; from utils.impersonate import CURL_CFFI_AVAILABLE; print\\('Architecture OK'\\); print\\('CURL_CFFI_AVAILABLE:', CURL_CFFI_AVAILABLE\\)\")",
+      "Bash(python -m pytest tests/ -x -q --ignore=tests/test_p0_gates.py)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}
