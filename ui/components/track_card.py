@@ -26,22 +26,13 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import BodyLabel, CaptionLabel, ToolButton
 
 from ui.theme_manager import (
-    ACCENT_COLOR,
-    BG_DARK, SURFACE_DARK, SURFACE2_DARK, BORDER_DARK,
-    TEXT_DARK, TEXT2_DARK, TEXT3_DARK,
+    ACCENT_COLOR, get_colors,
     SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, PROCESSING_COLOR,
 )
 
 
 # ── Design tokens ──────────────────────────────────────────────────────────────
 
-_BG_NORMAL   = SURFACE_DARK
-_BG_HOVER    = SURFACE2_DARK
-_BG_DRAG     = "#1a1a26"
-_BORDER      = BORDER_DARK
-_TEXT        = TEXT_DARK
-_TEXT_2      = TEXT2_DARK
-_TEXT_3      = TEXT3_DARK
 _SUCCESS     = SUCCESS_COLOR
 _ERROR       = ERROR_COLOR
 _WARNING     = WARNING_COLOR
@@ -50,32 +41,46 @@ _THUMB_W     = 64
 _THUMB_H     = 64
 
 _STATUS_COLORS: dict[str, str] = {
-    "queued":      _TEXT_3,
+    "queued":      "",          # resolved dynamically from get_colors().text_tertiary
     "downloading": ACCENT_COLOR,
     "processing":  PROCESSING_COLOR,
-    "done":        _SUCCESS,
-    "error":       _ERROR,
-    "cancelled":   _WARNING,
-    "paused":      "#f59e0b",   # amber – NEW
+    "done":        SUCCESS_COLOR,
+    "error":       ERROR_COLOR,
+    "cancelled":   WARNING_COLOR,
+    "paused":      "#f59e0b",   # amber
+}
+
+_PLATFORM_BADGE_LABELS: dict[str, str] = {
+    "youtube":  "YT",
+    "ytm":      "YTM",
+    "ytmusic":  "YTM",
+    "spotify":  "SP",
+    "generic":  "URL",
+    "hls":      "HLS",
+    "dash":     "HLS",
 }
 
 _PLATFORM_COLORS: dict[str, tuple[str, str]] = {
     "youtube":  ("#cc2200", "#ffffff"),
     "ytmusic":  ("#cc2200", "#ffffff"),
+    "ytm":      ("#cc2200", "#ffffff"),
     "spotify":  ("#1aa34a", "#ffffff"),
-    "default":  (_BORDER, _TEXT_2),
+    "hls":      ("#0ea5e9", "#ffffff"),
+    "dash":     ("#0ea5e9", "#ffffff"),
+    "generic":  ("#6b65a0", "#ffffff"),
 }
 
 
 def _make_placeholder_pixmap(w: int = _THUMB_W, h: int = _THUMB_H) -> QPixmap:
+    c = get_colors()
     img = QImage(w, h, QImage.Format.Format_ARGB32)
-    img.fill(QColor(BORDER_DARK))
+    img.fill(QColor(c.border))
     # Draw a simple play triangle
     from PySide6.QtGui import QPainter, QPen, QBrush, QPolygon
     from PySide6.QtCore import QPoint as _QP
     painter = QPainter(img)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QBrush(QColor(TEXT3_DARK)))
+    painter.setBrush(QBrush(QColor(c.text_tertiary)))
     painter.setPen(Qt.PenStyle.NoPen)
     cx, cy = w // 2, h // 2
     s = min(w, h) // 5
@@ -101,6 +106,7 @@ class TrackCard(QFrame):
     pause_requested   = Signal(int)    # queue_index
     resume_requested  = Signal(int)    # queue_index
     reorder_requested = Signal(int, int)  # (from_index, to_index)
+    status_changed    = Signal(str)   # new status string
 
     # ── Constructor ───────────────────────────────────────────────────────────
 
@@ -149,6 +155,10 @@ class TrackCard(QFrame):
 
         self._build(title, artist, duration, plat_str)
         self._apply_shadow()
+        from ui.theme_manager import ThemeManager
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
 
     # ── Build ──────────────────────────────────────────────────────────────────
 
@@ -159,7 +169,8 @@ class TrackCard(QFrame):
         duration: str,
         platform: str,
     ) -> None:
-        self.setFixedHeight(82)
+        c = get_colors()
+        self.setFixedHeight(90)
         self.setObjectName("trackCard")
         self._refresh_style(hover=False)
 
@@ -181,29 +192,29 @@ class TrackCard(QFrame):
         self._thumb_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._thumb_lbl.setPixmap(_make_placeholder_pixmap())
         self._thumb_lbl.setStyleSheet(
-            f"border-radius: 6px; border: 1px solid {_BORDER};"
+            f"border-radius: 6px; border: 1px solid {c.border};"
         )
         outer.addWidget(self._thumb_lbl)
 
         # Status dot
         self._dot = QLabel("●")
         self._dot.setFixedWidth(14)
-        self._dot.setStyleSheet(f"color: {_TEXT_3}; background: transparent; font-size: 10px;")
+        self._dot.setStyleSheet(f"color: {c.text_tertiary}; background: transparent; font-size: 10px;")
         outer.addWidget(self._dot)
 
         # Text column
         text_col = QVBoxLayout()
-        text_col.setSpacing(2)
+        text_col.setSpacing(1)
 
         self._title_lbl = BodyLabel(title[:80])
-        self._title_lbl.setStyleSheet(f"color: {_TEXT}; background: transparent;")
+        self._title_lbl.setStyleSheet(f"color: {c.text_primary}; background: transparent;")
         title_font = QFont()
         title_font.setPointSize(10)
         self._title_lbl.setFont(title_font)
         text_col.addWidget(self._title_lbl)
 
         self._artist_lbl = CaptionLabel(artist or "—")
-        self._artist_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
+        self._artist_lbl.setStyleSheet(f"color: {c.text_secondary}; background: transparent;")
         text_col.addWidget(self._artist_lbl)
 
         # Progress bar (hidden until download starts)
@@ -214,7 +225,7 @@ class TrackCard(QFrame):
         self._progress_bar.setTextVisible(False)
         self._progress_bar.setStyleSheet(f"""
             QProgressBar {{
-                background: {_BORDER};
+                background: {c.border};
                 border: none;
                 border-radius: 1px;
             }}
@@ -225,6 +236,14 @@ class TrackCard(QFrame):
         """)
         self._progress_bar.setVisible(False)
         text_col.addWidget(self._progress_bar)
+
+        # Speed/ETA label (hidden until download starts)
+        self._speed_lbl = CaptionLabel("")
+        self._speed_lbl.setStyleSheet(
+            f"color: {c.text_tertiary}; background: transparent; font-size: 9px;"
+        )
+        self._speed_lbl.setVisible(False)
+        text_col.addWidget(self._speed_lbl)
 
         outer.addLayout(text_col, stretch=1)
         outer.addSpacing(8)
@@ -297,8 +316,12 @@ class TrackCard(QFrame):
 
     def _make_badge(self, text: str, kind: str) -> QLabel:
         lbl = QLabel(text)
-        fg_bg = _PLATFORM_COLORS.get(kind.lower(), _PLATFORM_COLORS["default"])
-        bg, fg = fg_bg
+        c = get_colors()
+        colors = _PLATFORM_COLORS.get(kind.lower())
+        if colors:
+            bg, fg = colors
+        else:
+            bg, fg = c.border, c.text_secondary
         lbl.setStyleSheet(f"""
             QLabel {{
                 background: {bg};
@@ -321,15 +344,53 @@ class TrackCard(QFrame):
         self.setGraphicsEffect(fx)
 
     def _refresh_style(self, hover: bool) -> None:
-        bg = _BG_HOVER if hover else _BG_NORMAL
+        c = get_colors()
+        bg = c.surface2 if hover else c.surface
         self.setStyleSheet(f"""
             QFrame#trackCard {{
                 background: {bg};
-                border: 1px solid {_BORDER};
+                border: 1px solid {c.border};
                 border-radius: {_RADIUS}px;
             }}
             QFrame#trackCard:hover {{
                 border-color: {ACCENT_COLOR}44;
+            }}
+        """)
+
+    def _apply_theme(self) -> None:
+        """Re-apply all palette-dependent styles (called on theme change)."""
+        c = get_colors()
+        self._refresh_style(hover=False)
+        self._thumb_lbl.setStyleSheet(f"border-radius: 6px; border: 1px solid {c.border};")
+        self._title_lbl.setStyleSheet(f"color: {c.text_primary}; background: transparent;")
+        self._artist_lbl.setStyleSheet(f"color: {c.text_secondary}; background: transparent;")
+        self._speed_lbl.setStyleSheet(
+            f"color: {c.text_tertiary}; background: transparent; font-size: 9px;"
+        )
+        self._progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background: {c.border}; border: none; border-radius: 1px;
+            }}
+            QProgressBar::chunk {{
+                background: {ACCENT_COLOR}; border-radius: 1px;
+            }}
+        """)
+        # Refresh dot color for current status
+        color = _STATUS_COLORS.get(self._status, "") or c.text_tertiary
+        self._dot.setStyleSheet(f"color: {color}; background: transparent; font-size: 10px;")
+        # Refresh platform badge
+        plat_label = _PLATFORM_BADGE_LABELS.get(self._platform, self._platform.upper()[:4])
+        self._plat_badge.setText(plat_label)
+        colors = _PLATFORM_COLORS.get(self._platform)
+        if colors:
+            bg_p, fg_p = colors
+        else:
+            bg_p, fg_p = c.border, c.text_secondary
+        self._plat_badge.setStyleSheet(f"""
+            QLabel {{
+                background: {bg_p}; color: {fg_p};
+                border-radius: 4px; padding: 1px 6px;
+                font-size: 10px; font-weight: 600;
             }}
         """)
 
@@ -375,6 +436,23 @@ class TrackCard(QFrame):
         self._progress_bar.setValue(int(fraction * 1000))
         self._progress_bar.setVisible(fraction > 0.0 and self._status not in ("done", "error", "cancelled"))
 
+    def update_speed(self, speed_bps: Optional[float], eta_seconds: Optional[float]) -> None:
+        """Show speed/ETA below the progress bar while downloading."""
+        if speed_bps and speed_bps > 0:
+            if speed_bps >= 1_048_576:
+                speed_str = f"{speed_bps / 1_048_576:.1f} MB/s"
+            else:
+                speed_str = f"{speed_bps / 1024:.0f} KB/s"
+            if eta_seconds and eta_seconds > 0:
+                m, s = divmod(int(eta_seconds), 60)
+                eta_str = f"{m}:{s:02d}"
+            else:
+                eta_str = "—"
+            self._speed_lbl.setText(f"{speed_str} · ETA {eta_str}")
+            self._speed_lbl.setVisible(True)
+        else:
+            self._speed_lbl.setVisible(False)
+
     def set_status(self, status: str) -> None:
         """
         Update the visual state.
@@ -383,7 +461,8 @@ class TrackCard(QFrame):
                          "done" | "error" | "cancelled" | "paused"
         """
         self._status = status
-        color = _STATUS_COLORS.get(status, _TEXT_3)
+        self.status_changed.emit(status)
+        color = _STATUS_COLORS.get(status, "") or get_colors().text_tertiary
         self._dot.setStyleSheet(
             f"color: {color}; background: transparent; font-size: 10px;"
         )
@@ -391,10 +470,12 @@ class TrackCard(QFrame):
         # Update button visibility
         self._pause_btn.setVisible(status == "downloading")
         self._resume_btn.setVisible(status == "paused")
-        # Remove button is only for queued, but we keep it available until started
-        # self._remove_btn.setVisible(status == "queued") 
-        # (handeled by enter/leaveEvent for better UX)
- 
+
+        # Hide speed label when not downloading
+        if status not in ("downloading", "processing"):
+            self._speed_lbl.setVisible(False)
+            self._speed_lbl.setText("")
+
         # Disable checkbox once download is in flight
         self._check.setEnabled(status == "queued")
 

@@ -460,6 +460,15 @@ class PlaylistParser:
                     on_progress=on_progress,
                     on_error=on_error,
                 )
+                # Fallback: if yt-dlp found nothing, try Playwright interception
+                if not result.tracks and not result.cancelled:
+                    result = self._parse_universal_fallback(
+                        url,
+                        existing_result=result,
+                        on_item=on_item,
+                        on_progress=on_progress,
+                        on_error=on_error,
+                    )
 
             if result.total_count == 0:
                 result.total_count = len(result.tracks)
@@ -577,6 +586,77 @@ class PlaylistParser:
                 except Exception:  # noqa: BLE001
                     pass
             return result
+
+    # ── Universal (Playwright) fallback ───────────────────────────────────────
+
+    def _parse_universal_fallback(
+        self,
+        url: str,
+        *,
+        existing_result: ParseResult,
+        on_item:     Optional[Callable[[TrackMeta, int, Optional[int]], None]] = None,
+        on_progress: Optional[Callable[[str], None]] = None,
+        on_error:    Optional[Callable[[str], None]] = None,
+    ) -> ParseResult:
+        """
+        Second-pass fallback: use Playwright to intercept HLS/DASH/media URLs
+        that yt-dlp's Generic extractor could not handle.
+        """
+        result = existing_result
+        self._notify(on_progress, "yt-dlp found nothing — trying Playwright interception…")
+
+        try:
+            from core.universal_extractor import find_streams
+        except ImportError:
+            self._notify(on_error, "Playwright not installed — universal extraction unavailable")
+            return result
+
+        try:
+            streams = find_streams(url, timeout_ms=25_000)
+        except Exception as exc:
+            self._notify(on_error, f"Playwright interception failed: {exc}")
+            return result
+
+        if not streams:
+            result.error = "No media streams found (yt-dlp and Playwright both returned nothing)"
+            return result
+
+        self._notify(
+            on_progress,
+            f"Found {len(streams)} media stream(s) via page interception"
+        )
+
+        # Derive a title from the page title or the last path segment of the URL
+        page_title = streams[0].page_title if streams else ""
+        if not page_title:
+            parsed = __import__("urllib.parse", fromlist=["urlparse"]).urlparse(url)
+            page_title = parsed.path.split("/")[-1] or parsed.netloc or url
+
+        result.playlist_title = page_title
+
+        for idx, stream in enumerate(streams, start=1):
+            if self._cancel.is_set():
+                result.cancelled = True
+                break
+            track = TrackMeta(
+                index=idx,
+                url=stream.url,
+                title=page_title if len(streams) == 1 else f"{page_title} [{idx}]",
+                artist="",
+                platform=SourcePlatform.GENERIC,
+                # Carry the stream type in the category field so DownloadRequest
+                # can route to the correct downloader without a schema change.
+                category=f"stream:{stream.stream_type}",
+            )
+            result.tracks.append(track)
+            if on_item:
+                try:
+                    on_item(track, idx, len(streams))
+                except Exception:
+                    pass
+
+        result.total_count = len(result.tracks)
+        return result
 
     # ── Utility ────────────────────────────────────────────────────────────────
 

@@ -35,8 +35,10 @@ Light Theme Palette (default Amber accent)
 
 from __future__ import annotations
 
-from typing import Final
+from dataclasses import dataclass
+from typing import Final, Optional
 
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
 from qfluentwidgets import setTheme, setThemeColor, Theme
 
@@ -87,6 +89,38 @@ TEXT2_LIGHT:    str = "#6b65a0"
 TEXT3_LIGHT:    str = "#b5b0d4"
 
 _CYCLE_ORDER: list[str] = ["dark", "light", "oled"]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Theme-aware colour helper
+# ──────────────────────────────────────────────────────────────────────────────
+
+@dataclass
+class ThemeColors:
+    bg:            str
+    surface:       str
+    surface2:      str
+    border:        str
+    text_primary:  str
+    text_secondary: str
+    text_tertiary: str
+    accent:        str
+
+
+def get_colors() -> "ThemeColors":
+    """Return the correct colour set for the current theme (dark or light/oled)."""
+    inst = ThemeManager._instance  # noqa: SLF001
+    dark = (inst._current in ("dark", "oled")) if inst else True  # noqa: SLF001
+    return ThemeColors(
+        bg            = BG_DARK       if dark else BG_LIGHT,
+        surface       = SURFACE_DARK  if dark else SURFACE_LIGHT,
+        surface2      = SURFACE2_DARK if dark else SURFACE2_LIGHT,
+        border        = BORDER_DARK   if dark else BORDER_LIGHT,
+        text_primary  = TEXT_DARK     if dark else TEXT_LIGHT,
+        text_secondary = TEXT2_DARK   if dark else TEXT2_LIGHT,
+        text_tertiary = TEXT3_DARK    if dark else TEXT3_LIGHT,
+        accent        = ACCENT_COLOR,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -668,29 +702,36 @@ QPushButton:hover {{ background-color: {_dim_hex(accent)}; }}
 # ThemeManager
 # ──────────────────────────────────────────────────────────────────────────────
 
-class ThemeManager:
+class ThemeManager(QObject):
     """
     Manages Dark / Light / OLED theme switching with dynamic accent colours.
+    Singleton: obtain via ThemeManager.instance() after the first construction.
 
-    Parameters
-    ----------
-    config : AppConfig
-        Live application config.  ThemeManager reads config.theme on init
-        and writes it back on every change.
+    Signals
+    -------
+    theme_changed  emitted whenever the theme or accent changes.
 
     Usage
     -----
-    >>> tm = ThemeManager(config)
+    >>> tm = ThemeManager(config)          # first call creates the singleton
+    >>> ThemeManager.instance()            # subsequent calls return same object
     >>> tm.apply("light")
-    >>> tm.set_accent("Violet")          # named palette entry
-    >>> tm.set_accent("#ff6b6b")         # arbitrary hex
-    >>> tm.cycle()                        # rotate dark→light→oled→dark
+    >>> tm.set_accent("Violet")
+    >>> tm.cycle()
     """
 
-    def __init__(self, config: AppConfig) -> None:
+    theme_changed = Signal()
+    _instance: "Optional[ThemeManager]" = None
+
+    @classmethod
+    def instance(cls) -> "Optional[ThemeManager]":
+        return cls._instance
+
+    def __init__(self, config: AppConfig, parent: "Optional[QObject]" = None) -> None:
+        super().__init__(parent)
+        ThemeManager._instance = self
         self._config  = config
         self._current = config.theme
-        # Resolve initial accent: prefer saved config value, else brand default
         saved_accent = getattr(config, "accent_color", None)
         self._accent  = saved_accent if saved_accent else ACCENT_COLOR
         self._apply_fluent()
@@ -714,6 +755,7 @@ class ThemeManager:
         self._apply_qss()
         self._config.theme = theme_name
         self._config.save()
+        self.theme_changed.emit()
 
     def cycle(self) -> str:
         """Advance to the next theme (dark → light → oled → dark) and apply."""
@@ -752,6 +794,7 @@ class ThemeManager:
 
         self._apply_fluent()
         self._apply_qss()
+        self.theme_changed.emit()
 
     def theme_display_label(self) -> str:
         return {"dark": "🌙  Dark", "light": "☀️  Light", "oled": "⚫  OLED"}.get(

@@ -38,7 +38,7 @@ from core.history_db import DownloadRecord, HistoryDB
 from core.services import ServiceContainer
 from core.search_engine import SearchResult, ResultKind
 from core.update_checker import ReleaseInfo
-from core.offline_monitor import OfflineMonitor
+from ui.workers.offline_monitor import OfflineMonitor
 from core.downloader import AudioQuality, DownloadEngine, DownloadRequest, MediaType, VideoQuality
 from core.playlist_parser import ParseResult, SourcePlatform, UrlKind, classify_url
 from error_handler import classify_error, ErrorInfo, ErrorSeverity, probe_connectivity
@@ -654,8 +654,7 @@ class AppWindow(FluentWindow):
             msg.yesButton.setText("🔧 תיקון ידני בדפדפן")
             msg.cancelButton.setText("סגור")
             if msg.exec() and failing_url:
-                from core.cookie_wizard import run_cookie_wizard
-                run_cookie_wizard(self, start_url=failing_url)
+                self._run_cookie_wizard_ui()
         else:
             msg.cancelButton.hide()
             msg.exec()
@@ -675,6 +674,16 @@ class AppWindow(FluentWindow):
                 return
             target_url = url
             
+        # Instruct the user what to do before the browser opens
+        from PySide6.QtWidgets import QMessageBox
+        info_msg = (
+            "כעת ייפתח חלון דפדפן.\n\n"
+            f"1. התחבר לחשבון שלך באתר: {target_url}\n"
+            "2. לאחר ההתחברות, פשוט סגור את חלון הדפדפן.\n\n"
+            "התוכנה תשמור את פרטי ההתחברות באופן אוטומטי."
+        )
+        QMessageBox.information(self, "אשף התחברות לאתרים", info_msg)
+
         # Run the wizard in a background thread so the Qt UI stays responsive.
         class WizardThread(QThread):
             done = QSignal(bool)

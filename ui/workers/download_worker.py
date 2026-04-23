@@ -60,6 +60,9 @@ class _SignalAdapter:
     def on_track_progress(self, key: str, fraction: float) -> None:
         self._w.track_progress.emit(key, fraction)
 
+    def on_track_speed(self, key: str, speed_bps: float, eta_seconds: float) -> None:
+        self._w.track_speed.emit(key, speed_bps, eta_seconds)
+
     def on_track_status(self, key: str, status: str) -> None:
         self._w.track_status.emit(key, status)
 
@@ -105,6 +108,7 @@ class DownloadWorker(QThread):
     # ── Signals (public API unchanged) ────────────────────────────────────────
 
     track_progress   = Signal(str, float)
+    track_speed      = Signal(str, float, float)
     track_status     = Signal(str, str)
     track_finished   = Signal(str, str)
     overall_progress = Signal(float)

@@ -38,20 +38,7 @@ from config import AppConfig
 from core.search_engine import ResultKind, SearchResult
 from ui.components.search_result_card import SearchResultCard
 from ui.i18n import t
-from ui.theme_manager import (
-    ACCENT_COLOR,
-    BG_DARK, SURFACE_DARK, BORDER_DARK,
-    TEXT_DARK, TEXT2_DARK, TEXT3_DARK,
-)
-
-
-# ── Design tokens ──────────────────────────────────────────────────────────────
-_BG      = BG_DARK       # "#0d0d12"
-_SURFACE = SURFACE_DARK  # "#16161f"
-_BORDER  = BORDER_DARK   # "#252533"
-_TEXT    = TEXT_DARK     # "#eeeef5"
-_TEXT_2  = TEXT2_DARK    # "#8888a8"
-_TEXT_3  = TEXT3_DARK    # "#4a4a66"
+from ui.theme_manager import ACCENT_COLOR, get_colors
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +94,10 @@ class SearchPanel(QWidget):
 
         self._build()
         self._restore_state()
+        from ui.theme_manager import ThemeManager
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -190,8 +181,8 @@ class SearchPanel(QWidget):
     # ── Build ──────────────────────────────────────────────────────────────────
 
     def _build(self) -> None:
+        c = get_colors()
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setStyleSheet(f"background: {_BG};")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 0)
@@ -204,18 +195,6 @@ class SearchPanel(QWidget):
         self._search_box = SearchLineEdit()
         self._search_box.setPlaceholderText(t("search_placeholder"))
         self._search_box.setMinimumHeight(42)
-        self._search_box.setStyleSheet(f"""
-            SearchLineEdit {{
-                background: {_SURFACE};
-                border: 1.5px solid {_BORDER};
-                border-radius: 8px;
-                color: {_TEXT};
-                font-size: 13px;
-            }}
-            SearchLineEdit:focus {{
-                border-color: {ACCENT_COLOR};
-            }}
-        """)
         self._search_box.searchSignal.connect(self._on_search)
         self._search_box.returnPressed.connect(self._on_search_return)
         top_row.addWidget(self._search_box, stretch=1)
@@ -261,9 +240,6 @@ class SearchPanel(QWidget):
         sub_row.setSpacing(8)
 
         self._results_lbl = CaptionLabel("")
-        self._results_lbl.setStyleSheet(
-            f"color: {_TEXT_2}; background: transparent;"
-        )
         sub_row.addWidget(self._results_lbl)
 
         self._ring = IndeterminateProgressRing()
@@ -273,58 +249,26 @@ class SearchPanel(QWidget):
 
         sub_row.addStretch()
 
-        clear_btn = PushButton(t("clear_results"))
-        clear_btn.setFixedHeight(28)
-        clear_btn.setStyleSheet(f"""
-            PushButton {{
-                background: transparent;
-                border: 1px solid {_BORDER};
-                border-radius: 6px;
-                color: {_TEXT_2};
-                font-size: 11px;
-                padding: 0 8px;
-            }}
-            PushButton:hover {{
-                border-color: {ACCENT_COLOR};
-                color: {ACCENT_COLOR};
-            }}
-        """)
-        clear_btn.clicked.connect(self.clear_results)
-        sub_row.addWidget(clear_btn)
+        self._clear_btn = PushButton(t("clear_results"))
+        self._clear_btn.setFixedHeight(28)
+        self._clear_btn.clicked.connect(self.clear_results)
+        sub_row.addWidget(self._clear_btn)
 
         root.addLayout(sub_row)
 
         # ── Divider ───────────────────────────────────────────────────────────
-        divider = QFrame()
-        divider.setFrameShape(QFrame.Shape.HLine)
-        divider.setFixedHeight(1)
-        divider.setStyleSheet(f"background: {_BORDER}; border: none;")
-        root.addWidget(divider)
+        self._divider = QFrame()
+        self._divider.setFrameShape(QFrame.Shape.HLine)
+        self._divider.setFixedHeight(1)
+        root.addWidget(self._divider)
 
         # ── Scrollable results area ───────────────────────────────────────────
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{ background: {_BG}; border: none; }}
-            QScrollBar:vertical {{
-                background: {_BG};
-                width: 6px;
-                border-radius: 3px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: {_BORDER};
-                border-radius: 3px;
-                min-height: 24px;
-            }}
-            QScrollBar::handle:vertical:hover {{ background: {ACCENT_COLOR}; }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {{ height: 0; }}
-        """)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self._results_container = QWidget()
-        self._results_container.setStyleSheet(f"background: {_BG};")
         outer_layout = QVBoxLayout(self._results_container)
         outer_layout.setContentsMargins(0, 4, 0, 16)
         outer_layout.setSpacing(0)
@@ -343,11 +287,56 @@ class SearchPanel(QWidget):
             self._section_layouts[kind]  = cards_layout
 
         outer_layout.addStretch()
-        scroll.setWidget(self._results_container)
-        root.addWidget(scroll, stretch=1)
+        self._scroll.setWidget(self._results_container)
+        root.addWidget(self._scroll, stretch=1)
+
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        c = get_colors()
+        self.setStyleSheet(f"background: {c.bg};")
+        self._search_box.setStyleSheet(f"""
+            SearchLineEdit {{
+                background: {c.surface};
+                border: 1.5px solid {c.border};
+                border-radius: 8px;
+                color: {c.text_primary};
+                font-size: 13px;
+            }}
+            SearchLineEdit:focus {{ border-color: {ACCENT_COLOR}; }}
+        """)
+        self._results_lbl.setStyleSheet(
+            f"color: {c.text_secondary}; background: transparent;"
+        )
+        self._clear_btn.setStyleSheet(f"""
+            PushButton {{
+                background: transparent;
+                border: 1px solid {c.border};
+                border-radius: 6px;
+                color: {c.text_secondary};
+                font-size: 11px;
+                padding: 0 8px;
+            }}
+            PushButton:hover {{ border-color: {ACCENT_COLOR}; color: {ACCENT_COLOR}; }}
+        """)
+        self._divider.setStyleSheet(f"background: {c.border}; border: none;")
+        self._scroll.setStyleSheet(f"""
+            QScrollArea {{ background: {c.bg}; border: none; }}
+            QScrollBar:vertical {{
+                background: {c.bg}; width: 6px; border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {c.border}; border-radius: 3px; min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {ACCENT_COLOR}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+        self._results_container.setStyleSheet(f"background: {c.bg};")
 
     def _build_section(self, kind: ResultKind) -> tuple[QWidget, QVBoxLayout]:
         """Return (section_container, cards_layout) for one ResultKind."""
+        c = get_colors()
         container = QWidget()
         container.setStyleSheet("background: transparent;")
         v = QVBoxLayout(container)
@@ -358,7 +347,7 @@ class SearchPanel(QWidget):
         header = QLabel(_SECTION_LABELS[kind].upper())
         header.setStyleSheet(f"""
             QLabel {{
-                color: {_TEXT_2};
+                color: {c.text_secondary};
                 font-size: 10px;
                 font-weight: bold;
                 letter-spacing: 1px;
@@ -379,6 +368,7 @@ class SearchPanel(QWidget):
         return container, cards_layout
 
     def _build_empty_state(self) -> QWidget:
+        c = get_colors()
         w = QWidget()
         w.setStyleSheet("background: transparent;")
         v = QVBoxLayout(w)
@@ -392,7 +382,7 @@ class SearchPanel(QWidget):
 
         hint = BodyLabel(t("search_empty_hint"))
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet(f"color: {_TEXT_3}; background: transparent;")
+        hint.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
         v.addWidget(hint)
 
         return w

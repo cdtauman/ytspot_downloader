@@ -32,7 +32,7 @@ from typing import Callable
 logger = logging.getLogger(__name__)
 
 # Current schema version — bump this when adding a new migration.
-CURRENT_VERSION: int = 1
+CURRENT_VERSION: int = 2
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -53,13 +53,14 @@ _MIGRATIONS: list[tuple[int, str, Callable[[dict], None]]] = [
         lambda d: None,   # no-op; version is set by migrate() after running
     ),
 
+    # ── Migration 2: drop unused window_geometry key ──────────────────────────
+    (
+        2,
+        "Drop stale 'window_geometry' config key (never read, replaced by window_state)",
+        lambda d: d.pop("window_geometry", None),
+    ),
+
     # ── Future migrations go here ─────────────────────────────────────────────
-    # Example:
-    # (
-    #     2,
-    #     "Rename 'audio_quality' values from 'Best (320k)' → '320k'",
-    #     _migrate_v2,
-    # ),
 ]
 
 

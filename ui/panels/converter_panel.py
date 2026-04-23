@@ -41,20 +41,9 @@ from qfluentwidgets import (
 )
 
 from ui.theme_manager import (
-    ACCENT_COLOR, BG_DARK, SURFACE_DARK, SURFACE2_DARK,
-    BORDER_DARK, TEXT_DARK, TEXT2_DARK, TEXT3_DARK,
+    ACCENT_COLOR, get_colors,
     SUCCESS_COLOR, ERROR_COLOR,
 )
-
-
-# ── Design tokens ──────────────────────────────────────────────────────────────
-_BG       = BG_DARK
-_SURFACE  = SURFACE_DARK
-_SURFACE2 = SURFACE2_DARK
-_BORDER   = BORDER_DARK
-_TEXT     = TEXT_DARK
-_TEXT_2   = TEXT2_DARK
-_TEXT_3   = TEXT3_DARK
 
 _OUTPUT_FORMATS = ["mp3", "m4a", "flac", "opus", "wav"]
 _BITRATES       = ["320k", "256k", "192k", "128k", "96k"]
@@ -169,11 +158,12 @@ class _FileRow(QFrame):
         self._build()
 
     def _build(self) -> None:
+        c = get_colors()
         self.setFixedHeight(52)
         self.setStyleSheet(f"""
             QFrame {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
+                background: {c.surface};
+                border: 1px solid {c.border};
                 border-radius: 8px;
             }}
         """)
@@ -193,9 +183,9 @@ class _FileRow(QFrame):
         text_col.setSpacing(1)
         p = Path(self.file_path)
         name_lbl = BodyLabel(p.name[:60])
-        name_lbl.setStyleSheet(f"color: {_TEXT}; background: transparent; font-size: 12px;")
+        name_lbl.setStyleSheet(f"color: {c.text_primary}; background: transparent; font-size: 12px;")
         dir_lbl  = CaptionLabel(str(p.parent)[:70])
-        dir_lbl.setStyleSheet(f"color: {_TEXT_3}; background: transparent;")
+        dir_lbl.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
         text_col.addWidget(name_lbl)
         text_col.addWidget(dir_lbl)
         row.addLayout(text_col, stretch=1)
@@ -208,7 +198,7 @@ class _FileRow(QFrame):
         self._bar.setVisible(False)
         self._bar.setStyleSheet(f"""
             QProgressBar {{
-                background: {_BORDER};
+                background: {c.border};
                 border: none;
                 border-radius: 3px;
             }}
@@ -232,7 +222,7 @@ class _FileRow(QFrame):
         rm_btn.setFixedSize(24, 24)
         rm_btn.setStyleSheet(f"""
             ToolButton {{
-                color: {_TEXT_3}; background: transparent; border: none;
+                color: {c.text_tertiary}; background: transparent; border: none;
                 font-size: 11px;
             }}
             ToolButton:hover {{ color: {ERROR_COLOR}; }}
@@ -276,42 +266,44 @@ class ConverterPanel(QWidget):
         self._out_dir:  Optional[str] = None
         self._build()
         self.setAcceptDrops(True)
+        from ui.theme_manager import ThemeManager
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
 
     # ── Build ──────────────────────────────────────────────────────────────────
 
     def _build(self) -> None:
+        c = get_colors()
         self.setObjectName("converterPage")
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(14)
 
         # Header
-        header_lbl = QLabel("🔄  Local File Converter")
-        header_lbl.setStyleSheet(
-            f"color: {_TEXT}; font-size: 20px; font-weight: 700; background: transparent;"
+        self._header_lbl = QLabel("🔄  Local File Converter")
+        self._header_lbl.setStyleSheet(
+            f"color: {c.text_primary}; font-size: 20px; font-weight: 700; background: transparent;"
         )
-        root.addWidget(header_lbl)
+        root.addWidget(self._header_lbl)
 
-        sub_lbl = QLabel(
+        self._sub_lbl = QLabel(
             "Convert audio files already on your disk to a different format. "
             "Drag files here or use the Add button — no internet connection needed."
         )
-        sub_lbl.setWordWrap(True)
-        sub_lbl.setStyleSheet(f"color: {_TEXT_2}; font-size: 12px; background: transparent;")
-        root.addWidget(sub_lbl)
+        self._sub_lbl.setWordWrap(True)
+        self._sub_lbl.setStyleSheet(
+            f"color: {c.text_secondary}; font-size: 12px; background: transparent;"
+        )
+        root.addWidget(self._sub_lbl)
 
         # Drop zone / file list
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
         self._scroll.setMinimumHeight(200)
-        self._scroll.setStyleSheet(f"""
-            QScrollArea {{ background: {_BG}; border: 2px dashed {_BORDER};
-                border-radius: 12px; }}
-        """)
 
         self._list_widget = QWidget()
-        self._list_widget.setStyleSheet(f"background: {_BG};")
         self._list_layout = QVBoxLayout(self._list_widget)
         self._list_layout.setContentsMargins(10, 10, 10, 10)
         self._list_layout.setSpacing(6)
@@ -319,24 +311,14 @@ class ConverterPanel(QWidget):
 
         self._drop_hint = QLabel("⬆  Drop audio files here or click Add Files")
         self._drop_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._drop_hint.setStyleSheet(
-            f"color: {_TEXT_3}; font-size: 14px; background: transparent;"
-        )
         self._list_layout.addWidget(self._drop_hint)
 
         self._scroll.setWidget(self._list_widget)
         root.addWidget(self._scroll, stretch=1)
 
         # Controls row
-        controls = QFrame()
-        controls.setStyleSheet(f"""
-            QFrame {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 10px;
-            }}
-        """)
-        ctrl_row = QHBoxLayout(controls)
+        self._controls_frame = QFrame()
+        ctrl_row = QHBoxLayout(self._controls_frame)
         ctrl_row.setContentsMargins(16, 10, 16, 10)
         ctrl_row.setSpacing(12)
 
@@ -353,9 +335,8 @@ class ConverterPanel(QWidget):
         ctrl_row.addStretch()
 
         # Format selector
-        fmt_lbl = QLabel("Output Format:")
-        fmt_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
-        ctrl_row.addWidget(fmt_lbl)
+        self._fmt_lbl = QLabel("Output Format:")
+        ctrl_row.addWidget(self._fmt_lbl)
 
         self._fmt_combo = ComboBox()
         for fmt in _OUTPUT_FORMATS:
@@ -365,9 +346,8 @@ class ConverterPanel(QWidget):
         ctrl_row.addWidget(self._fmt_combo)
 
         # Bitrate selector
-        br_lbl = QLabel("Bitrate:")
-        br_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
-        ctrl_row.addWidget(br_lbl)
+        self._br_lbl = QLabel("Bitrate:")
+        ctrl_row.addWidget(self._br_lbl)
 
         self._br_combo = ComboBox()
         for br in _BITRATES:
@@ -379,9 +359,8 @@ class ConverterPanel(QWidget):
         ctrl_row.addSpacing(12)
 
         # Output folder toggle
-        same_dir_lbl = QLabel("Same folder as source")
-        same_dir_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
-        ctrl_row.addWidget(same_dir_lbl)
+        self._same_dir_lbl = QLabel("Same folder as source")
+        ctrl_row.addWidget(self._same_dir_lbl)
 
         self._same_dir_sw = SwitchButton()
         self._same_dir_sw.setChecked(True)
@@ -393,12 +372,40 @@ class ConverterPanel(QWidget):
         self._out_dir_btn.clicked.connect(self._on_browse_out)
         ctrl_row.addWidget(self._out_dir_btn)
 
-        root.addWidget(controls)
+        root.addWidget(self._controls_frame)
 
         # Convert button
         self._convert_btn = PushButton(FluentIcon.PLAY, "Convert All")
         self._convert_btn.setFixedHeight(42)
         self._convert_btn.clicked.connect(self._on_convert)
+        root.addWidget(self._convert_btn)
+
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        c = get_colors()
+        self._header_lbl.setStyleSheet(
+            f"color: {c.text_primary}; font-size: 20px; font-weight: 700; background: transparent;"
+        )
+        self._sub_lbl.setStyleSheet(
+            f"color: {c.text_secondary}; font-size: 12px; background: transparent;"
+        )
+        self._scroll.setStyleSheet(
+            f"QScrollArea {{ background: {c.bg}; border: 2px dashed {c.border}; border-radius: 12px; }}"
+        )
+        self._list_widget.setStyleSheet(f"background: {c.bg};")
+        self._drop_hint.setStyleSheet(
+            f"color: {c.text_tertiary}; font-size: 14px; background: transparent;"
+        )
+        self._controls_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 10px;
+            }}
+        """)
+        for lbl in (self._fmt_lbl, self._br_lbl, self._same_dir_lbl):
+            lbl.setStyleSheet(f"color: {c.text_secondary}; background: transparent;")
         self._convert_btn.setStyleSheet(f"""
             PushButton {{
                 background: {ACCENT_COLOR};
@@ -409,9 +416,8 @@ class ConverterPanel(QWidget):
                 font-weight: 700;
             }}
             PushButton:hover {{ background: #c47d0e; }}
-            PushButton:disabled {{ background: {_BORDER}; color: {_TEXT_3}; }}
+            PushButton:disabled {{ background: {c.border}; color: {c.text_tertiary}; }}
         """)
-        root.addWidget(self._convert_btn)
 
     # ── Drag & Drop ────────────────────────────────────────────────────────────
 

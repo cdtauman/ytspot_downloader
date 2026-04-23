@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
@@ -32,14 +33,13 @@ try:
 except ImportError:
     pass
 
-from utils.impersonate import (
-    ImpersonateTarget as _ImpersonateTarget,
-    CURL_CFFI_AVAILABLE as _CURL_CFFI_AVAILABLE,
-)
+from utils.cookie_validator import check_cookies_valid
+from utils.paths import get_app_cookies_path
 from utils.yt_dlp_opts import build_base_ydl_opts as _build_base_opts
 
 logger = logging.getLogger(__name__)
- 
+
+
 class SilentLogger:
     """Captures yt-dlp output and avoids polluting the console."""
     def debug(self, msg: str) -> None:
@@ -68,15 +68,6 @@ class SilentLogger:
         if "Signature solving failed" in msg and "EJS" in msg:
             return
         logger.error(f"[yt-dlp] {msg}")
-
-def _get_app_cookies_path() -> Path:
-    """Returns the platform-specific path where the wizard saves cookies."""
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
-    else:
-        base = Path.home()
-    return base / ".ytspot" / "app_cookies.txt"
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Enumerations
@@ -165,9 +156,13 @@ class DownloadRequest:
     # Custom Thumbnail Overrides
     thumbnail_url:   Optional[str] = None
 
+    # Proxy (passed to yt-dlp; empty/None = direct connection)
+    proxy_url: Optional[str] = None
+
     # NEW v3 feature flags (all default to off for backward compat)
-    sponsorblock:           bool = False   # cut non-music segments
-    resumable:              bool = False   # pick up .part file if present
+    sponsorblock:               bool              = False   # cut non-music segments
+    sponsorblock_categories:    Optional[list[str]] = None  # None = use default set
+    resumable:                  bool              = False   # pick up .part file if present
     embed_lyrics:           bool = False   # fetch + embed lyrics after download
     replay_gain:            bool = False   # ReplayGain analysis after download
     musicbrainz:            bool = False   # MusicBrainz tag enrichment after download
@@ -175,6 +170,10 @@ class DownloadRequest:
     clean_filename:         bool = False   # use minimal filename (Title only)
     randomize_user_agent:   bool = False   # rotate UA string per download (anti-ban)
     is_solo:                bool = False   # single track download flag (no folder, no index, no artist name)
+
+    # Universal / HLS / DASH stream (set when URL came from universal_extractor)
+    # Values: "hls" | "dash" | "mp4" | "webm" | "ts" | None (= use yt-dlp)
+    stream_type: Optional[str] = None
 
     # Per-request cancellation (parallel downloads)
     cancel_event: Optional[threading.Event] = field(default=None, repr=False)
@@ -199,15 +198,6 @@ class DownloadRequest:
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
-
-def _get_app_cookies_path() -> Path:
-    import os
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
-    else:
-        base = Path.home()
-    return base / ".ytspot" / "app_cookies.txt"
-
 
 def _strip_ansi_codes(text: str) -> str:
     """Remove [0;31m style escape codes from strings."""
@@ -339,6 +329,11 @@ class DownloadEngine:
             ), error=True)
             return
 
+        # HLS / DASH / direct stream: bypass yt-dlp and use ffmpeg directly
+        if request.stream_type in ("hls", "dash", "mp4", "webm", "ts"):
+            self._download_hls_stream(request)
+            return
+
         cancel_ev    = request.cancel_event or self._cancel_event
         global_cancel = self._cancel_event
 
@@ -362,9 +357,11 @@ class DownloadEngine:
             else:
                 opts.update(self._video_opts(request))
 
-            # SponsorBlock
+            # SponsorBlock (categories configurable per-request)
             if request.sponsorblock:
-                sb_cats = ["music_offtopic", "sponsor", "intro", "outro", "selfpromo"]
+                sb_cats = request.sponsorblock_categories or [
+                    "music_offtopic", "sponsor", "intro", "outro", "selfpromo"
+                ]
                 opts.setdefault("postprocessors", [])
                 opts["postprocessors"].insert(0, {"key": "SponsorBlock", "categories": sb_cats})
                 opts["postprocessors"].insert(1, {
@@ -376,7 +373,6 @@ class DownloadEngine:
             if request.resumable:
                 opts["continuedl"] = True
 
-            import time
             max_retries = 3
             with yt_dlp.YoutubeDL(opts) as ydl:
                 for attempt in range(max_retries):
@@ -389,8 +385,7 @@ class DownloadEngine:
                         winerror = getattr(exc, "winerror", None)
                         is_locked = winerror in (5, 32)
                         if is_locked and attempt < max_retries - 1:
-                            # Transient file lock (common on Windows during network drops or media player scans)
-                            logger.warning(f"[Downloader] File locked, retrying in 2s... (Attempt {attempt+1}/{max_retries})")
+                            logger.warning("[Downloader] File locked, retrying in 2s... (Attempt %d/%d)", attempt + 1, max_retries)
                             time.sleep(2)
                             continue
                         raise
@@ -465,6 +460,65 @@ class DownloadEngine:
     def cancel(self) -> None:
         self._cancel_event.set()
 
+    # ── HLS / DASH stream download via ffmpeg ─────────────────────────────────
+
+    def _download_hls_stream(self, request: DownloadRequest) -> None:
+        """Download a raw HLS/DASH/direct stream URL using ffmpeg (not yt-dlp)."""
+        from core.hls_downloader import download_hls
+
+        url       = request.url
+        ext       = "mp3" if request.media_type == MediaType.AUDIO else "mp4"
+        if request.media_type == MediaType.AUDIO and request.audio_format:
+            ext = request.audio_format
+
+        out_dir   = Path(request.output_dir).expanduser().resolve()
+        if request.playlist_name:
+            out_dir = out_dir / request.playlist_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Build filename
+        title  = request.forced_title or "stream"
+        artist = request.forced_artist or ""
+        if artist:
+            stem = f"{artist} - {title}"
+        else:
+            stem = title
+        # Sanitize
+        stem = re.sub(r'[\\/*?:"<>|]', "_", stem)
+        if request.forced_index:
+            stem = f"{request.forced_index:02d} {stem}"
+
+        output_path = str(out_dir / f"{stem}.{ext}")
+
+        self._fire(request, DownloadProgress(
+            status=DownloadStatus.DOWNLOADING,
+            url=url,
+            title=title,
+        ))
+
+        try:
+            download_hls(
+                url=url,
+                output_path=output_path,
+                cookies_file=request.cookies_file,
+            )
+        except Exception as exc:
+            self._fire(request, DownloadProgress(
+                status=DownloadStatus.ERROR,
+                url=url,
+                title=title,
+                error_message=str(exc),
+            ), error=True)
+            return
+
+        self._fire(request, DownloadProgress(
+            status=DownloadStatus.FINISHED,
+            url=url,
+            title=title,
+            fraction=1.0,
+            output_path=output_path,
+        ))
+
     # ── yt-dlp options builder ─────────────────────────────────────────────────
 
     def _build_ydl_opts(self, req: DownloadRequest) -> dict[str, Any]:
@@ -479,15 +533,14 @@ class DownloadEngine:
 
         # Output template
         raw_title = req.forced_title or "%(title)s"
-        import re as _re
-        
+
         # Comprehensive clean: strip common parenthetical labels and promotional suffixes
         # WE EXCLUDE 'Remix', 'Edit', 'Acoustic', 'Live' to prevent collisions in EPs
-        clean_title = _re.sub(r'\s*[([].*?(Official|Video|Clip|Audio|Prod|By|Remaster|Lyrics|HD|4K|Direct|Vevo|Studio).*?[)\]]', '', raw_title, flags=_re.IGNORECASE)
-        # Strip anything in parents at the end
-        clean_title = _re.sub(r'\s*\([^)]*\)\s*$', '', clean_title).strip()
+        clean_title = re.sub(r'\s*[([].*?(Official|Video|Clip|Audio|Prod|By|Remaster|Lyrics|HD|4K|Direct|Vevo|Studio).*?[)\]]', '', raw_title, flags=re.IGNORECASE)
+        # Strip anything in parens at the end
+        clean_title = re.sub(r'\s*\([^)]*\)\s*$', '', clean_title).strip()
         # Strip trailing hyphens or dashes followed by common tags
-        clean_title = _re.sub(r'\s*-\s*(Club Edit|Official|Prod|Original).*$', '', clean_title, flags=_re.IGNORECASE).strip()
+        clean_title = re.sub(r'\s*-\s*(Club Edit|Official|Prod|Original).*$', '', clean_title, flags=re.IGNORECASE).strip()
         
         if not clean_title:
             clean_title = raw_title
@@ -512,9 +565,15 @@ class DownloadEngine:
         # Automatic pickup of wizard cookies
         cookies_file = req.cookies_file
         if not cookies_file and not req.cookies_browser:
-            wizard_cookies = _get_app_cookies_path()
+            wizard_cookies = get_app_cookies_path()
             if wizard_cookies.exists():
                 cookies_file = str(wizard_cookies)
+
+        # Warn if cookies are expired (non-blocking)
+        if cookies_file:
+            valid, warn_msg = check_cookies_valid(cookies_file)
+            if not valid:
+                logger.warning("[Downloader] %s", warn_msg)
 
         opts: dict[str, Any] = _build_base_opts(
             cookies_file=cookies_file or None,
@@ -523,6 +582,7 @@ class DownloadEngine:
             quiet=True,
             retries=10,
             randomize_user_agent=req.randomize_user_agent,
+            proxy=req.proxy_url or None,
         )
 
         opts["outtmpl"]           = outtmpl
@@ -533,12 +593,12 @@ class DownloadEngine:
         if req.playlist_end:
             opts["playlistend"]   = req.playlist_end
 
-        # Use clients that are supported by this version of yt-dlp.
-        # android_vr: works without PO Token (JS-less).  web_safari: fallback.
-        # tv_downgraded: good fallback when authenticated.
+        # ios: most reliable authenticated client (no PO Token needed).
+        # android_vr: works without PO Token. tv_embedded: good fallback.
+        # web_creator / web_embedded: final HTTP fallbacks.
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["android_vr", "tv_downgraded", "web_safari"]
+                "player_client": ["ios", "android_vr", "tv_embedded", "web_creator", "web_embedded"]
             }
         }
         # Small sleep between requests to avoid YouTube rate-limiting
@@ -684,10 +744,8 @@ class DownloadEngine:
 
             pp_key = (d.get("postprocessor", "") or "").lower()
             output_path: str = d.get("info_dict", {}).get("filepath", "") or ""
-            
-            import logging
-            l = logging.getLogger(__name__)
-            l.debug(f"[Downloader] PP Hook: status=finished, pp={pp_key}, path={output_path}")
+
+            logger.debug("[Downloader] PP Hook: status=finished, pp=%s, path=%s", pp_key, output_path)
 
             if output_path:
                 output_path = os.path.abspath(output_path)
@@ -703,8 +761,7 @@ class DownloadEngine:
         Called after yt-dlp has completely finished.
         """
         # 0. Stability delay to ensure file system is ready (mitigates ffprobe locking)
-        import time as _time
-        _time.sleep(1.5) 
+        time.sleep(1.5)
 
         if not os.path.exists(final_path):
             logger.warning(f"[Downloader] Final path does not exist, skipping pipeline: {final_path}")

@@ -57,6 +57,13 @@ _VIDEO_QUALITY_MAP = {
 _MULTI_KINDS = {UrlKind.PLAYLIST, UrlKind.ALBUM, UrlKind.ARTIST}
 
 
+def _parse_stream_type(category: str) -> Optional[str]:
+    """Extract stream_type from a category string like 'stream:hls'."""
+    if category and category.startswith("stream:"):
+        return category[len("stream:"):]
+    return None
+
+
 class DownloadController(QObject):
     """
     Owns all download logic extracted from AppWindow.
@@ -301,13 +308,16 @@ class DownloadController(QObject):
                 ),
                 thumbnail_url=card.thumbnail_url,
                 sponsorblock=self._cfg.sponsorblock_enabled,
+                sponsorblock_categories=self._cfg.get("sponsorblock_categories") or None,
                 embed_lyrics=self._cfg.lyrics_enabled,
                 replay_gain=self._cfg.replay_gain_enabled,
                 musicbrainz=self._cfg.musicbrainz_enabled,
                 square_thumbnails=self._cfg.square_thumbnails,
                 clean_filename=is_clean,
                 randomize_user_agent=self._cfg.randomize_user_agent,
+                proxy_url=self._cfg.get("youtube_proxy_url") or None,
                 is_solo=is_solo,
+                stream_type=_parse_stream_type(getattr(card, "category", "")),
             )
 
             key = str(id(card))
@@ -339,6 +349,7 @@ class DownloadController(QObject):
             parent=self,
         )
         self._dl_worker.track_progress.connect(self._on_track_progress)
+        self._dl_worker.track_speed.connect(self._on_track_speed)
         self._dl_worker.track_status.connect(self._on_track_status)
         self._dl_worker.track_finished.connect(self._on_track_finished)
         self._dl_worker.overall_progress.connect(self.overall_progress)
@@ -384,6 +395,7 @@ class DownloadController(QObject):
                 forced_index=req.forced_index,
                 playlist_name=req.playlist_name,
                 sponsorblock=req.sponsorblock,
+                sponsorblock_categories=req.sponsorblock_categories,
                 resumable=True,   # pick up .part file on resume
                 embed_lyrics=req.embed_lyrics,
                 replay_gain=req.replay_gain,
@@ -392,6 +404,8 @@ class DownloadController(QObject):
                 clean_filename=req.clean_filename,
                 cookies_file=req.cookies_file,
                 randomize_user_agent=req.randomize_user_agent,
+                proxy_url=req.proxy_url,
+                stream_type=req.stream_type,
             )
             self._paused_requests[key] = req_copy
 
@@ -433,12 +447,14 @@ class DownloadController(QObject):
         resume_worker = DownloadWorker(
             jobs=[(key, req)],
             engine=self._engine,
+            config=self._cfg,
             db=self._db,
             max_workers=1,
             parent=self,
         )
         self._resume_workers.append(resume_worker)
         resume_worker.track_progress.connect(self._on_track_progress)
+        resume_worker.track_speed.connect(self._on_track_speed)
         resume_worker.track_status.connect(self._on_track_status)
         resume_worker.track_finished.connect(self._on_track_finished)
         resume_worker.job_error.connect(self._on_track_error)
@@ -462,6 +478,11 @@ class DownloadController(QObject):
             card.set_progress(fraction)
             if card._status != "downloading":  # noqa: SLF001
                 card.set_status("downloading")
+
+    def _on_track_speed(self, key: str, speed_bps: float, eta_seconds: float) -> None:
+        card = self._key_to_card.get(key)
+        if card and hasattr(card, "update_speed"):
+            card.update_speed(speed_bps, eta_seconds)
 
     def _on_track_status(self, key: str, status: str) -> None:
         card = self._key_to_card.get(key)
@@ -533,7 +554,7 @@ class DownloadController(QObject):
             output = subprocess.check_output('tasklist /FI "IMAGENAME eq ' + process_name + '" /NH', 
                                             shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore')
             return process_name.lower() in output.lower()
-        except:
+        except Exception:
             return False
 
     def _active_request_for_key(self, key: str) -> Optional[DownloadRequest]:

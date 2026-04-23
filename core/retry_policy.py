@@ -34,20 +34,26 @@ _RETRIABLE_PATTERNS = [
     re.compile(r"429|too many requests|rate.?limit", re.I),
     re.compile(r"503|service unavailable", re.I),
     re.compile(r"502|bad gateway", re.I),
-    re.compile(r"connection reset|connection aborted", re.I),
+    re.compile(r"500|internal server error", re.I),
+    re.compile(r"connection reset|connection aborted|connection closed", re.I),
     re.compile(r"timed?\s*out|socket.?timeout|read timeout", re.I),
     re.compile(r"temporary failure|temporary error", re.I),
-    re.compile(r"network is unreachable", re.I),
-    re.compile(r"incomplete read|chunked.?encoding", re.I),
+    re.compile(r"network is unreachable|unable to connect", re.I),
+    re.compile(r"name.*resolution.*fail|dns.*fail|getaddrinfo", re.I),
+    re.compile(r"incomplete read|chunked.?encoding|empty.*response", re.I),
+    re.compile(r"ssl.*error|certificate.*verify.*failed", re.I),
 ]
 
 # Patterns that indicate permanent failures — never retry
 _PERMANENT_PATTERNS = [
     re.compile(r"private video|video unavailable|has been removed", re.I),
-    re.compile(r"sign in|age.?gated|login required", re.I),
+    re.compile(r"this video is not available", re.I),
+    re.compile(r"sign in to confirm.*not a bot|confirm you.re not a bot", re.I),
+    re.compile(r"age.?gated|login required", re.I),
     re.compile(r"not available in your country|geo.?block", re.I),
     re.compile(r"copyright|dmca|taken down", re.I),
     re.compile(r"permission denied|access denied", re.I),
+    re.compile(r"members?.only|membership required", re.I),
 ]
 
 

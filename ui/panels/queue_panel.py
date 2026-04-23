@@ -34,16 +34,7 @@ from qfluentwidgets import (
 
 from ui.components.track_card import TrackCard
 from ui.i18n import t
-from ui.theme_manager import ACCENT_COLOR
-
-
-# ── Design tokens ──────────────────────────────────────────────────────────────
-_BG      = "#111114"
-_SURFACE = "#1c1c21"
-_BORDER  = "#313139"
-_TEXT    = "#f2f2f5"
-_TEXT_2  = "#94949e"
-_TEXT_3  = "#5a5a66"
+from ui.theme_manager import ACCENT_COLOR, get_colors
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -187,6 +178,10 @@ class QueuePanel(QWidget):
         super().__init__(parent)
         self._cards: list[TrackCard] = []   # ordered list of all cards
         self._build()
+        from ui.theme_manager import ThemeManager
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -231,6 +226,7 @@ class QueuePanel(QWidget):
         )
         card.remove_requested.connect(self._on_card_remove)
         card.selection_changed.connect(self._on_selection_change)
+        card.status_changed.connect(lambda _: self._update_stats())
 
         self._drop_area.cards_layout.addWidget(card)
         self._cards.append(card)
@@ -266,33 +262,89 @@ class QueuePanel(QWidget):
 
     def _build(self) -> None:
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setStyleSheet(f"background: {_BG};")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
         # ── Header ────────────────────────────────────────────────────────────
-        header = QFrame()
-        header.setFixedHeight(44)
-        header.setStyleSheet(
-            f"background: {_SURFACE}; border-bottom: 1px solid {_BORDER};"
-        )
-        h_row = QHBoxLayout(header)
+        self._header_frame = QFrame()
+        self._header_frame.setFixedHeight(44)
+        h_row = QHBoxLayout(self._header_frame)
         h_row.setContentsMargins(12, 0, 12, 0)
         h_row.setSpacing(8)
 
         self._all_chk = QCheckBox(t("select_deselect_all"))
         self._all_chk.setChecked(True)
+        self._all_chk.stateChanged.connect(
+            lambda s: self.set_all_selected(bool(s))
+        )
+        h_row.addWidget(self._all_chk)
+        h_row.addStretch()
+
+        self._count_lbl = CaptionLabel(t("no_tracks_loaded"))
+        h_row.addWidget(self._count_lbl)
+
+        self._stats_lbl = CaptionLabel("")
+        self._stats_lbl.setVisible(False)
+        h_row.addWidget(self._stats_lbl)
+
+        # ── Global Pause/Resume ───────────────────────────────────────────────
+        self._pause_resume_btn = ToolButton(FluentIcon.PAUSE)
+        self._pause_resume_btn.setFixedSize(26, 26)
+        self._pause_resume_btn.setToolTip(t("pause_all"))
+        self._is_paused_state = False
+        self._pause_resume_btn.clicked.connect(self._on_global_pause_resume_click)
+        h_row.addWidget(self._pause_resume_btn)
+
+        # ── Cleanup Dropdown ──────────────────────────────────────────────────
+        self._cleanup_btn = DropDownPushButton(t("clear_options"))
+        self._cleanup_btn.setFixedHeight(26)
+
+        menu = RoundMenu(parent=self)
+        menu.addAction(Action(t("clear_all"), triggered=self.clear))
+        menu.addAction(Action(t("clear_selected"), triggered=self.clear_selected))
+        menu.addAction(Action(t("clear_completed"), triggered=self._clear_completed))
+        self._cleanup_btn.setMenu(menu)
+        h_row.addWidget(self._cleanup_btn)
+
+        root.addWidget(self._header_frame)
+
+        # ── Scroll area ───────────────────────────────────────────────────────
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        self._drop_area = _DropArea()
+        self._drop_area.reorder_requested.connect(self._on_reorder)
+
+        # Empty state (inside drop area so it fills the space)
+        self._empty_widget = self._build_empty_state()
+        self._drop_area.cards_layout.addWidget(self._empty_widget)
+
+        self._scroll.setWidget(self._drop_area)
+        root.addWidget(self._scroll, stretch=1)
+
+        # Apply initial theme styles
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        """Re-apply all palette-dependent stylesheets."""
+        c = get_colors()
+        self.setStyleSheet(f"background: {c.bg};")
+        self._header_frame.setStyleSheet(
+            f"background: {c.surface}; border-bottom: 1px solid {c.border};"
+        )
         self._all_chk.setStyleSheet(f"""
             QCheckBox {{
-                color: {_TEXT_2};
+                color: {c.text_secondary};
                 font-size: 12px;
                 background: transparent;
             }}
             QCheckBox::indicator {{
                 width: 15px; height: 15px;
-                border: 1.5px solid {_BORDER};
+                border: 1.5px solid {c.border};
                 border-radius: 3px;
                 background: transparent;
             }}
@@ -301,44 +353,27 @@ class QueuePanel(QWidget):
                 border-color: {ACCENT_COLOR};
             }}
         """)
-        self._all_chk.stateChanged.connect(
-            lambda s: self.set_all_selected(bool(s))
-        )
-        h_row.addWidget(self._all_chk)
-        h_row.addStretch()
-
-        self._count_lbl = CaptionLabel(t("no_tracks_loaded"))
         self._count_lbl.setStyleSheet(
-            f"color: {_TEXT_3}; background: transparent;"
+            f"color: {c.text_tertiary}; background: transparent;"
         )
-        h_row.addWidget(self._count_lbl)
-
-        # ── Global Pause/Resume ───────────────────────────────────────────────
-        self._pause_resume_btn = ToolButton(FluentIcon.PAUSE)
-        self._pause_resume_btn.setFixedSize(26, 26)
-        self._pause_resume_btn.setToolTip(t("pause_all"))
-        self._is_paused_state = False
-        self._pause_resume_btn.clicked.connect(self._on_global_pause_resume_click)
+        self._stats_lbl.setStyleSheet(
+            f"color: {c.text_tertiary}; background: transparent;"
+        )
         self._pause_resume_btn.setStyleSheet(f"""
             ToolButton {{
                 background: transparent;
-                border: 1px solid {_BORDER};
+                border: 1px solid {c.border};
                 border-radius: 6px;
                 color: {ACCENT_COLOR};
             }}
-            ToolButton:hover {{ background: rgba(255,255,255,0.05); }}
+            ToolButton:hover {{ background: rgba(128,128,128,0.10); }}
         """)
-        h_row.addWidget(self._pause_resume_btn)
-
-        # ── Cleanup Dropdown ──────────────────────────────────────────────────
-        self._cleanup_btn = DropDownPushButton(t("clear_options"))
-        self._cleanup_btn.setFixedHeight(26)
         self._cleanup_btn.setStyleSheet(f"""
             DropDownPushButton {{
                 background: transparent;
-                border: 1px solid {_BORDER};
+                border: 1px solid {c.border};
                 border-radius: 6px;
-                color: {_TEXT_2};
+                color: {c.text_secondary};
                 font-size: 11px;
                 padding: 0 8px;
             }}
@@ -347,50 +382,25 @@ class QueuePanel(QWidget):
                 color: {ACCENT_COLOR};
             }}
         """)
-        
-        menu = RoundMenu(parent=self)
-        menu.addAction(Action(t("clear_all"), triggered=self.clear))
-        menu.addAction(Action(t("clear_selected"), triggered=self.clear_selected))
-        menu.addAction(Action(t("clear_completed"), triggered=self._clear_completed))
-        self._cleanup_btn.setMenu(menu)
-        h_row.addWidget(self._cleanup_btn)
-
-        root.addWidget(header)
-
-        # ── Scroll area ───────────────────────────────────────────────────────
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{ background: {_BG}; border: none; }}
+        self._scroll.setStyleSheet(f"""
+            QScrollArea {{ background: {c.bg}; border: none; }}
             QScrollBar:vertical {{
-                background: {_BG};
+                background: {c.bg};
                 width: 6px;
                 border-radius: 3px;
             }}
             QScrollBar::handle:vertical {{
-                background: {_BORDER};
+                background: {c.border};
                 border-radius: 3px;
                 min-height: 24px;
             }}
-            QScrollBar::handle:vertical:hover {{ background: #3e3e47; }}
             QScrollBar::add-line:vertical,
             QScrollBar::sub-line:vertical {{ height: 0; }}
         """)
-
-        self._drop_area = _DropArea()
-        self._drop_area.setStyleSheet(f"background: {_BG};")
-        self._drop_area.reorder_requested.connect(self._on_reorder)
-
-        # Empty state (inside drop area so it fills the space)
-        self._empty_widget = self._build_empty_state()
-        self._drop_area.cards_layout.addWidget(self._empty_widget)
-
-        scroll.setWidget(self._drop_area)
-        root.addWidget(scroll, stretch=1)
+        self._drop_area.setStyleSheet(f"background: {c.bg};")
 
     def _build_empty_state(self) -> QWidget:
+        c = get_colors()
         w = QWidget()
         w.setStyleSheet("background: transparent;")
         v = QVBoxLayout(w)
@@ -399,12 +409,14 @@ class QueuePanel(QWidget):
 
         icon_lbl = QLabel("⬇")
         icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon_lbl.setStyleSheet(f"font-size: 52px; background: transparent; color: {_BORDER};")
+        icon_lbl.setStyleSheet(
+            f"font-size: 52px; background: transparent; color: {c.border};"
+        )
         v.addWidget(icon_lbl)
 
         hint = BodyLabel(t("queue_empty_hint"))
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet(f"color: {_TEXT_3}; background: transparent;")
+        hint.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
         v.addWidget(hint)
 
         return w
@@ -494,6 +506,20 @@ class QueuePanel(QWidget):
         n = len(self._cards)
         if n == 0:
             self._count_lbl.setText(t("no_tracks_loaded"))
+            self._stats_lbl.setVisible(False)
         else:
             sel = len(self.get_selected_cards())
             self._count_lbl.setText(t("sel_of_n", sel=sel, n=n))
+            self._update_stats()
+
+    def _update_stats(self) -> None:
+        if not self._cards:
+            self._stats_lbl.setVisible(False)
+            return
+        done = sum(1 for c in self._cards if c.get_status() == "done")
+        total = len(self._cards)
+        if done > 0 or any(c.get_status() == "downloading" for c in self._cards):
+            self._stats_lbl.setText(f"· {done}/{total} done")
+            self._stats_lbl.setVisible(True)
+        else:
+            self._stats_lbl.setVisible(False)

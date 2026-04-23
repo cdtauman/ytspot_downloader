@@ -176,7 +176,7 @@ class TestClassifyUrl:
 
     @pytest.fixture(autouse=True)
     def _import(self):
-        from playlist_parser import classify_url, SourcePlatform, UrlKind
+        from core.playlist_parser import classify_url, SourcePlatform, UrlKind
         self.classify = classify_url
         self.SP = SourcePlatform
         self.UK = UrlKind

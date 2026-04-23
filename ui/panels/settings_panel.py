@@ -109,6 +109,7 @@ class SettingsPanel(QScrollArea):
             self._spotify_results_card.setValue(self._cfg.spotify_max_results)
             self._spotify_proxy_card.setText(self._cfg.proxy_server_url)
             self._spotify_proxy_token_card.setText(self._cfg.spotify_app_api_key)
+            self._youtube_proxy_card.setText(self._cfg.get("youtube_proxy_url", ""))
         except Exception:
             pass
 
@@ -532,6 +533,18 @@ class SettingsPanel(QScrollArea):
             lambda v: self._persist("spotify_app_api_key", v)
         )
         search_grp.addSettingCard(self._spotify_proxy_token_card)
+
+        self._youtube_proxy_card = _TextSettingCard(
+            icon=FluentIcon.VPN,
+            title="YouTube Proxy",
+            content="HTTP/HTTPS/SOCKS proxy for YouTube downloads (e.g. http://127.0.0.1:7890). Leave empty for direct connection.",
+            value=self._cfg.get("youtube_proxy_url", ""),
+            parent=search_grp,
+        )
+        self._youtube_proxy_card.value_changed.connect(
+            lambda v: self._persist("youtube_proxy_url", v)
+        )
+        search_grp.addSettingCard(self._youtube_proxy_card)
 
         layout.addWidget(search_grp)
 

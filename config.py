@@ -67,7 +67,6 @@ _DEFAULTS: dict[str, Any] = {
     "accessibility_mode":   False,          # NEW – high-contrast / keyboard nav
 
     # ── Window state ──────────────────────────────────────────────────────────
-    "window_geometry":      "",
     "window_state":         "",
 
     # ── Clipboard / tray / updates ────────────────────────────────────────────
@@ -89,8 +88,9 @@ _DEFAULTS: dict[str, Any] = {
     # ── Batch import ──────────────────────────────────────────────────────────
     "batch_import_dir":     "",
 
-    # ── Spotify proxy ─────────────────────────────────────────────────────────
-    "proxy_server_url":         "http://localhost:8000",
+    # ── Proxies ───────────────────────────────────────────────────────────────
+    "proxy_server_url":         "http://localhost:8000",   # Spotify search proxy
+    "youtube_proxy_url":        "",                        # HTTP/SOCKS proxy for yt-dlp
     "spotify_client_id":        "",
     "spotify_client_secret":    "",
     "spotify_app_api_key":      "c6ffadbe3f5cb7146a72d91364c0a3cd981a90d67c167fc6acf44db4f3cbf8ad",
@@ -101,7 +101,8 @@ _DEFAULTS: dict[str, Any] = {
     "randomize_user_agent":   True,        # Rotate browser headers
 
     # ── Advanced: audio post-processing ──────────────────────────────────────
-    "sponsorblock_enabled":  False,         # cut non-music segments
+    "sponsorblock_enabled":     False,      # cut non-music segments
+    "sponsorblock_categories":  ["music_offtopic", "sponsor", "intro", "outro", "selfpromo"],
     "lyrics_enabled":        False,         # NEW – auto-fetch + embed lyrics
     "replay_gain_enabled":   False,         # NEW – ReplayGain analysis
     "square_thumbnails":     True,          # NEW – crop 16:9 art to 1:1

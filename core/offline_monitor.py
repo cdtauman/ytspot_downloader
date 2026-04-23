@@ -1,80 +1,106 @@
 """
-core/offline_monitor.py  –  Offline / network detection
-=========================================================
-A lightweight QObject that polls network reachability every 15 seconds
-and emits signals when the app goes offline or comes back online.
+core/offline_monitor.py  –  Offline / network detection  (pure Python)
+=======================================================================
+A headless network monitor that polls reachability in a background thread
+and fires Python callbacks on state changes.
 
-Design
-------
-* Uses a QTimer on the main thread (no extra QThread needed).
-* Probes via a DNS-only httpx HEAD to dns.google – fast, no data transfer.
-* Emits went_offline / came_online signals so AppWindow can show/hide the
-  OfflineBanner without blocking the UI.
-* Initial check happens 500 ms after start() is called to avoid slowing
-  app launch.
+Zero GUI imports — this module works in CLI mode and unit tests without Qt.
+The Qt-signal wrapper lives in ui/workers/offline_monitor.py.
 
-Usage (in AppWindow.__init__)
-------------------------------
+Usage (headless / CLI)
+----------------------
+    monitor = NetworkMonitor(on_offline=my_fn, on_online=my_fn)
+    monitor.start()
+    ...
+    monitor.stop()
+
+Usage (GUI — via the Qt wrapper)
+---------------------------------
+    from ui.workers.offline_monitor import OfflineMonitor
     self._net_monitor = OfflineMonitor(parent=self)
-    self._net_monitor.went_offline.connect(self._offline_banner.show)
-    self._net_monitor.came_online.connect(self._offline_banner.hide)
+    self._net_monitor.went_offline.connect(...)
     self._net_monitor.start()
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Optional
+import threading
+import time
+from typing import Callable, Optional
 
-import httpx
-from PySide6.QtCore import QObject, QTimer, Signal
+from utils.network_probe import probe_network
 
 logger = logging.getLogger(__name__)
 
-_PROBE_URL     = "https://dns.google"
-_PROBE_TIMEOUT = 4.0          # seconds
-_POLL_INTERVAL = 15_000       # milliseconds
+_POLL_INTERVAL = 15.0   # seconds between probes
+_INITIAL_DELAY = 0.5    # seconds before the first probe after start()
 
 
-class OfflineMonitor(QObject):
+class NetworkMonitor:
     """
-    Polls network connectivity and emits Qt signals on state changes.
+    Thread-based network poller.  Fires ``on_offline`` / ``on_online``
+    callbacks when connectivity state changes.
 
-    Signals
-    -------
-    went_offline()   – fired the first time a probe fails after success.
-    came_online()    – fired the first time a probe succeeds after failure.
+    Parameters
+    ----------
+    on_offline : callable, optional
+        Called (no arguments) when the network goes down.
+    on_online : callable, optional
+        Called (no arguments) when the network comes back.
+    poll_interval : float
+        Seconds between consecutive probes (default 15).
     """
 
-    went_offline = Signal()
-    came_online  = Signal()
+    def __init__(
+        self,
+        on_offline:    Optional[Callable[[], None]] = None,
+        on_online:     Optional[Callable[[], None]] = None,
+        poll_interval: float = _POLL_INTERVAL,
+    ) -> None:
+        self._on_offline    = on_offline
+        self._on_online     = on_online
+        self._poll_interval = poll_interval
 
-    def __init__(self, parent: Optional[QObject] = None) -> None:
-        super().__init__(parent)
-        self._online: Optional[bool] = None   # None = unknown (initial state)
-        self._timer = QTimer(self)
-        self._timer.setInterval(_POLL_INTERVAL)
-        self._timer.timeout.connect(self._check)
+        self._online: Optional[bool] = None   # None = unknown (initial)
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def start(self) -> None:
-        """Start polling.  First check fires after 500 ms."""
-        QTimer.singleShot(500, self._check)
-        self._timer.start()
+        """Start the background polling thread."""
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            daemon=True,
+            name="NetworkMonitor",
+        )
+        self._thread.start()
 
     def stop(self) -> None:
-        self._timer.stop()
+        """Signal the polling thread to stop (non-blocking)."""
+        self._stop_event.set()
 
     @property
     def is_online(self) -> bool:
-        """True if the most recent probe succeeded (or unknown → optimistic True)."""
+        """True if the last probe succeeded (optimistic when unknown)."""
         return self._online is not False
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
+    def _run(self) -> None:
+        # Brief initial delay so the app window can finish starting up
+        self._stop_event.wait(_INITIAL_DELAY)
+        if self._stop_event.is_set():
+            return
+
+        while not self._stop_event.is_set():
+            self._check()
+            self._stop_event.wait(self._poll_interval)
+
     def _check(self) -> None:
-        reachable = _probe()
+        reachable = probe_network()
         if reachable == self._online:
             return   # no state change
 
@@ -82,18 +108,10 @@ class OfflineMonitor(QObject):
         self._online = reachable
 
         if reachable:
-            logger.info("[OfflineMonitor] Network reachable.")
-            if prev is False:        # only emit if we were previously offline
-                self.came_online.emit()
+            logger.info("[NetworkMonitor] Network reachable.")
+            if prev is False and self._on_online:
+                self._on_online()
         else:
-            logger.warning("[OfflineMonitor] Network unreachable.")
-            self.went_offline.emit()
-
-
-def _probe() -> bool:
-    """Return True if the probe URL is reachable, False otherwise."""
-    try:
-        resp = httpx.head(_PROBE_URL, timeout=_PROBE_TIMEOUT, follow_redirects=True)
-        return resp.status_code < 500
-    except Exception:
-        return False
+            logger.warning("[NetworkMonitor] Network unreachable.")
+            if self._on_offline:
+                self._on_offline()

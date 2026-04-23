@@ -171,7 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _resolve_quality(label: str, is_audio: bool):
-    from downloader import AudioQuality, VideoQuality
+    from core.downloader import AudioQuality, VideoQuality
     if is_audio:
         _map = {
             "Best (320k)":   AudioQuality.BEST,
@@ -201,7 +201,7 @@ def main() -> int:
     logger = logging.getLogger("cli")
 
     # ── 1. Parse URL → track list ─────────────────────────────────────────
-    from playlist_parser import PlaylistParser, TrackMeta, classify_url, SourcePlatform
+    from core.playlist_parser import PlaylistParser, TrackMeta, classify_url, SourcePlatform
 
     platform, kind = classify_url(args.url)
     if platform == SourcePlatform.UNKNOWN:
@@ -249,7 +249,7 @@ def main() -> int:
         return 0
 
     # ── 3. Build download jobs ────────────────────────────────────────────
-    from downloader import DownloadEngine, DownloadRequest, MediaType
+    from core.downloader import DownloadEngine, DownloadRequest, MediaType
 
     is_audio   = args.format == "mp3"
     media_type = MediaType.AUDIO if is_audio else MediaType.VIDEO

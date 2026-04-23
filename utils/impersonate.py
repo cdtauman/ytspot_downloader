@@ -1,21 +1,25 @@
 """
-utils/impersonate.py  –  Shared curl_cffi / ImpersonateTarget detection
-=========================================================================
-Both downloader.py and playlist_parser.py need to detect whether
-curl_cffi is available and optionally build an ImpersonateTarget for
-yt-dlp's impersonation API.  This module centralises that detection so
-there is a single place to update if yt-dlp's internal API changes.
+utils/impersonate.py  –  curl_cffi / ImpersonateTarget availability check
+==========================================================================
+Detects whether both curl_cffi (the HTTP impersonation library) and
+yt-dlp's impersonation interface are available.
+
+Both conditions must be true for TLS impersonation to work:
+  1. ``curl_cffi`` is installed in the environment.
+  2. ``yt_dlp.networking.impersonate.ImpersonateTarget`` exists in this
+     version of yt-dlp.
 
 Usage
 -----
 >>> from utils.impersonate import CURL_CFFI_AVAILABLE, ImpersonateTarget
 >>> if CURL_CFFI_AVAILABLE:
-...     target = ImpersonateTarget("chrome", None, "windows", None)
+...     target = ImpersonateTarget("chrome", "137", "windows", None)
 """
 
 from __future__ import annotations
 
 try:
+    import curl_cffi  # noqa: F401  — confirm the library is installed
     from yt_dlp.networking.impersonate import ImpersonateTarget
     CURL_CFFI_AVAILABLE: bool = True
 except ImportError:
