@@ -168,7 +168,7 @@ class DownloadRequest:
     musicbrainz:            bool = False   # MusicBrainz tag enrichment after download
     square_thumbnails:      bool = False   # crop embedded art to 1:1 square
     clean_filename:         bool = False   # use minimal filename (Title only)
-    randomize_user_agent:   bool = False   # rotate UA string per download (anti-ban)
+    randomize_user_agent:   bool = False   # rotate UA string per download (anti-ban) (kept for signature but unused)
     is_solo:                bool = False   # single track download flag (no folder, no index, no artist name)
 
     # Universal / HLS / DASH stream (set when URL came from universal_extractor)
@@ -350,7 +350,7 @@ class DownloadEngine:
                 if cancel_ev.is_set() or global_cancel.is_set():
                     raise yt_dlp.utils.DownloadCancelled()
 
-            opts["progress_hooks"].append(_abort_hook)
+            opts.setdefault("progress_hooks", []).append(_abort_hook)
 
             if request.media_type == MediaType.AUDIO:
                 opts.update(self._audio_opts(request))
@@ -593,21 +593,9 @@ class DownloadEngine:
         if req.playlist_end:
             opts["playlistend"]   = req.playlist_end
 
-        # ios: most reliable authenticated client (no PO Token needed).
-        # android_vr: works without PO Token. tv_embedded: good fallback.
-        # web_creator / web_embedded: final HTTP fallbacks.
-        opts["extractor_args"] = {
-            "youtube": {
-                "player_client": ["ios", "android_vr", "tv_embedded", "web_creator", "web_embedded"]
-            }
-        }
-        # Small sleep between requests to avoid YouTube rate-limiting
-        opts["sleep_interval"]     = 2
-        opts["max_sleep_interval"] = 5
         opts["progress_hooks"]      = [self._make_progress_hook(req)]
         opts["postprocessor_hooks"] = [self._make_pp_hook(req)]
         opts["no_warnings"]         = True
-        opts["nomarkwatched"]       = True  # Prevent downloads from appearing in YouTube history
 
         return opts
 
@@ -845,4 +833,3 @@ class DownloadEngine:
                 req.on_progress(progress)
             except Exception as exc:
                 logger.warning("[Downloader] on_progress callback raised: %s", exc, exc_info=True)
-

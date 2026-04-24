@@ -77,13 +77,24 @@ def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, 
     items = []
     seen = set()
     page.goto(url, wait_until="load", timeout=30000)
+    is_album = content_type_label == "Album"
     try:
         # Wait for grid or track rows
         page.wait_for_selector("main div[role='grid'], main div[data-testid='tracklist-row']", timeout=15000)
-        
+
         # Get title from entity header
         scraped_title = page.evaluate("() => document.querySelector('h1[data-testid=\"entityTitle\"], main h1')?.innerText") or f"Unknown Spotify {content_type_label}"
-        
+
+        # For albums: extract the primary artist from the header credits link
+        header_artist = ""
+        if is_album:
+            try:
+                # Spotify album page shows artist link(s) under the album title
+                artist_els = page.locator("main a[href*='/artist/']").all()
+                if artist_els:
+                    header_artist = artist_els[0].inner_text().strip()
+            except: pass
+
         # Get higher-res entity image from header (Album/Playlist cover)
         header_thumb = ""
         try:
@@ -108,10 +119,10 @@ def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, 
                     if uid in seen: continue
                     seen.add(uid)
                     added_in_pass += 1
-                    
+
                     artist_links = track_row.locator("a[href*='/artist/']").all()
                     artists = ", ".join([a.inner_text().strip() for a in artist_links]) if artist_links else "Unknown Artist"
-                    
+
                     # Extract thumbnail from row
                     track_thumb = ""
                     try:
@@ -119,14 +130,14 @@ def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, 
                         if row_img.count():
                             track_thumb = _ensure_high_res_spotify_image(row_img.get_attribute("src") or "")
                     except: pass
-                    
+
                     # For ALBUMS, we ALWAYS prefer the header/album cover over single-track covers
                     final_thumb = track_thumb
-                    if content_type_label == "Album" and header_thumb:
+                    if is_album and header_thumb:
                         final_thumb = header_thumb
                     elif not final_thumb:
                         final_thumb = header_thumb
-                    
+
                     duration_sec = 0
                     duration_str = ""
                     try:
@@ -145,18 +156,28 @@ def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, 
                         "url": f"ytsearch1:{artists} {track_title} audio",
                         "album_index": len(seen), "thumbnail_url": final_thumb,
                         "duration_sec": duration_sec, "duration_str": duration_str or "??:??",
-                        "platform": "spotify", "release_type": content_type_label.lower()
+                        "platform": "spotify", "release_type": content_type_label.lower(),
                     }
+                    # For albums: enrich with parent_artist and folder category
+                    if is_album and header_artist:
+                        track_dict["parent_artist"] = header_artist
+                        track_dict["category"] = "אלבומים"
                     items.append(track_dict)
                     if on_item: on_item(track_dict)
                 except: pass
-            
+
             if added_in_pass == 0: stagnant_count += 1
             else: stagnant_count = 0
             try:
                 tracks[-1].scroll_into_view_if_needed()
                 page.wait_for_timeout(500)
             except: break
+
+        # Back-fill total_tracks now that we know the full count
+        if is_album and items:
+            total = len(items)
+            for td in items:
+                td["total_tracks"] = total
     except Exception as e:
         logger.error(f"Error in _scrape_spotify_grid_on_page for {url}: {e}")
         return "Unknown", []
@@ -202,11 +223,15 @@ def scrape_spotify_track(url: str, on_item: Optional[Callable[[Dict], None]] = N
                     thumb_url = _ensure_high_res_spotify_image(img_el.get_attribute("src") or "")
             except: pass
             artist_links = page.locator("main a[href*='/artist/']").all()
-            artists = ", ".join([a.inner_text().strip() for a in artist_links]) if artist_links else "Unknown Artist"
+            artist_names = [a.inner_text().strip() for a in artist_links] if artist_links else []
+            artists = ", ".join(artist_names) if artist_names else "Unknown Artist"
+            parent_artist = artist_names[0] if artist_names else ""
             track_dict = {
-                "title": title, "artist": artists, "album": "Single",
+                "title": title, "artist": artists, "album": title,
+                "parent_artist": parent_artist, "category": "סינגלים ו-EP",
                 "url": f"ytsearch1:{artists} {title} audio",
-                "thumbnail_url": thumb_url, "platform": "spotify", "release_type": "track"
+                "thumbnail_url": thumb_url, "platform": "spotify",
+                "release_type": "single", "total_tracks": 1,
             }
             items.append(track_dict)
             if on_item: on_item(track_dict)

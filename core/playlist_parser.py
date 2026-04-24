@@ -103,6 +103,7 @@ class TrackMeta:
     
     # ── Custom Categories ───────────────────────────────────────────────────
     category:       str   = ""          # override for custom yt/scraper tabs
+    total_tracks:   int   = 0           # total tracks in the release (for EP grouping)
 
     # ── State used by the GUI (not set by the parser) ─────────────────────────
     selected:       bool = True         # pre-tick all items in the UI
@@ -388,6 +389,7 @@ class PlaylistParser:
                 thumbnail_url=track_data.get("thumbnail_url", ""),
                 duration_str=track_data.get("duration_str", ""),
                 duration_sec=track_data.get("duration_sec"),
+                total_tracks=track_data.get("total_tracks", 0),
                 platform=platform,
                 selected=True,
             )

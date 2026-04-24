@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "ytspot-downloader"
@@ -14,7 +14,6 @@ keywords = ["youtube", "spotify", "downloader", "music", "yt-dlp"]
 dependencies = [
     "yt-dlp[default]>=2026.3.13",
     "yt-dlp-ejs",
-    "curl_cffi>=0.14.0,<0.14.9",
     "ffmpeg-python>=0.2.0",
     "moviepy>=2.2.1",
     "pyloudnorm>=0.1.1",
