@@ -17,8 +17,17 @@ from __future__ import annotations
 
 import io
 import logging
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Optional
+
+try:
+    from PIL import Image
+    _PIL_AVAILABLE = True
+except ImportError:
+    Image = None  # type: ignore[assignment]
+    _PIL_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +38,8 @@ def crop_embedded_thumbnail(file_path: str) -> bool:
 
     Returns True on success, False if no art found or on failure.
     """
-    try:
-        from PIL import Image
-    except ImportError:
-        logger.warning("[ThumbnailCropper] Pillow not installed. "
-                       "Run: pip install Pillow")
+    if not _PIL_AVAILABLE:
+        logger.warning("[ThumbnailCropper] Pillow not installed. Run: pip install Pillow")
         return False
 
     path = Path(file_path)
@@ -41,11 +47,11 @@ def crop_embedded_thumbnail(file_path: str) -> bool:
 
     try:
         if suffix == ".mp3":
-            return _crop_mp3(path, Image)
+            return _crop_mp3(path)
         elif suffix == ".flac":
-            return _crop_flac(path, Image)
+            return _crop_flac(path)
         elif suffix in (".m4a", ".mp4", ".aac"):
-            return _crop_m4a(path, Image)
+            return _crop_m4a(path)
         else:
             logger.debug("[ThumbnailCropper] Unsupported format: %s", suffix)
             return False
@@ -54,53 +60,111 @@ def crop_embedded_thumbnail(file_path: str) -> bool:
         return False
 
 
-def embed_custom_thumbnail(file_path: str, url: str) -> bool:
-    """Download an image from the given URL, crop to square, and embed it."""
-    if not url.startswith("http"):
+def embed_custom_thumbnail(media_path: str, image_url: str, crop: bool = True) -> bool:
+    """
+    Download an image from image_url, convert it to JPEG (via PIL), optionally
+    crop it to a square, and embed it into the media file using mutagen.
+    Always converts to JPEG so that WebP/PNG thumbnails (common from YTM) are
+    embedded with the correct format rather than causing blank artwork in players.
+    """
+    if not image_url:
         return False
     try:
-        from PIL import Image
-        import urllib.request
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            img_bytes = resp.read()
+        raw_bytes = _fetch_image(image_url)
+        if not raw_bytes:
+            return False
+        if _PIL_AVAILABLE:
+            jpeg_bytes = _to_jpeg(raw_bytes, crop=crop)
+            if jpeg_bytes:
+                raw_bytes = jpeg_bytes
+        return _embed_cover(media_path, raw_bytes)
     except Exception as exc:
-        logger.error("[ThumbnailCropper] Failed to download %s: %s", url, exc)
+        logger.error(f"[Thumbnail] embed_custom_thumbnail failed: {exc}")
         return False
 
-    path = Path(file_path)
+
+_YTIMG_FALLBACKS = [
+    "maxresdefault.jpg",
+    "hqdefault.jpg",
+    "sddefault.jpg",
+    "mqdefault.jpg",
+    "default.jpg",
+]
+
+
+def _ytimg_fallback_urls(url: str) -> list[str]:
+    """For i.ytimg.com URLs return a priority-ordered list of quality variants."""
+    if "i.ytimg.com/vi/" not in url:
+        return [url]
+    for quality in _YTIMG_FALLBACKS:
+        if quality in url:
+            base = url[: url.rfind(quality)]
+            return [base + q for q in _YTIMG_FALLBACKS]
+    return [url]
+
+
+def _fetch_image(url: str) -> Optional[bytes]:
+    """Download image bytes from url, with automatic YouTube quality fallback on 404."""
+    import urllib.error
+    for candidate in _ytimg_fallback_urls(url):
+        try:
+            req = urllib.request.Request(candidate, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read()
+        except urllib.error.HTTPError as exc:
+            if exc.code in (404, 403):
+                continue
+            raise
+        if not data or len(data) < 12:
+            continue
+        is_jpeg = data[:2] == b'\xff\xd8'
+        is_png  = data[:8] == b'\x89PNG\r\n\x1a\n'
+        is_webp = data[:4] == b'RIFF' and data[8:12] == b'WEBP'
+        if not (is_jpeg or is_png or is_webp):
+            logger.warning("[Thumbnail] URL returned non-image content: %s", candidate)
+            continue
+        return data
+    return None
+
+
+def _to_jpeg(data: bytes, crop: bool = False) -> Optional[bytes]:
+    """
+    Convert image data (JPEG/PNG/WebP) to JPEG bytes using PIL.
+    Optionally crops to a centred square before encoding.
+    Returns None on failure so the caller can fall back to raw bytes.
+    """
+    try:
+        img = Image.open(io.BytesIO(data))
+        if crop:
+            w, h = img.size
+            side = min(w, h)
+            left = (w - side) // 2
+            top  = (h - side) // 2
+            img  = img.crop((left, top, left + side, top + side))
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, format="JPEG", quality=92)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+def _embed_cover(media_path: str, image_bytes: bytes) -> bool:
+    """Dispatch to the correct container-specific injector."""
+    path = Path(media_path)
     suffix = path.suffix.lower()
-
-    # Pass the fresh image bytes directly.
-    try:
-        cropped = _centre_crop(img_bytes, Image)
-        logger.debug(f"[ThumbnailCropper] Cropped image to square ({len(img_bytes)} -> {len(cropped)} bytes)")
-        if suffix == ".mp3":
-            res = _inject_mp3_cover(path, cropped)
-            return res
-        elif suffix == ".flac":
-            res = _inject_flac_cover(path, cropped)
-            return res
-        elif suffix in (".m4a", ".mp4", ".aac"):
-            res = _inject_m4a_cover(path, cropped)
-            return res
-    except Exception as exc:
-        logger.error("[ThumbnailCropper] Failed injecting custom thumb for %s: %s", path.name, exc)
+    if suffix == ".mp3":
+        return _inject_mp3_cover(path, image_bytes)
+    if suffix == ".flac":
+        return _inject_flac_cover(path, image_bytes)
+    if suffix in (".m4a", ".mp4", ".aac"):
+        return _inject_m4a_cover(path, image_bytes)
+    logger.debug("[ThumbnailCropper] Unsupported format for embed: %s", suffix)
     return False
 
-def _centre_crop(img_bytes: bytes, Image) -> bytes:
+
+def crop_to_square(image_bytes: bytes) -> Optional[bytes]:
     """Crop image bytes to a centred square and return JPEG bytes."""
-    img = Image.open(io.BytesIO(img_bytes))
-    w, h = img.size
-    side = min(w, h)
-    left   = (w - side) // 2
-    top    = (h - side) // 2
-    right  = left + side
-    bottom = top  + side
-    cropped = img.crop((left, top, right, bottom))
-    buf = io.BytesIO()
-    cropped.convert("RGB").save(buf, format="JPEG", quality=92)
-    return buf.getvalue()
+    return _to_jpeg(image_bytes, crop=True) if _PIL_AVAILABLE else image_bytes
 
 
 def _retry_access(action_fn, path: Path, max_retries: int = 5, delay: float = 1.2):
@@ -169,7 +233,7 @@ def _inject_m4a_cover(path: Path, cropped: bytes) -> bool:
     res = _retry_access(task, path)
     return bool(res)
 
-def _crop_mp3(path: Path, Image) -> bool:
+def _crop_mp3(path: Path) -> bool:
     from mutagen.id3 import ID3, APIC, ID3NoHeaderError
 
     try:
@@ -184,10 +248,10 @@ def _crop_mp3(path: Path, Image) -> bool:
 
     key = apic_keys[0]
     apic = tags[key]
-    cropped = _centre_crop(apic.data, Image)
+    cropped = _to_jpeg(apic.data, crop=True) or apic.data
     return _inject_mp3_cover(path, cropped)
 
-def _crop_flac(path: Path, Image) -> bool:
+def _crop_flac(path: Path) -> bool:
     from mutagen.flac import FLAC, Picture
 
     audio = FLAC(str(path))
@@ -197,11 +261,11 @@ def _crop_flac(path: Path, Image) -> bool:
 
     for pic in pics:
         if pic.type == 3:   # Cover (front)
-            cropped = _centre_crop(pic.data, Image)
+            cropped = _to_jpeg(pic.data, crop=True) or pic.data
             return _inject_flac_cover(path, cropped)
     return False
 
-def _crop_m4a(path: Path, Image) -> bool:
+def _crop_m4a(path: Path) -> bool:
     from mutagen.mp4 import MP4, MP4Cover
 
     audio = MP4(str(path))
@@ -212,5 +276,5 @@ def _crop_m4a(path: Path, Image) -> bool:
     if not covers:
         return False
 
-    cropped = _centre_crop(bytes(covers[0]), Image)
+    cropped = _to_jpeg(bytes(covers[0]), crop=True) or bytes(covers[0])
     return _inject_m4a_cover(path, cropped)

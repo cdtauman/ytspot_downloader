@@ -50,8 +50,8 @@ class UpdateWorker(QThread):
 
     def __init__(
         self,
-        repo_owner:          str  = "your-github-username",   # ← replace before release
-        repo_name:           str  = "ytspot-downloader",       # ← replace before release
+        repo_owner:          str  = "cdtauman",
+        repo_name:           str  = "ytspot_downloader",
         include_prereleases: bool = False,
         parent=None,
     ) -> None:

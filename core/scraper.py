@@ -4,8 +4,8 @@ core/scraper.py – Deeply Isolated & Hyper-Optimized Media Scraper
 Dedicated extraction functions for every platform and content type.
 Optimized for high-speed artist discography scraping using continuous accumulation.
 """
-from playwright.sync_api import sync_playwright, Page, Locator
-from typing import Callable, Optional, Dict, List, Tuple, Any
+from playwright.sync_api import sync_playwright, Page
+from typing import Callable, Optional, Dict, List, Tuple
 import logging
 import re
 import yt_dlp
@@ -45,30 +45,42 @@ def _scrape_standard_ydl(url: str, platform_label: str, on_item: Optional[Callab
     """Generic internal wrapper for yt-dlp based extraction."""
     items = []
     ydl_opts = _build_parse_ydl_opts(logger=_SilentLogger())
-    
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         if not info: return "Unknown", []
-            
-        title = info.get("title") or info.get("playlist_title") or "Unknown"
+
+        # Save playlist/album title BEFORE the loop — the entry loop must not overwrite it
+        raw_title = info.get("title") or info.get("playlist_title") or "Unknown"
+        # Strip YouTube Music's "Album - " prefix that yt-dlp returns verbatim
+        playlist_title = re.sub(r"^Album\s*-\s*", "", raw_title, flags=re.IGNORECASE).strip() if platform_label == "ytmusic" else raw_title
         entries = info.get("entries") or [info]
-        
+
         for idx, entry in enumerate(entries, 1):
             if not entry: continue
+            artist = entry.get("artist") or entry.get("uploader") or entry.get("creator") or ""
+            track_title = entry.get("title") or entry.get("fulltitle") or f"Item {idx}"
+
+            # Switch to search query if the platform is ytmusic to avoid bot blocks/crashes
+            if platform_label == "ytmusic":
+                target_url = f"ytsearch1:{artist} {track_title} audio"
+            else:
+                target_url = entry.get("webpage_url") or entry.get("url") or f"https://www.youtube.com/watch?v={entry.get('id')}"
+
             track_dict = {
-                "title": entry.get("title") or entry.get("fulltitle") or f"Item {idx}",
-                "artist": entry.get("artist") or entry.get("uploader") or entry.get("creator") or "",
-                "album": title,
-                "url": entry.get("webpage_url") or entry.get("url") or f"https://www.youtube.com/watch?v={entry.get('id')}",
-                "thumbnail_url": entry.get("thumbnail") or "",
+                "title": track_title,
+                "artist": artist,
+                "album": playlist_title,
+                "url": target_url,
+                "thumbnail_url": _scraper_best_thumbnail(entry) or "",
                 "duration_sec": entry.get("duration"),
                 "platform": platform_label,
                 "album_index": entry.get("playlist_index") or idx
             }
             items.append(track_dict)
             if on_item: on_item(track_dict)
-                
-    return title, items
+
+    return playlist_title, items
 def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
     """
     CORE LOGIC: Scrape a Spotify grid on a PRE-INITIALIZED page.
@@ -84,16 +96,6 @@ def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, 
 
         # Get title from entity header
         scraped_title = page.evaluate("() => document.querySelector('h1[data-testid=\"entityTitle\"], main h1')?.innerText") or f"Unknown Spotify {content_type_label}"
-
-        # For albums: extract the primary artist from the header credits link
-        header_artist = ""
-        if is_album:
-            try:
-                # Spotify album page shows artist link(s) under the album title
-                artist_els = page.locator("main a[href*='/artist/']").all()
-                if artist_els:
-                    header_artist = artist_els[0].inner_text().strip()
-            except: pass
 
         # Get higher-res entity image from header (Album/Playlist cover)
         header_thumb = ""
@@ -158,10 +160,6 @@ def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, 
                         "duration_sec": duration_sec, "duration_str": duration_str or "??:??",
                         "platform": "spotify", "release_type": content_type_label.lower(),
                     }
-                    # For albums: enrich with parent_artist and folder category
-                    if is_album and header_artist:
-                        track_dict["parent_artist"] = header_artist
-                        track_dict["category"] = "אלבומים"
                     items.append(track_dict)
                     if on_item: on_item(track_dict)
                 except: pass
@@ -173,8 +171,8 @@ def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, 
                 page.wait_for_timeout(500)
             except: break
 
-        # Back-fill total_tracks now that we know the full count
-        if is_album and items:
+        # Back-fill total_tracks now that we know the full count (used by EP grouping)
+        if items:
             total = len(items)
             for td in items:
                 td["total_tracks"] = total
@@ -278,7 +276,7 @@ def scrape_spotify_artist(url: str, on_item: Optional[Callable[[Dict], None]] = 
                         artist_name = page.title().split("|")[0].strip()
                     
                     artist_name = re.sub(r"^Spotify\s*[-–]\s*", "", artist_name, flags=re.IGNORECASE)
-                    artist_name = re.sub(r"\s*[-–]\s*(דיסקוגרפיה|Discography)\s*$", "", artist_name, flags=re.IGNORECASE)
+                    artist_name = re.sub(r"\s*[-–]\s*(דיסקוגraphic|Discography)\s*$", "", artist_name, flags=re.IGNORECASE)
                     artist_name = re.sub(r"\s*[-–]\s*Discography.*$", "", artist_name, flags=re.IGNORECASE)
                     artist_name = re.sub(r"\s*\(Discography\).*$", "", artist_name, flags=re.IGNORECASE)
                     artist_name = artist_name.strip()
@@ -409,23 +407,30 @@ def scrape_ytm_artist(url: str, on_item: Optional[Callable[[Dict], None]] = None
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(release["url"], download=False)
                 if not info: continue
-                album_title = info.get("title") or release["title"]
+                raw_title = info.get("title") or release["title"]
+                # Strip YouTube Music's "Album - " prefix (yt-dlp returns it verbatim)
+                album_title = re.sub(r"^Album\s*-\s*", "", raw_title, flags=re.IGNORECASE).strip()
                 entries = info.get("entries") or [info]
+                total_tracks = len(entries)
                 for t_idx, entry in enumerate(entries, 1):
                     if not entry: continue
+                    artist = entry.get("artist") or artist_name
+                    title = entry.get("title") or "Unknown Title"
                     track_dict = {
-                        "title": entry.get("title") or "Unknown Title",
-                        "artist": entry.get("artist") or artist_name,
+                        "title": title,
+                        "artist": artist,
                         "album": album_title, "parent_artist": artist_name,
-                        "url": entry.get("webpage_url") or entry.get("url"),
-                        "thumbnail_url": entry.get("thumbnail") or "",
+                        "url": f"ytsearch1:{artist} {title} audio",
+                        "thumbnail_url": _scraper_best_thumbnail(entry) or "",
                         "duration_sec": entry.get("duration"), "platform": "ytmusic",
                         "release_type": release.get("type", "album"),
-                        "category": release.get("category_name", ""), "album_index": t_idx
+                        "category": release.get("category_name", ""), "album_index": t_idx,
+                        "total_tracks": total_tracks,
                     }
                     items.append(track_dict)
                     if on_item: on_item(track_dict)
-        except: pass
+        except Exception as e:
+            logger.error(f"[Scraper] YTM artist release extraction failed for {release.get('url', 'N/A')}: {e}", exc_info=True)
     return artist_name, items
 # ── YouTube Isolated Functions ───────────────────────────────────────────────
 def scrape_youtube_playlist(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
@@ -471,3 +476,28 @@ def scrape_youtube_channel(url: str, required_tabs: List[str], on_item: Optional
                         if on_item: on_item(td)
         browser.close()
     return channel_name, items
+
+def _scraper_best_thumbnail(info: dict) -> str:
+    """
+    Pick the highest-resolution thumbnail URL from a yt-dlp info dict.
+    Falls back gracefully through multiple possible keys.
+    """
+    # yt-dlp may provide a ranked list of thumbnails
+    thumbnails: list[dict] = info.get("thumbnails") or []
+    if thumbnails:
+        # Sort by resolution (width * height) descending; prefer HTTPS
+        def _score(t: dict) -> int:
+            w = t.get("width")  or 0
+            h = t.get("height") or 0
+            return w * h
+
+        ranked = sorted(
+            [t for t in thumbnails if t.get("url")],
+            key=_score,
+            reverse=True,
+        )
+        if ranked:
+            return ranked[0]["url"]
+
+    # Direct thumbnail key as last resort
+    return info.get("thumbnail") or ""

@@ -166,8 +166,8 @@ class UpdateChecker:
 
     def __init__(
         self,
-        repo_owner: str = "your-github-username",   # ← replace before release
-        repo_name:  str = "ytspot-downloader",       # ← replace before release
+        repo_owner: str = "cdtauman",
+        repo_name:  str = "ytspot_downloader",
         timeout:    float = 8.0,
     ) -> None:
         self._repo_owner = repo_owner

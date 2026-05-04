@@ -1,0 +1,3 @@
+[console_scripts]
+ytspot = main:main
+ytspot-cli = cli:main

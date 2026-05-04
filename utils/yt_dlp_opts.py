@@ -18,9 +18,22 @@ Design
 
 from __future__ import annotations
 
+import shutil
 from typing import Any, Optional
 
 CHROME_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+
+_JS_RUNTIMES_PREFERENCE = ("node", "bun", "deno")
+
+def _detect_js_runtimes() -> dict[str, dict]:
+    """Find available JS runtimes on PATH and return a js_runtimes dict for yt-dlp."""
+    runtimes: dict[str, dict] = {}
+    for name in _JS_RUNTIMES_PREFERENCE:
+        path = shutil.which(name)
+        if path:
+            runtimes[name] = {"path": path}
+            break  # one is enough
+    return runtimes or {"node": {}}  # fallback: let yt-dlp try to find node itself
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Main builder
@@ -43,6 +56,7 @@ def build_base_ydl_opts(
     """
     opts: dict[str, Any] = {
         # ── Network resilience ────────────────────────────────────────────────
+        "nocheckcertificate":              True,
         "retries":                         retries,
         "fragment_retries":                retries,
         "extractor_retries":               5,
@@ -54,6 +68,9 @@ def build_base_ydl_opts(
         "quiet":       quiet,
         "no_warnings": False,
         "no_color":    True,
+
+        # ── JS runtime for YouTube player decryption ──────────────────────────
+        "js_runtimes": _detect_js_runtimes(),
     }
 
     # ── Logger (optional) ─────────────────────────────────────────────────────
@@ -65,10 +82,6 @@ def build_base_ydl_opts(
         opts["cookiefile"] = cookies_file
     elif cookies_browser:
         opts["cookiesfrombrowser"] = (cookies_browser, None, None, None)
-    else:
-        # Fallback: force extraction from Chrome if nothing is specified.
-        # Change "chrome" to "edge" or "firefox" if that's your primary browser.
-        opts["cookiesfrombrowser"] = ("chrome", None, None, None)
 
     # ── Optional HTTP/HTTPS/SOCKS proxy ──────────────────────────────────────
     if proxy:

@@ -36,6 +36,8 @@ except ImportError:
 from utils.cookie_validator import check_cookies_valid
 from utils.paths import get_app_cookies_path
 from utils.yt_dlp_opts import build_base_ydl_opts as _build_base_opts
+from core.playlist_parser import SourcePlatform
+
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +176,7 @@ class DownloadRequest:
     # Universal / HLS / DASH stream (set when URL came from universal_extractor)
     # Values: "hls" | "dash" | "mp4" | "webm" | "ts" | None (= use yt-dlp)
     stream_type: Optional[str] = None
+    platform: Optional[SourcePlatform] = None
 
     # Per-request cancellation (parallel downloads)
     cancel_event: Optional[threading.Event] = field(default=None, repr=False)
@@ -743,34 +746,42 @@ class DownloadEngine:
 
         return hook
 
-    def _run_final_pipeline(self, req: DownloadRequest, final_path: str) -> None:
+    def _run_final_pipeline(self, req: DownloadRequest, final_path: str) -> list[str]:
         """
         Execute all custom post-processing steps sequentially.
         Called after yt-dlp has completely finished.
+        Returns a list of non-fatal error messages.
         """
         # 0. Stability delay to ensure file system is ready (mitigates ffprobe locking)
         time.sleep(1.5)
 
         if not os.path.exists(final_path):
             logger.warning(f"[Downloader] Final path does not exist, skipping pipeline: {final_path}")
-            return
+            return [f"Output file missing: {Path(final_path).name}"]
 
         logger.info(f"[Downloader] Starting final post-processing for: {Path(final_path).name}")
         failures: list[str] = []
 
-        # 1. Custom Square Thumbnail (priority for Spotify/YTM)
-        if req.square_thumbnails and req.thumbnail_url:
-            logger.debug(f"[Downloader] Injecting custom thumbnail from Spotify...")
+        # 1. Custom Thumbnail Embedding & Cropping
+        if req.thumbnail_url:
+            should_crop = False
+            if req.square_thumbnails:
+                is_audio = req.media_type == MediaType.AUDIO
+                platform_needs_crop = req.platform in (SourcePlatform.YOUTUBE, SourcePlatform.GENERIC)
+                if is_audio and platform_needs_crop:
+                    should_crop = True
+
+            logger.debug(f"[Downloader] Embedding custom thumbnail (crop={should_crop})...")
             try:
                 from core.thumbnail_cropper import embed_custom_thumbnail
-                ok = embed_custom_thumbnail(final_path, req.thumbnail_url)
+                ok = embed_custom_thumbnail(final_path, req.thumbnail_url, crop=should_crop)
                 if ok:
-                    logger.debug(f"[Downloader] Custom thumbnail injected successfully.")
+                    logger.debug(f"[Downloader] Custom thumbnail embedded successfully.")
                 else:
-                    logger.warning(f"[Downloader] Failed to inject custom thumbnail.")
-                    failures.append("thumbnail crop")
+                    logger.warning(f"[Downloader] Failed to embed custom thumbnail.")
+                    failures.append("thumbnail embed")
             except Exception as exc:
-                logger.error(f"[Downloader] Thumbnail error: {exc}")
+                logger.error(f"[Downloader] Thumbnail error: {exc}", exc_info=True)
                 failures.append(f"thumbnail: {exc}")
 
         # 2. MusicBrainz enrichment

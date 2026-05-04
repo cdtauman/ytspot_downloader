@@ -684,16 +684,29 @@ class AppWindow(FluentWindow):
         )
         QMessageBox.information(self, "אשף התחברות לאתרים", info_msg)
 
-        # Run the wizard in a background thread so the Qt UI stays responsive.
+        # Run the wizard in a background thread using a subprocess so the Qt UI stays responsive
+        # and avoids Playwright crashes inside a QThread on Windows.
         class WizardThread(QThread):
             done = QSignal(bool)
             def __init__(self, url): 
                 super().__init__()
                 self._url = url
             def run(self):
-                from core.cookie_wizard import run_cookie_wizard
-                result = run_cookie_wizard(start_url=self._url)
-                self.done.emit(result)
+                import subprocess
+                import sys
+                try:
+                    # Run the cookie wizard script as an external process
+                    cmd = [
+                        sys.executable, "-c", 
+                        f"from core.cookie_wizard import run_cookie_wizard; run_cookie_wizard('{self._url}')"
+                    ]
+                    # CREATE_NO_WINDOW prevents a black console window from popping up
+                    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+                    result = subprocess.run(cmd, capture_output=True, text=True, creationflags=creationflags)
+                    # Checking if it exited successfully
+                    self.done.emit(result.returncode == 0)
+                except Exception as e:
+                    self.done.emit(False)
 
         self._wizard_thread = WizardThread(target_url)
         

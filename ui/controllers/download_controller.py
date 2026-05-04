@@ -217,7 +217,7 @@ class DownloadController(QObject):
                         (kind == "album") or
                         (kind == "ep") or
                         (cat_name == "אלבומים") or
-                        (cat_name == "סינגלים ו-EP" and (card.total_tracks > 1 or kind == "ep")) or
+                        (cat_name in ("סינגלים ו-EP", "סינגלים וגרסאות EP") and (card.total_tracks > 1 or kind == "ep")) or
                         (card.total_tracks > 1 and album)
                     )
                     
@@ -271,8 +271,9 @@ class DownloadController(QObject):
                             card.set_status("done")
                             continue
 
-            # Smart clean filename: solo downloads or multi-batch get Title only.
-            is_clean = is_multi_batch or is_solo
+            # Clean filename (index + title only, no artist) for any multi-track
+            # download — the folder path already encodes the artist context.
+            is_clean = is_multi or is_solo
 
             req = DownloadRequest(
                 url=card.track_url,
