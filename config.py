@@ -106,6 +106,7 @@ _DEFAULTS: dict[str, Any] = {
     "lyrics_enabled":        False,         # NEW – auto-fetch + embed lyrics
     "replay_gain_enabled":   False,         # NEW – ReplayGain analysis
     "square_thumbnails":     True,          # NEW – crop 16:9 art to 1:1
+    "expand_thumbnails":     True,          # NEW – pad 1:1 art to 16:9
     "musicbrainz_enabled":   True,          # NEW – MusicBrainz tag enrichment
 
     # ── Playlist behaviour ────────────────────────────────────────────────────
@@ -542,6 +543,15 @@ class AppConfig:
     @square_thumbnails.setter
     def square_thumbnails(self, value: bool) -> None:
         self._data["square_thumbnails"] = bool(value)
+
+    @property
+    def expand_thumbnails(self) -> bool:
+        """Advanced setting – pad 1:1 art to 16:9 for video."""
+        return bool(self._data.get("expand_thumbnails", True))
+
+    @expand_thumbnails.setter
+    def expand_thumbnails(self, value: bool) -> None:
+        self._data["expand_thumbnails"] = bool(value)
 
     @property
     def musicbrainz_enabled(self) -> bool:

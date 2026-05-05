@@ -438,6 +438,22 @@ class SettingsPanel(QScrollArea):
         )
         advanced_grp.addSettingCard(self._sq_card)
 
+        # Expand Thumbnails (disabled by default)
+        self._expand_card = SwitchSettingCard(
+            icon=FluentIcon.PHOTO,
+            title="הרחב תמונות מרובעות למלבן עבור וידאו (MP4)",
+            content=(
+                "כאשר מורידים קובץ וידאו עם תמונה מרובעת במקור (כמו ספוטיפיי), "
+                "התמונה תורחב למלבן 16:9 על ידי יצירת רקע מטושטש ואלגנטי."
+            ),
+            parent=advanced_grp,
+        )
+        self._expand_card.setChecked(self._cfg.expand_thumbnails)
+        self._expand_card.checkedChanged.connect(
+            lambda v: self._persist("expand_thumbnails", v)
+        )
+        advanced_grp.addSettingCard(self._expand_card)
+
         layout.addWidget(advanced_grp)
 
         # ── 7. Authentication / Cookies ────────────────────────────────────────

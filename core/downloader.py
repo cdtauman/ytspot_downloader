@@ -169,6 +169,7 @@ class DownloadRequest:
     replay_gain:            bool = False   # ReplayGain analysis after download
     musicbrainz:            bool = False   # MusicBrainz tag enrichment after download
     square_thumbnails:      bool = False   # crop embedded art to 1:1 square
+    expand_thumbnails:      bool = False   # pad 1:1 art to 16:9 for video
     clean_filename:         bool = False   # use minimal filename (Title only)
     randomize_user_agent:   bool = False   # rotate UA string per download (anti-ban) (kept for signature but unused)
     is_solo:                bool = False   # single track download flag (no folder, no index, no artist name)
@@ -765,16 +766,22 @@ class DownloadEngine:
         # 1. Custom Thumbnail Embedding & Cropping
         if req.thumbnail_url:
             should_crop = False
-            if req.square_thumbnails:
-                is_audio = req.media_type == MediaType.AUDIO
-                platform_needs_crop = req.platform in (SourcePlatform.YOUTUBE, SourcePlatform.GENERIC)
-                if is_audio and platform_needs_crop:
-                    should_crop = True
+            should_pad = False
+            is_audio = req.media_type == MediaType.AUDIO
+            is_video = req.media_type == MediaType.VIDEO
 
-            logger.debug(f"[Downloader] Embedding custom thumbnail (crop={should_crop})...")
+            if req.square_thumbnails and is_audio:
+                platform_needs_crop = req.platform in (SourcePlatform.YOUTUBE, SourcePlatform.GENERIC)
+                if platform_needs_crop:
+                    should_crop = True
+                    
+            if req.expand_thumbnails and is_video:
+                should_pad = True
+
+            logger.debug(f"[Downloader] Embedding custom thumbnail (crop={should_crop}, pad={should_pad})...")
             try:
                 from core.thumbnail_cropper import embed_custom_thumbnail
-                ok = embed_custom_thumbnail(final_path, req.thumbnail_url, crop=should_crop)
+                ok = embed_custom_thumbnail(final_path, req.thumbnail_url, crop=should_crop, pad=should_pad)
                 if ok:
                     logger.debug(f"[Downloader] Custom thumbnail embedded successfully.")
                 else:
@@ -783,6 +790,21 @@ class DownloadEngine:
             except Exception as exc:
                 logger.error(f"[Downloader] Thumbnail error: {exc}", exc_info=True)
                 failures.append(f"thumbnail: {exc}")
+        elif (req.square_thumbnails and req.media_type == MediaType.AUDIO) or (req.expand_thumbnails and req.media_type == MediaType.VIDEO):
+            should_pad = req.expand_thumbnails and req.media_type == MediaType.VIDEO
+            try:
+                from core.thumbnail_cropper import crop_embedded_thumbnail
+                action = "Padding" if should_pad else "Cropping"
+                logger.debug(f"[Downloader] {action} embedded yt-dlp thumbnail...")
+                ok = crop_embedded_thumbnail(final_path, pad=should_pad)
+                if ok:
+                    logger.debug(f"[Downloader] Embedded thumbnail {action.lower()} successfully.")
+                else:
+                    logger.warning(f"[Downloader] Failed to process embedded thumbnail.")
+                    failures.append("thumbnail process")
+            except Exception as exc:
+                logger.error(f"[Downloader] Thumbnail process error: {exc}", exc_info=True)
+                failures.append(f"thumbnail process: {exc}")
 
         # 2. MusicBrainz enrichment
         if req.musicbrainz:

@@ -386,14 +386,83 @@ def scrape_spotify_artist(url: str, on_item: Optional[Callable[[Dict], None]] = 
     return artist_name or "Unknown Artist", items
 # ── YouTube Music Isolated Functions ──────────────────────────────────────────
 def scrape_ytm_playlist(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
-    """Dedicated entry for YouTube Music Playlists."""
-    return _scrape_standard_ydl(url, "ytmusic", on_item)
+    """Dedicated entry for YouTube Music Playlists/Albums using native API for 1:1 thumbnails."""
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+        playlist_id = url.split("list=")[-1].split("&")[0]
+        p = yt.get_playlist(playlist_id)
+        
+        title = p.get('title', 'Unknown Playlist')
+        items = []
+        for idx, track in enumerate(p.get('tracks', []), 1):
+            if not track.get('videoId'):
+                continue
+            track_title = track.get('title', f"Track {idx}")
+            artist = ", ".join(a['name'] for a in track.get('artists', []) if 'name' in a)
+            album = track.get('album', {}).get('name', title) if track.get('album') else title
+            
+            thumb_url = ""
+            if track.get('thumbnails'):
+                thumb_url = track['thumbnails'][-1]['url']
+                from utils.artwork_cleaner import clean_artwork_url
+                thumb_url = clean_artwork_url(thumb_url, "ytmusic")
+            
+            track_dict = {
+                "title": track_title,
+                "artist": artist,
+                "album": album,
+                "url": f"https://music.youtube.com/watch?v={track['videoId']}",
+                "thumbnail_url": thumb_url,
+                "duration_sec": track.get('duration_seconds') or 0,
+                "platform": "ytmusic",
+                "album_index": idx
+            }
+            items.append(track_dict)
+            if on_item: on_item(track_dict)
+        return title, items
+    except Exception as e:
+        logger.error(f"[Scraper] ytmusicapi playlist failed: {e}. Falling back to yt-dlp.")
+        return _scrape_standard_ydl(url, "ytmusic", on_item)
+
 def scrape_ytm_album(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
     """Dedicated entry for YouTube Music Albums."""
-    return _scrape_standard_ydl(url, "ytmusic", on_item)
+    # YTM Albums use the exact same playlist endpoint logic
+    return scrape_ytm_playlist(url, on_item)
+
 def scrape_ytm_track(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
     """Dedicated entry for YTM single tracks."""
-    return _scrape_standard_ydl(url, "ytmusic", on_item)
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+        video_id = url.split("v=")[-1].split("&")[0]
+        p = yt.get_song(video_id)
+        
+        details = p.get('videoDetails', {})
+        track_title = details.get('title', 'Unknown Track')
+        artist = details.get('author', 'Unknown Artist')
+        
+        thumb_url = ""
+        if details.get('thumbnail', {}).get('thumbnails'):
+            thumb_url = details['thumbnail']['thumbnails'][-1]['url']
+            from utils.artwork_cleaner import clean_artwork_url
+            thumb_url = clean_artwork_url(thumb_url, "ytmusic")
+        
+        track_dict = {
+            "title": track_title,
+            "artist": artist,
+            "album": track_title,
+            "url": f"https://music.youtube.com/watch?v={video_id}",
+            "thumbnail_url": thumb_url,
+            "duration_sec": int(details.get('lengthSeconds', 0)),
+            "platform": "ytmusic",
+            "album_index": 1
+        }
+        if on_item: on_item(track_dict)
+        return track_title, [track_dict]
+    except Exception as e:
+        logger.error(f"[Scraper] ytmusicapi track failed: {e}. Falling back to yt-dlp.")
+        return _scrape_standard_ydl(url, "ytmusic", on_item)
 def scrape_ytm_artist(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
     """Dedicated entry for YTM Artist discographies."""
     from utils.ytm_scraper import fetch_ytm_artist_releases
@@ -401,36 +470,75 @@ def scrape_ytm_artist(url: str, on_item: Optional[Callable[[Dict], None]] = None
     if not releases: return "Unknown Artist", []
     artist_name = releases[0].get("parent_artist", "Unknown Artist")
     items = []
-    ydl_opts = _build_parse_ydl_opts(logger=_SilentLogger())
+    
+    try:
+        from ytmusicapi import YTMusic
+        yt = YTMusic()
+    except Exception as e:
+        logger.error(f"[Scraper] Failed to import ytmusicapi: {e}")
+        return artist_name, []
+
     for r_idx, release in enumerate(releases, 1):
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(release["url"], download=False)
-                if not info: continue
-                raw_title = info.get("title") or release["title"]
-                # Strip YouTube Music's "Album - " prefix (yt-dlp returns it verbatim)
-                album_title = re.sub(r"^Album\s*-\s*", "", raw_title, flags=re.IGNORECASE).strip()
-                entries = info.get("entries") or [info]
-                total_tracks = len(entries)
-                for t_idx, entry in enumerate(entries, 1):
-                    if not entry: continue
-                    artist = entry.get("artist") or artist_name
-                    title = entry.get("title") or "Unknown Title"
-                    track_dict = {
-                        "title": title,
-                        "artist": artist,
-                        "album": album_title, "parent_artist": artist_name,
-                        "url": f"ytsearch1:{artist} {title} audio",
-                        "thumbnail_url": _scraper_best_thumbnail(entry) or "",
-                        "duration_sec": entry.get("duration"), "platform": "ytmusic",
-                        "release_type": release.get("type", "album"),
-                        "category": release.get("category_name", ""), "album_index": t_idx,
-                        "total_tracks": total_tracks,
-                    }
-                    items.append(track_dict)
-                    if on_item: on_item(track_dict)
+            rel_url = release.get("url", "")
+            tracks = []
+            album_title = release.get("title", "Unknown Release")
+            
+            if "list=" in rel_url:
+                playlist_id = rel_url.split("list=")[-1].split("&")[0]
+                p = yt.get_playlist(playlist_id)
+                tracks = p.get('tracks', [])
+                album_title = p.get('title') or album_title
+            elif "v=" in rel_url:
+                video_id = rel_url.split("v=")[-1].split("&")[0]
+                p = yt.get_song(video_id)
+                if p and p.get('videoDetails'):
+                    tracks = [p['videoDetails']]
+                    album_title = p['videoDetails'].get('title') or album_title
+            else:
+                continue
+
+            total_tracks = len(tracks)
+
+            for t_idx, track in enumerate(tracks, 1):
+                vid = track.get('videoId')
+                if not vid: continue
+                
+                track_title = track.get('title', f"Track {t_idx}")
+                artist = artist_name
+                if track.get('artists'):
+                    artist = ", ".join(a['name'] for a in track['artists'] if 'name' in a)
+                elif track.get('author'):
+                    artist = track['author']
+                
+                thumb_url = ""
+                if track.get('thumbnails'):
+                    thumb_url = track['thumbnails'][-1]['url']
+                elif track.get('thumbnail', {}).get('thumbnails'):
+                    thumb_url = track['thumbnail']['thumbnails'][-1]['url']
+                
+                from utils.artwork_cleaner import clean_artwork_url
+                thumb_url = clean_artwork_url(thumb_url, "ytmusic")
+                
+                track_dict = {
+                    "title": track_title,
+                    "artist": artist,
+                    "album": album_title,
+                    "parent_artist": artist_name,
+                    "url": f"https://music.youtube.com/watch?v={vid}",
+                    "thumbnail_url": thumb_url,
+                    "duration_sec": int(track.get('duration_seconds') or track.get('lengthSeconds') or 0),
+                    "platform": "ytmusic",
+                    "release_type": release.get("type", "album"),
+                    "category": release.get("category_name", ""),
+                    "album_index": t_idx,
+                    "total_tracks": total_tracks,
+                }
+                items.append(track_dict)
+                if on_item: on_item(track_dict)
         except Exception as e:
             logger.error(f"[Scraper] YTM artist release extraction failed for {release.get('url', 'N/A')}: {e}", exc_info=True)
+            
     return artist_name, items
 # ── YouTube Isolated Functions ───────────────────────────────────────────────
 def scrape_youtube_playlist(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:

@@ -37,7 +37,7 @@ _SUCCESS     = SUCCESS_COLOR
 _ERROR       = ERROR_COLOR
 _WARNING     = WARNING_COLOR
 _RADIUS      = 10
-_THUMB_W     = 64
+_THUMB_W     = 114
 _THUMB_H     = 64
 
 _STATUS_COLORS: dict[str, str] = {
@@ -411,26 +411,30 @@ class TrackCard(QFrame):
         return self._status
 
     def set_thumbnail(self, pixmap: QPixmap) -> None:
-        """Load and center-crop the thumbnail to prevent stretching."""
+        """Load and scale the thumbnail while preserving native aspect ratio."""
         if pixmap.isNull():
             return
             
-        target_w = self._thumb_lbl.width()
-        target_h = self._thumb_lbl.height()
+        w = pixmap.width()
+        h = pixmap.height()
+        target_h = _THUMB_H
         
-        # 1. Scale to cover the target area (KeepAspectRatioByExpanding)
+        # If the image is square (or very close), make the container square
+        if w > 0 and h > 0 and (w / h) < 1.2:
+            target_w = _THUMB_H
+        else:
+            target_w = _THUMB_W
+            
+        self._thumb_lbl.setFixedSize(target_w, target_h)
+        
+        # Scale to fit within target bounds (KeepAspectRatio)
         scaled = pixmap.scaled(
             target_w, target_h,
-            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation
         )
         
-        # 2. Center crop
-        x = (scaled.width()  - target_w) // 2
-        y = (scaled.height() - target_h) // 2
-        cropped = scaled.copy(x, y, target_w, target_h)
-        
-        self._thumb_lbl.setPixmap(cropped)
+        self._thumb_lbl.setPixmap(scaled)
 
     def set_progress(self, fraction: float) -> None:
         self._progress_bar.setValue(int(fraction * 1000))

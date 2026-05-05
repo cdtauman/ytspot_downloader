@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from PIL import Image
+    from PIL import Image, ImageFilter, ImageEnhance
     _PIL_AVAILABLE = True
 except ImportError:
     Image = None  # type: ignore[assignment]
@@ -32,9 +32,9 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def crop_embedded_thumbnail(file_path: str) -> bool:
+def crop_embedded_thumbnail(file_path: str, pad: bool = False) -> bool:
     """
-    Read the cover art from file_path, crop to 1:1, and re-embed.
+    Read the cover art from file_path, crop to 1:1 (or pad to 16:9), and re-embed.
 
     Returns True on success, False if no art found or on failure.
     """
@@ -47,11 +47,11 @@ def crop_embedded_thumbnail(file_path: str) -> bool:
 
     try:
         if suffix == ".mp3":
-            return _crop_mp3(path)
+            return _crop_mp3(path, pad=pad)
         elif suffix == ".flac":
-            return _crop_flac(path)
+            return _crop_flac(path, pad=pad)
         elif suffix in (".m4a", ".mp4", ".aac"):
-            return _crop_m4a(path)
+            return _crop_m4a(path, pad=pad)
         else:
             logger.debug("[ThumbnailCropper] Unsupported format: %s", suffix)
             return False
@@ -60,10 +60,10 @@ def crop_embedded_thumbnail(file_path: str) -> bool:
         return False
 
 
-def embed_custom_thumbnail(media_path: str, image_url: str, crop: bool = True) -> bool:
+def embed_custom_thumbnail(media_path: str, image_url: str, crop: bool = True, pad: bool = False) -> bool:
     """
     Download an image from image_url, convert it to JPEG (via PIL), optionally
-    crop it to a square, and embed it into the media file using mutagen.
+    crop it to a square (or pad to 16:9), and embed it into the media file using mutagen.
     Always converts to JPEG so that WebP/PNG thumbnails (common from YTM) are
     embedded with the correct format rather than causing blank artwork in players.
     """
@@ -74,7 +74,7 @@ def embed_custom_thumbnail(media_path: str, image_url: str, crop: bool = True) -
         if not raw_bytes:
             return False
         if _PIL_AVAILABLE:
-            jpeg_bytes = _to_jpeg(raw_bytes, crop=crop)
+            jpeg_bytes = _to_jpeg(raw_bytes, crop=crop, pad=pad)
             if jpeg_bytes:
                 raw_bytes = jpeg_bytes
         return _embed_cover(media_path, raw_bytes)
@@ -106,15 +106,28 @@ def _ytimg_fallback_urls(url: str) -> list[str]:
 def _fetch_image(url: str) -> Optional[bytes]:
     """Download image bytes from url, with automatic YouTube quality fallback on 404."""
     import urllib.error
+    import urllib.request
+    import ssl
+    
+    # Ignore SSL certificate errors (helpful for proxies like NetFree)
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
     for candidate in _ytimg_fallback_urls(url):
         try:
             req = urllib.request.Request(candidate, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
                 data = resp.read()
         except urllib.error.HTTPError as exc:
             if exc.code in (404, 403):
                 continue
-            raise
+            logger.warning("[Thumbnail] HTTP error fetching image: %s", exc)
+            return None
+        except Exception as exc:
+            logger.warning("[Thumbnail] Error fetching image: %s", exc)
+            return None
+            
         if not data or len(data) < 12:
             continue
         is_jpeg = data[:2] == b'\xff\xd8'
@@ -127,20 +140,42 @@ def _fetch_image(url: str) -> Optional[bytes]:
     return None
 
 
-def _to_jpeg(data: bytes, crop: bool = False) -> Optional[bytes]:
+def _to_jpeg(data: bytes, crop: bool = False, pad: bool = False) -> Optional[bytes]:
     """
     Convert image data (JPEG/PNG/WebP) to JPEG bytes using PIL.
-    Optionally crops to a centred square before encoding.
+    Optionally crops to a centred square or pads a square to 16:9.
     Returns None on failure so the caller can fall back to raw bytes.
     """
     try:
         img = Image.open(io.BytesIO(data))
-        if crop:
-            w, h = img.size
+        w, h = img.size
+        
+        if crop and w != h:
             side = min(w, h)
             left = (w - side) // 2
             top  = (h - side) // 2
             img  = img.crop((left, top, left + side, top + side))
+            
+        elif pad and w / h < 1.2:
+            # Pad 1:1 to 16:9 using blurred background
+            target_w = int(h * (16 / 9))
+            target_h = h
+            
+            # Create the blurred background
+            bg = img.copy()
+            # Scale background to fill 16:9 canvas
+            bg = bg.resize((target_w, target_h), Image.Resampling.LANCZOS)
+            # Apply strong blur
+            bg = bg.filter(ImageFilter.GaussianBlur(radius=20))
+            # Darken the background slightly so the main cover pops out
+            enhancer = ImageEnhance.Brightness(bg)
+            bg = enhancer.enhance(0.6)
+            
+            # Paste original image in the center
+            offset_x = (target_w - w) // 2
+            bg.paste(img, (offset_x, 0))
+            img = bg
+            
         buf = io.BytesIO()
         img.convert("RGB").save(buf, format="JPEG", quality=92)
         return buf.getvalue()
@@ -233,7 +268,7 @@ def _inject_m4a_cover(path: Path, cropped: bytes) -> bool:
     res = _retry_access(task, path)
     return bool(res)
 
-def _crop_mp3(path: Path) -> bool:
+def _crop_mp3(path: Path, pad: bool = False) -> bool:
     from mutagen.id3 import ID3, APIC, ID3NoHeaderError
 
     try:
@@ -248,10 +283,10 @@ def _crop_mp3(path: Path) -> bool:
 
     key = apic_keys[0]
     apic = tags[key]
-    cropped = _to_jpeg(apic.data, crop=True) or apic.data
+    cropped = _to_jpeg(apic.data, crop=not pad, pad=pad) or apic.data
     return _inject_mp3_cover(path, cropped)
 
-def _crop_flac(path: Path) -> bool:
+def _crop_flac(path: Path, pad: bool = False) -> bool:
     from mutagen.flac import FLAC, Picture
 
     audio = FLAC(str(path))
@@ -261,11 +296,11 @@ def _crop_flac(path: Path) -> bool:
 
     for pic in pics:
         if pic.type == 3:   # Cover (front)
-            cropped = _to_jpeg(pic.data, crop=True) or pic.data
+            cropped = _to_jpeg(pic.data, crop=not pad, pad=pad) or pic.data
             return _inject_flac_cover(path, cropped)
     return False
 
-def _crop_m4a(path: Path) -> bool:
+def _crop_m4a(path: Path, pad: bool = False) -> bool:
     from mutagen.mp4 import MP4, MP4Cover
 
     audio = MP4(str(path))
@@ -276,5 +311,5 @@ def _crop_m4a(path: Path) -> bool:
     if not covers:
         return False
 
-    cropped = _to_jpeg(bytes(covers[0]), crop=True) or bytes(covers[0])
+    cropped = _to_jpeg(bytes(covers[0]), crop=not pad, pad=pad) or bytes(covers[0])
     return _inject_m4a_cover(path, cropped)
