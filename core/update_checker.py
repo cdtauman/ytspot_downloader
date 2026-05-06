@@ -364,8 +364,8 @@ if __name__ == "__main__":
     # Use a known-public repo with releases as a connectivity proxy.
     # Your own repo details will be substituted once you publish to GitHub.
     test_checker = UpdateChecker(
-        repo_owner="nicowillis",      # public test repo with releases
-        repo_name="ytspot-downloader-test",
+        repo_owner="github",          # public repo used as connectivity test
+        repo_name="gitignore",
         timeout=8.0,
     )
 

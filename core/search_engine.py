@@ -1147,7 +1147,7 @@ if __name__ == "__main__":
     engine = SearchEngine()
 
     # 1. YTM categorized search
-    print("\n── 1. YTM search: 'daft punk get lucky' ──")
+    print("\n── 1. YTM search: 'example artist song' ──")
     ytm_results: list[SearchResult] = []
 
     def _on_ytm(r: SearchResult) -> None:
@@ -1158,13 +1158,13 @@ if __name__ == "__main__":
         ytm_results.append(r)
 
     try:
-        engine.search_youtube_music("daft punk get lucky", max_results=15, on_result=_on_ytm)
+        engine.search_youtube_music("example artist song", max_results=15, on_result=_on_ytm)
         print(f"  ✅  {len(ytm_results)} results\n")
     except SearchError as exc:
         print(f"  ⚠  SearchError: {exc}\n")
 
     # 2. Plain YouTube categorized
-    print("── 2. YouTube categorized: 'lofi hip hop' ──")
+    print("── 2. YouTube categorized: 'example music genre' ──")
     yt_results: list[SearchResult] = []
 
     def _on_yt(r: SearchResult) -> None:
@@ -1172,7 +1172,7 @@ if __name__ == "__main__":
         yt_results.append(r)
 
     try:
-        engine.search_youtube_categorized("lofi hip hop", max_results=10, on_result=_on_yt)
+        engine.search_youtube_categorized("example music genre", max_results=10, on_result=_on_yt)
         print(f"  ✅  {len(yt_results)} results\n")
     except SearchError as exc:
         print(f"  ⚠  SearchError: {exc}\n")

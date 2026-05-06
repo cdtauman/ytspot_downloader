@@ -193,3 +193,204 @@ def find_streams(
     except Exception as exc:
         logger.warning("universal_extractor.find_streams failed: %s", exc)
         return []
+
+
+def find_best_stream_with_title(
+    page_url:   str,
+    timeout_ms: int = 30_000,
+) -> tuple[str, str, str]:
+    """
+    Open a single video page, intercept its best media stream, and return
+    the stream URL, stream type, and the page title.
+
+    This is the per-video equivalent of mpmux.com staticdownloader:
+    open page → intercept HLS/DASH/mp4 stream → return for ffmpeg download.
+
+    Returns
+    -------
+    (stream_url, stream_type, page_title)
+    On failure, returns ('', 'unknown', '')
+    """
+    try:
+        streams = asyncio.run(intercept_page(page_url, timeout_ms=timeout_ms))
+    except Exception as exc:
+        logger.warning("universal_extractor.find_best_stream_with_title failed: %s", exc)
+        return "", "unknown", ""
+
+    if not streams:
+        return "", "unknown", ""
+
+    # Best stream is already sorted: HLS/DASH first, then largest by size
+    best = streams[0]
+    return best.url, best.stream_type, best.page_title
+
+
+# ── Generic video listing scraper ─────────────────────────────────────────────
+
+def scrape_generic_video_listing(
+    page_url:   str,
+    timeout_ms: int = 30_000,
+) -> list[dict]:
+    """
+    Generic Playwright scraper for any video listing page.
+
+    Opens the page and looks for video page links using universal patterns:
+    - href matching /video/, /watch/, /videos/, /embed/ etc.
+    - Extracts title from: anchor[title], nearby h2/h3, aria-label, img[alt]
+    - Extracts thumbnail from: img[src/data-src] near the anchor
+
+    Returns a list of dicts:
+        { 'title': str, 'url': str, 'thumbnail_url': str }
+
+    Returns [] when:
+    - Playwright not available
+    - Page has no recognisable video links (likely a single video page)
+    - Network/timeout error
+    """
+    try:
+        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+    except ImportError:
+        logger.warning("[generic_listing] Playwright not installed")
+        return []
+
+    _USER_AGENT = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+
+    # URL path patterns that strongly indicate a video page link
+    _VIDEO_PATH_RE = re.compile(
+        r"/(?:video|videos|watch|v|embed|clip|movie|film|porn|tube|play|stream|item|content)"
+        r"[s]?[/\-_]",
+        re.IGNORECASE,
+    )
+
+    def _block_media(route):
+        if route.request.resource_type in ("media", "font"):
+            route.abort()
+        else:
+            route.continue_()
+
+    def _title_from_element(el) -> str:
+        """Try multiple attributes/inner text to get a meaningful title."""
+        for method in (
+            lambda: el.get_attribute("title") or "",
+            lambda: el.get_attribute("aria-label") or "",
+            lambda: el.inner_text().strip(),
+        ):
+            try:
+                val = method()
+                if val and len(val) > 2:
+                    return val.strip()
+            except Exception:
+                pass
+        return ""
+
+    results: list[dict] = []
+    seen: set = set()
+
+    parsed = urlparse(page_url)
+    base = f"{parsed.scheme}://{parsed.netloc}"
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        ctx = browser.new_context(user_agent=_USER_AGENT, viewport={"width": 1280, "height": 900})
+        page = ctx.new_page()
+        page.route("**/*", _block_media)
+
+        try:
+            page.goto(page_url, wait_until="domcontentloaded", timeout=timeout_ms)
+        except Exception as exc:
+            logger.warning("[generic_listing] Page load failed: %s", exc)
+            browser.close()
+            return []
+
+        # Short wait for JS to render video cards
+        try:
+            page.wait_for_timeout(2000)
+        except Exception:
+            pass
+
+        try:
+            # Find ALL anchor tags on the page
+            anchors = page.locator("a[href]").all()
+        except Exception:
+            browser.close()
+            return []
+
+        for anchor in anchors:
+            try:
+                href = anchor.get_attribute("href") or ""
+                if not href:
+                    continue
+
+                # Make absolute
+                if href.startswith("/"):
+                    href = base + href
+                elif not href.startswith("http"):
+                    continue
+
+                # Skip same-page anchors, JS, mailto, etc.
+                if href == page_url or "#" in href.split("?")[0]:
+                    continue
+
+                # Must look like a video page URL
+                link_path = urlparse(href).path
+                if not _VIDEO_PATH_RE.search(link_path):
+                    continue
+
+                # Deduplicate
+                if href in seen:
+                    continue
+                seen.add(href)
+
+                # Extract title
+                title = _title_from_element(anchor)
+                if not title:
+                    # Try nearest heading sibling/parent
+                    for selector in ("h2", "h3", "h4", ".title", "[class*='title']", "[class*='name']"):
+                        try:
+                            el = anchor.locator(f"xpath=./ancestor-or-self::*/descendant::{selector}[1]").first
+                            if el.count():
+                                t = el.inner_text().strip()
+                                if t and len(t) > 2:
+                                    title = t
+                                    break
+                        except Exception:
+                            pass
+
+                if not title:
+                    # Fall back to URL slug
+                    slug = link_path.rstrip("/").split("/")[-1]
+                    title = re.sub(r"[-_]", " ", re.sub(r"[^a-zA-Z0-9\-_ ]", "", slug)).strip()
+
+                if not title:
+                    continue
+
+                # Extract thumbnail (img near the anchor)
+                thumbnail_url = ""
+                try:
+                    img = anchor.locator("img").first
+                    if img.count():
+                        thumbnail_url = (
+                            img.get_attribute("data-src")
+                            or img.get_attribute("src")
+                            or ""
+                        )
+                except Exception:
+                    pass
+
+                results.append({
+                    "title": title,
+                    "url": href,
+                    "thumbnail_url": thumbnail_url,
+                })
+
+            except Exception as exc:
+                logger.debug("[generic_listing] anchor error: %s", exc)
+
+        browser.close()
+
+    logger.info("[generic_listing] Found %d video links on %s", len(results), page_url)
+    return results

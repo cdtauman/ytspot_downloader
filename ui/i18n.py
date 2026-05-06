@@ -40,8 +40,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "unsupported_url_title": "Invalid URL",
         "unsupported_url_detail": (
             "Please enter a valid http:// or https:// URL.\n\n"
-            "Most video sites are supported — YouTube, Vimeo, Dailymotion, Twitch, and thousands more via yt-dlp.\n\n"
-            "Examples:\n  • youtube.com/watch?v=…\n  • vimeo.com/123456"
+            "YouTube, YouTube Music, and Spotify are fully supported.\n"
+            "Thousands of additional sites are supported via yt-dlp.\n\n"
+            "Example:\n  • youtube.com/watch?v=…"
         ),
         "unsupported_generic_title": "Unsupported Site / Listing Page",
         "unsupported_generic_detail": (
@@ -266,8 +267,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "unsupported_url_title": "כתובת URL לא תקינה",
         "unsupported_url_detail": (
             "אנא הזן כתובת http:// או https:// תקינה.\n\n"
-            "רוב אתרי הווידאו נתמכים — YouTube, Vimeo, Dailymotion, Twitch ואלפים נוספים דרך yt-dlp.\n\n"
-            "דוגמאות:\n  • youtube.com/watch?v=…\n  • vimeo.com/123456"
+            "YouTube, YouTube Music ו-Spotify נתמכים במלואם.\n"
+            "אלפי אתרים נוספים נתמכים דרך yt-dlp.\n\n"
+            "דוגמה:\n  • youtube.com/watch?v=…"
         ),
         "unsupported_generic_title": "אתר לא נתמך / דף רשימה",
         "unsupported_generic_detail": (

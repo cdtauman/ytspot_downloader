@@ -11,13 +11,13 @@ Uses the same core engine as the desktop app:
 Usage
 -----
     # Single track
-    python cli.py "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    python cli.py "https://www.youtube.com/watch?v=TESTVIDEOAAA"
 
     # Playlist (downloads all tracks)
     python cli.py "https://www.youtube.com/playlist?list=PLxxxxx"
 
     # Spotify album → YouTube match → download
-    python cli.py "https://open.spotify.com/album/1DFixLWuPkv3KT3TnV35m3"
+    python cli.py "https://open.spotify.com/album/TESTALBUMID00001"
 
     # Options
     python cli.py URL --format mp4 --quality 720p --output ~/Music
@@ -109,7 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  %(prog)s https://youtu.be/dQw4w9WgXcQ\n"
+            "  %(prog)s https://youtu.be/TESTVIDEOAAA\n"
             "  %(prog)s https://youtube.com/playlist?list=PLxxx --format mp4\n"
             "  %(prog)s https://open.spotify.com/album/xxx --audio-format flac\n"
             "  %(prog)s URL --list\n"

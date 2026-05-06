@@ -63,13 +63,13 @@ python main.py --debug    # verbose console logging
 ### CLI (Headless)
 ```bash
 # Single track
-python cli.py "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+python cli.py "https://www.youtube.com/watch?v=TESTVIDEOAAA"
 
 # Playlist (all tracks)
 python cli.py "https://www.youtube.com/playlist?list=PLxxxxx"
 
 # Spotify album → YouTube match → download
-python cli.py "https://open.spotify.com/album/1DFixLWuPkv3KT3TnV35m3"
+python cli.py "https://open.spotify.com/album/TESTALBUMID00001"
 
 # Options
 python cli.py URL --format mp4 --quality 1080p --output ~/Music
@@ -241,9 +241,9 @@ Paste multiple URLs directly into the URL bar, or load a `.txt` file:
 **Text file format:**
 ```
 # My download batch – 2025-06-01
-https://www.youtube.com/watch?v=dQw4w9WgXcQ
-https://open.spotify.com/album/1DFixLWuPkv3KT3TnV35m3
-https://music.youtube.com/playlist?list=RDCLAK5uy_k
+https://www.youtube.com/watch?v=TESTVIDEOAAA
+https://open.spotify.com/album/TESTALBUMID00001
+https://music.youtube.com/playlist?list=RDTESTPLAYLIST
 ```
 
 - Lines starting with `#` are comments

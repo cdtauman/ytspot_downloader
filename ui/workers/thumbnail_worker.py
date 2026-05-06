@@ -82,6 +82,20 @@ class ThumbnailWorker(QThread):
 
             raw: bytes = response.content
             if raw:
+                # Many Qt Windows installations lack the WebP imageformats plugin.
+                # If the image is WebP, we decode it with Pillow and emit JPEG bytes.
+                is_webp = raw[:4] == b'RIFF' and raw[8:12] == b'WEBP'
+                if is_webp:
+                    try:
+                        from PIL import Image
+                        import io
+                        img = Image.open(io.BytesIO(raw))
+                        buf = io.BytesIO()
+                        img.convert("RGB").save(buf, format="JPEG", quality=90)
+                        raw = buf.getvalue()
+                    except Exception as e:
+                        pass # Fallback to raw bytes if PIL fails or is unavailable
+                
                 self.thumbnail_ready.emit(self._index, raw)
 
         except Exception:  # noqa: BLE001

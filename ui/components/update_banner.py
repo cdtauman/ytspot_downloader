@@ -261,7 +261,7 @@ if __name__ == "__main__":
         release_url="https://github.com/your-username/ytspot-downloader/releases/tag/v2.1.0",
         release_notes=(
             "## Highlights\n\n"
-            "- **Clipboard Monitor** now detects SoundCloud links\n"
+            "- **Clipboard Monitor** now detects media links from additional sources\n"
             "- Fixed crash when output directory contains Unicode characters\n"
             "- Search panel now shows album art for Spotify results\n"
         ),

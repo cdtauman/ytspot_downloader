@@ -315,8 +315,8 @@ def _build_light_qss(accent: str) -> str:
     * Gradient header stripe on key containers (lavender → warm peach)
     * Colorful platform badges, vivid status indicators
 
-    The goal: looks like a cross between Apple Music (light) and
-    Material You, with a music-app personality.
+    The goal: looks like a modern music app with a light, Material-inspired
+    personality.
     """
     dim   = _dim_hex(accent)
     faint = accent + "1a"   # 10 % opacity QSS hex8 approximation (not CSS)

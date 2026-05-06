@@ -104,10 +104,10 @@ class TestHistoryDB:
     def sample_record(self):
         from core.history_db import DownloadRecord
         return DownloadRecord(
-            title="Never Gonna Give You Up",
-            artist="Rick Astley",
-            url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-            output_path="/tmp/rick.mp3",
+            title="Example Song",
+            artist="Example Artist",
+            url="https://www.youtube.com/watch?v=TESTVIDEOAAA",
+            output_path="/tmp/example.mp3",
             media_type="audio",
             platform="youtube",
         )
@@ -117,8 +117,8 @@ class TestHistoryDB:
         assert rec_id > 0
         records = db.fetch_all(limit=10)
         assert len(records) == 1
-        assert records[0].title == "Never Gonna Give You Up"
-        assert records[0].artist == "Rick Astley"
+        assert records[0].title == "Example Song"
+        assert records[0].artist == "Example Artist"
 
     def test_count(self, db, sample_record):
         assert db.count() == 0
@@ -142,9 +142,9 @@ class TestHistoryDB:
 
     def test_fts_search(self, db, sample_record):
         db.insert(sample_record)
-        results = db.search("rick astley")
+        results = db.search("example artist")
         assert len(results) == 1
-        assert results[0].title == "Never Gonna Give You Up"
+        assert results[0].title == "Example Song"
 
     def test_fts_search_no_match(self, db, sample_record):
         db.insert(sample_record)
@@ -157,8 +157,8 @@ class TestHistoryDB:
         count = db.export_csv(csv_path)
         assert count == 1
         content = Path(csv_path).read_text(encoding="utf-8-sig")
-        assert "Rick Astley" in content
-        assert "Never Gonna" in content
+        assert "Example Artist" in content
+        assert "Example Song" in content
 
     def test_downloaded_at_auto_filled(self, db, sample_record):
         assert sample_record.downloaded_at == ""
@@ -183,18 +183,18 @@ class TestClassifyUrl:
 
     @pytest.mark.parametrize("url, exp_plat, exp_kind", [
         # YouTube
-        ("https://www.youtube.com/watch?v=dQw4w9WgXcQ",           "YOUTUBE",       "SINGLE_VIDEO"),
-        ("https://youtu.be/dQw4w9WgXcQ",                          "YOUTUBE",       "SINGLE_VIDEO"),
+        ("https://www.youtube.com/watch?v=TESTVIDEOAAA",            "YOUTUBE",       "SINGLE_VIDEO"),
+        ("https://youtu.be/TESTVIDEOAAA",                          "YOUTUBE",       "SINGLE_VIDEO"),
         ("https://www.youtube.com/playlist?list=PLxxxxx",          "YOUTUBE",       "PLAYLIST"),
         ("https://www.youtube.com/watch?v=abc&list=PLxxx",         "YOUTUBE",       "PLAYLIST"),
         # YouTube Music
         ("https://music.youtube.com/watch?v=xyz",                  "YOUTUBE_MUSIC", "SINGLE_VIDEO"),
-        ("https://music.youtube.com/playlist?list=RDCLAK5uy_k",   "YOUTUBE_MUSIC", "PLAYLIST"),
+        ("https://music.youtube.com/playlist?list=RDTESTPLAYLIST",  "YOUTUBE_MUSIC", "PLAYLIST"),
         # Spotify
-        ("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC", "SPOTIFY",       "SINGLE_VIDEO"),
-        ("https://open.spotify.com/album/1DFixLWuPkv3KT3TnV35m3", "SPOTIFY",       "ALBUM"),
-        ("https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M", "SPOTIFY",     "PLAYLIST"),
-        ("https://open.spotify.com/artist/3TVXtAsR1Inumwj472S9r4", "SPOTIFY",       "ARTIST"),
+        ("https://open.spotify.com/track/TESTTRACKID00001",         "SPOTIFY",       "SINGLE_VIDEO"),
+        ("https://open.spotify.com/album/TESTALBUMID00001",         "SPOTIFY",       "ALBUM"),
+        ("https://open.spotify.com/playlist/TESTPLAYLISTID0001",    "SPOTIFY",       "PLAYLIST"),
+        ("https://open.spotify.com/artist/TESTARTISTID00001",       "SPOTIFY",       "ARTIST"),
         # Generic
         ("https://example.com/some-video",                         "GENERIC",       "UNKNOWN"),
         # Garbage
@@ -272,8 +272,8 @@ class TestBatchImporter:
 
     def test_from_raw_text_extracts_urls(self):
         text = """
-        Check out https://www.youtube.com/watch?v=dQw4w9WgXcQ
-        and also https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC
+        Check out https://www.youtube.com/watch?v=TESTVIDEOAAA
+        and also https://open.spotify.com/track/TESTTRACKID00001
         some garbage text here
         """
         result = self.BI.from_raw_text(text)
@@ -285,17 +285,17 @@ class TestBatchImporter:
 
     def test_from_raw_text_deduplicates(self):
         text = (
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"
+            "https://www.youtube.com/watch?v=TESTVIDEOAAA\n"
+            "https://www.youtube.com/watch?v=TESTVIDEOAAA\n"
         )
         result = self.BI.from_raw_text(text)
         assert result.found_count == 1
 
     def test_from_clipboard_text(self):
         urls = self.BI.from_clipboard_text(
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ random stuff"
+            "https://www.youtube.com/watch?v=TESTVIDEOAAA random stuff"
         )
-        assert urls == ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
+        assert urls == ["https://www.youtube.com/watch?v=TESTVIDEOAAA"]
 
     def test_from_clipboard_text_empty(self):
         assert self.BI.from_clipboard_text("") == []
@@ -308,9 +308,9 @@ class TestBatchImporter:
         f = tmp_path / "batch.txt"
         f.write_text(
             "# My batch\n"
-            "https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"
+            "https://www.youtube.com/watch?v=TESTVIDEOAAA\n"
             "# skip this\n"
-            "https://youtu.be/abc123def45\n"
+            "https://youtu.be/TESTVIDEOAAB\n"
         )
         result = self.BI.from_text_file(str(f))
         # At least the first URL should be found
@@ -345,9 +345,9 @@ class TestDuplicateChecker:
 
     def test_find_duplicate_match(self, tmp_path):
         from core.duplicate_checker import find_duplicate, expected_stem
-        stem = expected_stem("My Song", "Daft Punk")
+        stem = expected_stem("My Song", "Example Artist")
         (tmp_path / f"{stem}.mp3").write_bytes(b"\x00" * 100)
-        result = find_duplicate(str(tmp_path), "My Song", "Daft Punk")
+        result = find_duplicate(str(tmp_path), "My Song", "Example Artist")
         assert result is not None
         assert result.name == f"{stem}.mp3"
 
@@ -366,11 +366,11 @@ class TestPlaylistSync:
 
     def test_extract_video_id_watch(self):
         from core.playlist_sync import extract_video_id
-        assert extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+        assert extract_video_id("https://www.youtube.com/watch?v=TESTVIDEOAAA") == "TESTVIDEOAAA"
 
     def test_extract_video_id_short(self):
         from core.playlist_sync import extract_video_id
-        assert extract_video_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+        assert extract_video_id("https://youtu.be/TESTVIDEOAAA") == "TESTVIDEOAAA"
 
     def test_extract_video_id_none(self):
         from core.playlist_sync import extract_video_id
@@ -378,7 +378,7 @@ class TestPlaylistSync:
 
     def test_extract_video_id_embed(self):
         from core.playlist_sync import extract_video_id
-        assert extract_video_id("https://youtube.com/embed/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+        assert extract_video_id("https://youtube.com/embed/TESTVIDEOAAA") == "TESTVIDEOAAA"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

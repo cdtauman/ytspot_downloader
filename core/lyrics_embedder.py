@@ -2,8 +2,8 @@
 core/lyrics_embedder.py  –  Lyrics fetch + embed (Advanced Setting)
 ====================================================================
 Fetches plain-text lyrics for a track using the syncedlyrics library
-(which queries lrclib.net, Musixmatch, NetEase, etc. in order) and
-embeds them into the file's metadata tags.
+(which queries multiple lyrics sources in order) and embeds them into
+the file's metadata tags.
 
 Supported containers
 --------------------

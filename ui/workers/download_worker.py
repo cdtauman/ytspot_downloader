@@ -87,6 +87,9 @@ class _SignalAdapter:
     def on_batch_finished(self) -> None:
         self._w.all_finished.emit()
 
+    def on_track_thumbnail(self, key: str, thumbnail_url: str) -> None:
+        self._w.track_thumbnail.emit(key, thumbnail_url)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # DownloadWorker (QThread shell)
@@ -117,6 +120,7 @@ class DownloadWorker(QThread):
     job_error        = Signal(str, object)
     job_count_changed = Signal(int, int)
     all_finished     = Signal()
+    track_thumbnail  = Signal(str, str)
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 

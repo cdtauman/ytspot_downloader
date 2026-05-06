@@ -67,6 +67,7 @@ class OrchestratorCallbacks(Protocol):
     def on_status_message(self, msg: str) -> None: ...
     def on_job_count_changed(self, completed: int, total: int) -> None: ...
     def on_batch_finished(self) -> None: ...
+    def on_track_thumbnail(self, key: str, thumbnail_url: str) -> None: ...
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -275,6 +276,10 @@ class DownloadOrchestrator:
         update_counter = [0]
 
         def on_progress(p: DownloadProgress) -> None:
+            if p.thumbnail_url and not getattr(req, "_thumb_sent", False):
+                self._safe_cb("on_track_thumbnail", key, p.thumbnail_url)
+                req._thumb_sent = True
+
             update_counter[0] += 1
             if update_counter[0] % 10 != 0:
                 return

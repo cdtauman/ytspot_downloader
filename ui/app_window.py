@@ -367,6 +367,7 @@ class AppWindow(FluentWindow):
         self._download_ctrl.batch_finished.connect(self._on_all_downloads_finished)
         self._download_ctrl.batch_started.connect(self._save_queue_state)
         self._download_ctrl.browser_lock_warning.connect(self._on_browser_lock_warning)
+        self._download_ctrl.track_thumbnail.connect(self._on_track_thumbnail_update)
 
         # ── History panel ──────────────────────────────────────────────────────
         self._history_panel.redownload_requested.connect(self._on_redownload)
@@ -960,6 +961,17 @@ class AppWindow(FluentWindow):
         px.loadFromData(data)
         if not px.isNull():
             card.set_thumbnail(px)
+
+    def _on_track_thumbnail_update(self, queue_index: int, thumb_url: str) -> None:
+        card = self._index_to_card.get(queue_index)
+        if card:
+            tw = ThumbnailWorker(queue_index, thumb_url, parent=self)
+            self._thumb_workers.add(tw)
+            tw.finished.connect(lambda t=tw: self._thumb_workers.discard(t))
+            tw.thumbnail_ready.connect(
+                lambda idx, data, c=card: self._set_card_thumb(c, data)
+            )
+            tw.start()
 
     def _on_selection_changed(self, count: int) -> None:
         total = len(self._queue_panel.get_all_cards())

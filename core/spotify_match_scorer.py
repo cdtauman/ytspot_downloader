@@ -14,17 +14,17 @@ Scoring factors
   at ±15s difference, 0 beyond that.
 * **Artist match** (0–20 pts) — Whether the Spotify artist name appears in
   the YouTube title or channel name.
-* **Channel quality** (0–10 pts) — Bonus for "Official", "VEVO", "Topic"
-  channels, or if the channel name contains the artist name.
+* **Channel quality** (0–10 pts) — Bonus for official, topic, or
+  artist-named channels.
 
 Usage
 -----
     from core.spotify_match_scorer import find_best_youtube_match
 
     result = find_best_youtube_match(
-        title="Get Lucky",
-        artist="Daft Punk",
-        duration_sec=369,
+        title="Example Song",
+        artist="Example Artist",
+        duration_sec=240,
         max_candidates=5,
         cookies_file=None,
     )
@@ -81,9 +81,9 @@ _STRIP_PATTERNS = [
     re.compile(r"\s+"),                      # collapse whitespace
 ]
 
-_VEVO_RE    = re.compile(r"vevo", re.I)
-_TOPIC_RE   = re.compile(r" - topic$", re.I)
-_OFFICIAL_RE = re.compile(r"official", re.I)
+_BRANDED_CHANNEL_RE = re.compile(r"vevo", re.I)
+_TOPIC_RE           = re.compile(r" - topic$", re.I)
+_OFFICIAL_RE        = re.compile(r"official", re.I)
 
 
 def _normalize(text: str) -> str:
@@ -167,12 +167,12 @@ def _artist_score(
 def _channel_score(channel: str, spotify_artist: str, max_pts: float = 10.0) -> float:
     """
     Channel quality bonus (0 – max_pts).
-    VEVO, Topic, Official channels, or artist-named channels get points.
+    Branded, topic, official, or artist-named channels get points.
     """
     if not channel:
         return 0.0
     pts = 0.0
-    if _VEVO_RE.search(channel):
+    if _BRANDED_CHANNEL_RE.search(channel):
         pts += max_pts * 0.5
     if _TOPIC_RE.search(channel):
         pts += max_pts * 0.5

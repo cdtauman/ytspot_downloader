@@ -21,7 +21,7 @@ from core.spotify_match_scorer import (
 
 class TestNormalize:
     def test_strips_official_audio(self):
-        assert "get lucky" in _normalize("Get Lucky (Official Audio)")
+        assert "sample song" in _normalize("Sample Song (Official Audio)")
 
     def test_strips_lyrics(self):
         assert "song" in _normalize("Song [Lyrics]")
@@ -35,15 +35,15 @@ class TestNormalize:
 
 class TestTitleScore:
     def test_exact_match(self):
-        s = _title_score("Get Lucky", "Get Lucky")
+        s = _title_score("Sample Song", "Sample Song")
         assert s == 40.0
 
     def test_with_noise(self):
-        s = _title_score("Get Lucky", "Get Lucky (Official Audio)")
+        s = _title_score("Sample Song", "Sample Song (Official Audio)")
         assert s >= 35.0  # after normalization, nearly identical
 
     def test_totally_different(self):
-        s = _title_score("Get Lucky", "Bohemian Rhapsody")
+        s = _title_score("Sample Song", "Unrelated Track Title")
         assert s < 15.0
 
 
@@ -72,44 +72,44 @@ class TestDurationScore:
 
 class TestArtistScore:
     def test_in_both(self):
-        s = _artist_score("Daft Punk", "Daft Punk - Get Lucky", "Daft Punk")
+        s = _artist_score("Sample Artist", "Sample Artist - Sample Song", "Sample Artist")
         assert s == 20.0
 
     def test_in_title_only(self):
-        s = _artist_score("Daft Punk", "Daft Punk - Get Lucky", "SomeChannel")
-        assert s == 16.0  # 80% (updated from 70% to boost accuracy)
+        s = _artist_score("Sample Artist", "Sample Artist - Sample Song", "SomeChannel")
+        assert s == 16.0  # 80% (in title but not channel)
 
     def test_not_present(self):
-        s = _artist_score("Daft Punk", "Get Lucky", "SomeChannel")
+        s = _artist_score("Sample Artist", "Sample Song", "SomeChannel")
         assert s < 10.0
 
     def test_empty_artist(self):
-        assert _artist_score("", "Get Lucky", "Channel") == 0.0
+        assert _artist_score("", "Sample Song", "Channel") == 0.0
 
 
 class TestChannelScore:
-    def test_vevo(self):
-        s = _channel_score("DaftPunkVEVO", "Daft Punk")
+    def test_branded_channel(self):
+        s = _channel_score("SampleArtistOfficial", "Sample Artist")
         assert s > 0
 
     def test_topic(self):
-        s = _channel_score("Daft Punk - Topic", "Daft Punk")
+        s = _channel_score("Sample Artist - Topic", "Sample Artist")
         assert s > 0
 
     def test_official(self):
-        s = _channel_score("Daft Punk Official", "Daft Punk")
+        s = _channel_score("Sample Artist Official", "Sample Artist")
         assert s > 0
 
     def test_generic_channel(self):
-        s = _channel_score("RandomUploader", "Daft Punk")
+        s = _channel_score("RandomUploader", "Sample Artist")
         assert s == 0.0
 
 
 class TestScoreCandidate:
     def test_perfect_match(self):
         total, bd = score_candidate(
-            "Get Lucky", "Daft Punk", 369,
-            "Daft Punk - Get Lucky (Official Audio)", "DaftPunkVEVO", 369,
+            "Sample Song", "Sample Artist", 369,
+            "Sample Artist - Sample Song (Official Audio)", "SampleArtistOfficial", 369,
         )
         assert total >= 80.0
         assert bd["title"] > 30
@@ -117,15 +117,15 @@ class TestScoreCandidate:
 
     def test_wrong_track(self):
         total, bd = score_candidate(
-            "Get Lucky", "Daft Punk", 369,
-            "Bohemian Rhapsody", "QueenVEVO", 354,
+            "Sample Song", "Sample Artist", 369,
+            "Completely Different Title", "OtherArtistChannel", 354,
         )
         assert total < 30.0
 
     def test_right_track_wrong_duration(self):
         total, _ = score_candidate(
-            "Get Lucky", "Daft Punk", 369,
-            "Daft Punk - Get Lucky (Extended Mix)", "DaftPunkVEVO", 480,
+            "Sample Song", "Sample Artist", 369,
+            "Sample Artist - Sample Song (Extended Mix)", "SampleArtistOfficial", 480,
         )
         # Good title/artist but duration kills it
         assert total < 70.0

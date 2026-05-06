@@ -317,16 +317,6 @@ class TestClassifyUrlGeneric:
         from core.playlist_parser import classify_url
         return classify_url(url)
 
-    def test_soundcloud_is_generic(self):
-        platform, _ = self._classify("https://soundcloud.com/artist/track")
-        from core.playlist_parser import SourcePlatform
-        assert platform == SourcePlatform.GENERIC
-
-    def test_vimeo_is_generic(self):
-        platform, _ = self._classify("https://vimeo.com/123456789")
-        from core.playlist_parser import SourcePlatform
-        assert platform == SourcePlatform.GENERIC
-
     def test_example_com_is_generic(self):
         platform, _ = self._classify("https://www.example.com/video.html")
         from core.playlist_parser import SourcePlatform

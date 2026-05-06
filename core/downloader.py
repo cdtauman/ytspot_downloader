@@ -125,6 +125,7 @@ class DownloadProgress:
     error_message:     str               = ""
     warning_message:   str               = ""   # non-fatal post-processing failures
     output_path:       str               = ""
+    thumbnail_url:     Optional[str]     = None
 
 
 @dataclass
@@ -179,6 +180,9 @@ class DownloadRequest:
     stream_type: Optional[str] = None
     platform: Optional[SourcePlatform] = None
 
+    # Category tag forwarded from TrackMeta (e.g. "stream_intercept", "stream:hls")
+    category: Optional[str] = None
+
     # Per-request cancellation (parallel downloads)
     cancel_event: Optional[threading.Event] = field(default=None, repr=False)
 
@@ -197,6 +201,7 @@ class DownloadRequest:
     # Declared here (not set dynamically) so type-checkers and frozen-dataclass
     # tools can see it.
     _final_output_path: str = field(default="", init=False, repr=False)
+    _thumb_sent: bool = field(default=False, init=False, repr=False)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -336,6 +341,11 @@ class DownloadEngine:
         # HLS / DASH / direct stream: bypass yt-dlp and use ffmpeg directly
         if request.stream_type in ("hls", "dash", "mp4", "webm", "ts"):
             self._download_hls_stream(request)
+            return
+
+        # Generic video page (any site): intercept HLS/DASH stream, then download via ffmpeg
+        if request.category == "stream_intercept":
+            self._download_with_stream_intercept(request)
             return
 
         cancel_ev    = request.cancel_event or self._cancel_event
@@ -523,6 +533,140 @@ class DownloadEngine:
             output_path=output_path,
         ))
 
+    # ── Generic stream-intercept download (any video page) ───────────────────
+
+    def _download_with_stream_intercept(self, request: DownloadRequest) -> None:
+        """
+        Universal video page downloader — works for any site whose video pages
+        set category='stream_intercept'.
+
+        Steps:
+          1. Open the video page with Playwright (headless)
+          2. Intercept the best HLS/DASH stream URL
+          3. Download via ffmpeg (same mechanism as mpmux.com staticdownloader)
+
+        Falls back to yt-dlp if stream interception fails.
+        """
+        page_url = request.url
+
+        self._fire(request, DownloadProgress(
+            status=DownloadStatus.EXTRACTING,
+            url=page_url,
+            title=request.forced_title or "",
+        ))
+
+        logger.debug("[Downloader] Intercepting stream from %s", page_url)
+
+        try:
+            from core.universal_extractor import find_best_stream_with_title
+            stream_url, stream_type, page_title = find_best_stream_with_title(
+                page_url, timeout_ms=35_000
+            )
+        except Exception as exc:
+            logger.warning("[Downloader] Stream interception failed: %s — falling back to yt-dlp", exc)
+            stream_url = ""
+            stream_type = "unknown"
+            page_title = ""
+
+        if not stream_url or stream_type == "unknown":
+            logger.info("[Downloader] No stream intercepted — trying yt-dlp for %s", page_url)
+            # We do NOT return early here; we call the yt-dlp path below
+            try:
+                opts = self._build_ydl_opts(request)
+                cancel_ev = request.cancel_event or self._cancel_event
+                if request.media_type == MediaType.AUDIO:
+                    opts.update(self._audio_opts(request))
+                else:
+                    opts.update(self._video_opts(request))
+
+                def _abort_hook(_info: dict) -> None:
+                    if cancel_ev.is_set() or self._cancel_event.is_set():
+                        raise yt_dlp.utils.DownloadCancelled()
+
+                opts.setdefault("progress_hooks", []).append(_abort_hook)
+
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([page_url])
+
+                final_path = request._final_output_path  # noqa: SLF001
+                self._fire(request, DownloadProgress(
+                    status=DownloadStatus.FINISHED,
+                    url=page_url,
+                    title=request.forced_title or "",
+                    fraction=1.0,
+                    output_path=final_path,
+                ))
+            except Exception as exc:
+                err_msg = _get_friendly_error(str(exc))
+                self._fire(request, DownloadProgress(
+                    status=DownloadStatus.ERROR,
+                    url=page_url,
+                    title=request.forced_title or "",
+                    error_message=err_msg,
+                ), error=True)
+            return
+
+        # Use page_title if our forced_title is a generic placeholder
+        title = request.forced_title
+        if (not title or title in ("Unknown Title", "stream")) and page_title:
+            title = page_title
+        if not title:
+            title = page_url.rstrip("/").split("/")[-1].replace("-", " ") or "stream"
+
+        # Update the request so the filename builder uses the real title
+        request.forced_title = title
+
+        logger.info(
+            "[Downloader] Intercepted %s stream for '%s'",
+            stream_type.upper(), title,
+        )
+
+        # Build output path
+        ext = "mp3" if request.media_type == MediaType.AUDIO else "mp4"
+        if request.media_type == MediaType.AUDIO and request.audio_format:
+            ext = request.audio_format
+
+        out_dir = Path(request.output_dir).expanduser().resolve()
+        if request.playlist_name:
+            out_dir = out_dir / _sanitize_folder_name(request.playlist_name)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        stem = _sanitize_filename(title)
+        if request.forced_index:
+            stem = f"{request.forced_index:02d} - {stem}"
+
+        output_path = str(out_dir / f"{stem}.{ext}")
+
+        self._fire(request, DownloadProgress(
+            status=DownloadStatus.DOWNLOADING,
+            url=page_url,
+            title=title,
+        ))
+
+        try:
+            from core.hls_downloader import download_hls
+            download_hls(
+                url=stream_url,
+                output_path=output_path,
+                cookies_file=request.cookies_file,
+            )
+        except Exception as exc:
+            self._fire(request, DownloadProgress(
+                status=DownloadStatus.ERROR,
+                url=page_url,
+                title=title,
+                error_message=str(exc),
+            ), error=True)
+            return
+
+        self._fire(request, DownloadProgress(
+            status=DownloadStatus.FINISHED,
+            url=page_url,
+            title=title,
+            fraction=1.0,
+            output_path=output_path,
+        ))
+
     # ── yt-dlp options builder ─────────────────────────────────────────────────
 
     def _build_ydl_opts(self, req: DownloadRequest) -> dict[str, Any]:
@@ -536,11 +680,15 @@ class DownloadEngine:
         out_dir.mkdir(parents=True, exist_ok=True)
 
         # Output template
-        raw_title = req.forced_title or "%(title)s"
+        raw_title = req.forced_title if (req.forced_title and req.forced_title != "Unknown Title") else None
+        use_ydlp_title = raw_title is None
+
+        if use_ydlp_title:
+            raw_title = "%(title)s"
 
         # Comprehensive clean: strip common parenthetical labels and promotional suffixes
         # WE EXCLUDE 'Remix', 'Edit', 'Acoustic', 'Live' to prevent collisions in EPs
-        clean_title = re.sub(r'\s*[([].*?(Official|Video|Clip|Audio|Prod|By|Remaster|Lyrics|HD|4K|Direct|Vevo|Studio).*?[)\]]', '', raw_title, flags=re.IGNORECASE)
+        clean_title = re.sub(r'\s*[([].*?(Official|Video|Clip|Audio|Prod|By|Remaster|Lyrics|HD|4K|Direct|Studio).*?[)\]]', '', raw_title, flags=re.IGNORECASE)
         # Strip anything in parens at the end
         clean_title = re.sub(r'\s*\([^)]*\)\s*$', '', clean_title).strip()
         # Strip trailing hyphens or dashes followed by common tags
@@ -551,7 +699,16 @@ class DownloadEngine:
 
         title = _sanitize_filename(clean_title)
 
-        if req.is_solo:
+        if use_ydlp_title:
+            # No forced title — let yt-dlp determine the title
+            if req.is_solo:
+                outtmpl = str(out_dir / "%(title)s.%(ext)s")
+            elif req.clean_filename:
+                idx_prefix = f"{req.forced_index:02d} - " if (req.forced_index is not None and req.forced_index > 0) else ""
+                outtmpl = str(out_dir / f"{idx_prefix}%(title)s.%(ext)s")
+            else:
+                outtmpl = str(out_dir / "%(playlist_index)s%(title)s.%(ext)s")
+        elif req.is_solo:
             # Solo download: No artist, no index, just the clean title.
             outtmpl = str(out_dir / f"{title}.%(ext)s")
         elif req.clean_filename:
@@ -647,6 +804,8 @@ class DownloadEngine:
         ]
         if req.embed_metadata:
             postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
+        if req.embed_thumbnail:
+            postprocessors.append({"key": "EmbedThumbnail"})
         if req.write_subtitles:
             postprocessors.append({
                 "key": "FFmpegEmbedSubtitle",
@@ -657,6 +816,7 @@ class DownloadEngine:
             "format":              req.video_quality.value,
             "postprocessors":      postprocessors,
             "merge_output_format": "mp4",
+            "writethumbnail":      req.embed_thumbnail,
         }
         if req.write_subtitles:
             opts["writesubtitles"]  = True
@@ -691,6 +851,7 @@ class DownloadEngine:
             total      = d.get("total_bytes") or d.get("total_bytes_estimate")
             speed      = d.get("speed")
             eta        = d.get("eta")
+            thumb      = info.get("thumbnail")
 
             fraction: float = 0.0
             if total and total > 0:
@@ -708,6 +869,7 @@ class DownloadEngine:
                     speed_bps=speed,
                     eta_seconds=eta,
                     fraction=fraction,
+                    thumbnail_url=thumb,
                 ))
 
             elif ydl_status == "finished":

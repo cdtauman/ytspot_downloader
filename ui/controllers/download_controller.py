@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import logging
 import threading
-import re
 from pathlib import Path
 from typing import Optional
 
@@ -93,6 +92,7 @@ class DownloadController(QObject):
     batch_finished      = Signal()
     batch_started       = Signal()
     browser_lock_warning = Signal(str)  # browser name (e.g. 'Chrome')
+    track_thumbnail     = Signal(int, str)
 
     def __init__(
         self,
@@ -320,6 +320,7 @@ class DownloadController(QObject):
                 proxy_url=self._cfg.get("youtube_proxy_url") or None,
                 is_solo=is_solo,
                 stream_type=_parse_stream_type(getattr(card, "category", "")),
+                category=getattr(card, "category", "") or None,
             )
 
             key = str(id(card))
@@ -360,6 +361,7 @@ class DownloadController(QObject):
         self._dl_worker.job_count_changed.connect(self.job_count_changed)
         self._dl_worker.job_error.connect(self._on_track_error)
         self._dl_worker.all_finished.connect(self._on_batch_done)
+        self._dl_worker.track_thumbnail.connect(self._on_track_thumbnail)
         self._dl_worker.start()
 
         self.batch_started.emit()
@@ -462,6 +464,7 @@ class DownloadController(QObject):
         resume_worker.track_finished.connect(self._on_track_finished)
         resume_worker.job_error.connect(self._on_track_error)
         resume_worker.all_finished.connect(self._on_batch_done)
+        resume_worker.track_thumbnail.connect(self._on_track_thumbnail)
         resume_worker.all_finished.connect(
             lambda w=resume_worker: (
                 self._resume_workers.remove(w) if w in self._resume_workers else None
@@ -503,6 +506,11 @@ class DownloadController(QObject):
         card = self._key_to_card.get(key)
         if card:
             card.set_status("error")
+
+    def _on_track_thumbnail(self, key: str, thumb_url: str) -> None:
+        card = self._key_to_card.get(key)
+        if card:
+            self.track_thumbnail.emit(card.queue_index, thumb_url)
 
         err_msg = str(err)
         if hasattr(err, "error_message"):

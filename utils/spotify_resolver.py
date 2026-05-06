@@ -156,7 +156,7 @@ class SpotifyResolver:
             proxy_url   = proxy_url or cfg_url
             proxy_token = proxy_token or cfg_token
 
-        if proxy_url and "your-future-server" not in proxy_url.lower():
+        if proxy_url and proxy_url.lower().startswith(("http://", "https://")):
             try:
                 return cls._resolve_proxy(url, proxy_url, proxy_token, on_item)
             except RuntimeError as err:

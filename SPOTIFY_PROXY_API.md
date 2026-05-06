@@ -28,11 +28,11 @@ Implement a **GET** endpoint: `GET /search?q={query}&max_results={count}`
 ### Request
 
 ```
-GET /search?q=taylor+swift&max_results=15
+GET /search?q=example+artist+song&max_results=15
 ```
 
 **Query Parameters:**
-- `q` (required): URL-encoded search query (e.g., "taylor swift", "නෙපස්තීඳ")
+- `q` (required): URL-encoded search query (e.g., "artist name song title")
 - `max_results` (required): Number of results to return (1–50)
 
 **Headers (from client):**
@@ -49,18 +49,18 @@ Accept: application/json
 {
   "results": [
     {
-      "title": "Anti-Hero",
-      "artist": "Taylor Swift",
+      "title": "Example Song One",
+      "artist": "Example Artist",
       "duration_sec": 229,
-      "thumbnail_url": "https://i.scdn.co/image/ab67616d0000b2731234...",
-      "url": "https://open.spotify.com/track/0DiWxABD9e1gBYfKFPZG09"
+      "thumbnail_url": "https://i.scdn.co/image/...",
+      "url": "https://open.spotify.com/track/EXAMPLE_TRACK_ID_1"
     },
     {
-      "title": "Midnight Rain",
-      "artist": "Taylor Swift",
+      "title": "Example Song Two",
+      "artist": "Example Artist",
       "duration_sec": 178,
-      "thumbnail_url": "https://i.scdn.co/image/ab67616d0000b2735678...",
-      "url": "https://open.spotify.com/track/0x1aXpSwmk7aNdDzVoGBjR"
+      "thumbnail_url": "https://i.scdn.co/image/...",
+      "url": "https://open.spotify.com/track/EXAMPLE_TRACK_ID_2"
     }
   ]
 }
@@ -221,7 +221,7 @@ app.listen(5000, () => {
 ### Local Test
 
 ```bash
-curl "http://localhost:5000/search?q=taylor+swift&max_results=5"
+curl "http://localhost:5000/search?q=example+artist+song&max_results=5"
 ```
 
 Expected response:
@@ -229,8 +229,8 @@ Expected response:
 {
   "results": [
     {
-      "title": "Anti-Hero",
-      "artist": "Taylor Swift",
+      "title": "Example Song One",
+      "artist": "Example Artist",
       "duration_sec": 229,
       ...
     }

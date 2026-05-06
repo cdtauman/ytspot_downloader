@@ -29,9 +29,9 @@ Supported input formats
 -----------------------
 Text file (.txt)  – one URL per line, '#' for comments:
 
-    # My download batch - 2025-06-01
-    https://www.youtube.com/watch?v=dQw4w9WgXcQ
-    https://open.spotify.com/album/1DFixLWuPkv3KT3TnV35m3
+    # My download batch
+    https://www.youtube.com/watch?v=TESTVIDEOAAA
+    https://open.spotify.com/album/TESTALBUMID00001
     # this line is a comment and will be skipped
     https://www.youtube.com/playlist?list=PLxxxxxx
 
@@ -40,7 +40,7 @@ Raw pasted text   – URLs may appear anywhere, separated by whitespace,
 
     Check these out:
     https://youtu.be/abc123, https://youtu.be/xyz789
-    and also https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC
+    and also https://open.spotify.com/track/TESTTRACKID00001
 
 Usage
 -----
@@ -398,24 +398,24 @@ if __name__ == "__main__":
     print("── 1. from_text_file ──")
 
     batch_content = """\
-# My batch download list – 2025-06-01
-# YouTube singles
-https://www.youtube.com/watch?v=dQw4w9WgXcQ
-https://youtu.be/fJ9rUzIMcZQ
+# Batch download list
+# YouTube
+https://www.youtube.com/watch?v=EXAMPLE_VIDEO_ID_1
+https://youtu.be/EXAMPLE_VIDEO_ID_2
 
 # Playlists
-https://www.youtube.com/playlist?list=PLbZIPy20-1pM5OX8RMwO6DvYkKfFf2dOq
+https://www.youtube.com/playlist?list=EXAMPLE_PLAYLIST_ID
 
 # YouTube Music
-https://music.youtube.com/playlist?list=RDCLAK5uy_k
+https://music.youtube.com/playlist?list=EXAMPLE_YTM_PLAYLIST_ID
 
 # Spotify
-https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC
-https://open.spotify.com/album/1DFixLWuPkv3KT3TnV35m3
-https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M
+https://open.spotify.com/track/EXAMPLE_TRACK_ID
+https://open.spotify.com/album/EXAMPLE_ALBUM_ID
+https://open.spotify.com/playlist/EXAMPLE_PLAYLIST_ID_2
 
 # Blank and invalid lines below – should be skipped
-   
+
 not-a-url
 http://
 https://notasupportedsite.com/video
@@ -453,9 +453,9 @@ https://notasupportedsite.com/video
 
     pasted = (
         "Hey, check these out:\n"
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ, "
-        "https://youtu.be/fJ9rUzIMcZQ\n"
-        "and also https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC\n"
+        "https://www.youtube.com/watch?v=TESTVIDEOAAA, "
+        "https://youtu.be/TESTVIDEOAAB\n"
+        "and also https://open.spotify.com/track/TESTTRACKID00001\n"
         "totally unrelated: https://www.google.com and some garbage text\n"
     )
 
@@ -471,10 +471,10 @@ https://notasupportedsite.com/video
     print("── 3. Deduplication ──")
 
     dupes = (
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ\n"    # exact dupe
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ/\n"   # trailing slash dupe
-        "https://youtu.be/fJ9rUzIMcZQ\n"                    # different URL, not a dupe
+        "https://www.youtube.com/watch?v=TESTVIDEOAAA\n"
+        "https://www.youtube.com/watch?v=TESTVIDEOAAA\n"    # exact dupe
+        "https://www.youtube.com/watch?v=TESTVIDEOAAA/\n"   # trailing slash dupe
+        "https://youtu.be/TESTVIDEOAAB\n"                   # different URL, not a dupe
     )
     result3 = BatchImporter.from_raw_text(dupes)
     print(f"  Input had 4 lines, expected 2 unique URLs, got {result3.found_count}")
@@ -502,9 +502,9 @@ https://notasupportedsite.com/video
     # ── 6. from_clipboard_text (lightweight variant) ──────────────────────────
     print("── 6. from_clipboard_text ──")
     clipboard_urls = BatchImporter.from_clipboard_text(
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ random stuff"
+        "https://www.youtube.com/watch?v=TESTVIDEOAAA random stuff"
     )
-    assert clipboard_urls == ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]
+    assert clipboard_urls == ["https://www.youtube.com/watch?v=TESTVIDEOAAA"]
     print(f"  Found: {clipboard_urls}")
     print("  ✅  from_clipboard_text assertions passed\n")
 

@@ -163,6 +163,8 @@ _YTM_RE          = re.compile(r"music\.youtube\.com")
 _SPOTIFY_RE      = re.compile(
     r"open\.spotify\.com/(track|album|playlist|artist)/([A-Za-z0-9]+)"
 )
+# Common pattern for user/channel video listing pages across many sites
+_USER_LISTING_RE = re.compile(r"/users?/[^/]+/(videos?|uploads?|playlists?|content)", re.IGNORECASE)
 
 
 def classify_url(url: str) -> tuple[SourcePlatform, UrlKind]:
@@ -210,6 +212,10 @@ def classify_url(url: str) -> tuple[SourcePlatform, UrlKind]:
             "artist":   UrlKind.ARTIST,
         }
         return SourcePlatform.SPOTIFY, type_map.get(m.group(1), UrlKind.UNKNOWN)
+
+    # User/channel video listing pages on any site → treat as playlist
+    if _USER_LISTING_RE.search(url):
+        return SourcePlatform.GENERIC, UrlKind.PLAYLIST
 
     # Any valid http/https URL → let yt-dlp's Generic extractor try
     parsed = urlparse(url)
@@ -368,7 +374,7 @@ class PlaylistParser:
         from core.scraper import (
             scrape_spotify_playlist, scrape_spotify_album, scrape_spotify_artist,
             scrape_ytm_playlist, scrape_ytm_album, scrape_ytm_artist,
-            scrape_youtube_playlist, scrape_youtube_channel
+            scrape_youtube_playlist, scrape_youtube_channel,
         )
 
         idx_counter = [0]
@@ -450,7 +456,7 @@ class PlaylistParser:
                     on_progress=on_progress,
                     on_error=on_error,
                 )
-
+            
             # ── GENERIC / OTHER ──────────────────────────────────────────────
             else:
                 result = self._parse_standard_yt(
@@ -462,7 +468,23 @@ class PlaylistParser:
                     on_progress=on_progress,
                     on_error=on_error,
                 )
-                # Fallback: if yt-dlp found nothing, try Playwright interception
+                # If yt-dlp found nothing, try the paginated listing scraper
+                # (handles user/channel listing pages on any site)
+                if not result.tracks and not result.cancelled:
+                    self._notify(on_progress, "Trying paginated listing scraper…")
+                    try:
+                        from core.listing_scraper import scrape_listing_page
+                        title, _ = scrape_listing_page(
+                            url,
+                            on_item=_on_scraper_item,
+                            cancel_check=lambda: self._cancel.is_set(),
+                        )
+                        if result.tracks:
+                            result.playlist_title = title
+                            result.kind = UrlKind.PLAYLIST
+                    except Exception:
+                        pass
+                # Final fallback: Playwright stream interception (single video pages)
                 if not result.tracks and not result.cancelled:
                     result = self._parse_universal_fallback(
                         url,
@@ -601,11 +623,73 @@ class PlaylistParser:
         on_error:    Optional[Callable[[str], None]] = None,
     ) -> ParseResult:
         """
-        Second-pass fallback: use Playwright to intercept HLS/DASH/media URLs
-        that yt-dlp's Generic extractor could not handle.
+        Second-pass fallback when yt-dlp found nothing.
+
+        Strategy:
+        1. Try the generic listing scraper — opens the page and finds all video
+           page links (works for any site: adult, news, etc.).
+           Each link becomes a TrackMeta with category='stream_intercept',
+           meaning the downloader will open THAT page and intercept its HLS stream.
+
+        2. If no video links found (single video page or obscure layout):
+           Fall back to Playwright stream interception of the current page directly
+           (old behaviour — intercepts the HLS that the page itself loads).
         """
         result = existing_result
-        self._notify(on_progress, "yt-dlp found nothing — trying Playwright interception…")
+        self._notify(on_progress, "yt-dlp found nothing — scanning page for video links…")
+
+        # ── Step 1: Generic listing scraper ───────────────────────────────────
+        try:
+            from core.universal_extractor import scrape_generic_video_listing
+            links = scrape_generic_video_listing(url, timeout_ms=30_000)
+        except ImportError:
+            links = []
+        except Exception as exc:
+            logger.debug("[PlaylistParser] generic_listing failed: %s", exc)
+            links = []
+
+        if links:
+            self._notify(
+                on_progress,
+                f"Found {len(links)} video link(s) — will intercept streams at download time"
+            )
+            # Derive playlist title from page or URL
+            from urllib.parse import urlparse as _up
+            parsed = _up(url)
+            playlist_title = (
+                parsed.path.rstrip("/").split("/")[-1].replace("-", " ")
+                or parsed.netloc
+                or url
+            )
+            result.playlist_title = playlist_title
+
+            for idx, link in enumerate(links, start=1):
+                if self._cancel.is_set():
+                    result.cancelled = True
+                    break
+                track = TrackMeta(
+                    index=idx,
+                    url=link["url"],
+                    title=link["title"] or f"Video {idx}",
+                    artist="",
+                    thumbnail_url=link.get("thumbnail_url", ""),
+                    platform=SourcePlatform.GENERIC,
+                    # 'stream_intercept' tells the downloader to open this video
+                    # page and intercept its HLS/DASH stream at download time.
+                    category="stream_intercept",
+                )
+                result.tracks.append(track)
+                if on_item:
+                    try:
+                        on_item(track, idx, len(links))
+                    except Exception:
+                        pass
+
+            result.total_count = len(result.tracks)
+            return result
+
+        # ── Step 2: Direct stream interception (single video page) ────────────
+        self._notify(on_progress, "No video links found — intercepting streams directly…")
 
         try:
             from core.universal_extractor import find_streams
@@ -631,8 +715,9 @@ class PlaylistParser:
         # Derive a title from the page title or the last path segment of the URL
         page_title = streams[0].page_title if streams else ""
         if not page_title:
-            parsed = __import__("urllib.parse", fromlist=["urlparse"]).urlparse(url)
-            page_title = parsed.path.split("/")[-1] or parsed.netloc or url
+            from urllib.parse import urlparse as _up2
+            parsed2 = _up2(url)
+            page_title = parsed2.path.split("/")[-1] or parsed2.netloc or url
 
         result.playlist_title = page_title
 
@@ -720,7 +805,7 @@ if __name__ == "__main__":
 
     _url = (
         sys.argv[1] if len(sys.argv) > 1
-        else "https://www.youtube.com/playlist?list=PLbZIPy20-1pM5OX8RMwO6DvYkKfFf2dOq"
+        else "https://www.youtube.com/playlist?list=EXAMPLE_PLAYLIST_ID"
     )
 
     _platform, _kind = classify_url(_url)
