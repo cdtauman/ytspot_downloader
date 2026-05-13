@@ -507,11 +507,6 @@ class DownloadController(QObject):
         if card:
             card.set_status("error")
 
-    def _on_track_thumbnail(self, key: str, thumb_url: str) -> None:
-        card = self._key_to_card.get(key)
-        if card:
-            self.track_thumbnail.emit(card.queue_index, thumb_url)
-
         err_msg = str(err)
         if hasattr(err, "error_message"):
             err_msg = err.error_message
@@ -548,6 +543,11 @@ class DownloadController(QObject):
         if is_fatal:
             logger.warning("[DownloadController] Fatal error detected. Cancelling batch.")
             self.cancel_all()
+
+    def _on_track_thumbnail(self, key: str, thumb_url: str) -> None:
+        card = self._key_to_card.get(key)
+        if card:
+            self.track_thumbnail.emit(card.queue_index, thumb_url)
 
     def _on_batch_done(self) -> None:
         self._dl_worker = None

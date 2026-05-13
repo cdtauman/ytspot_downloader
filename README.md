@@ -34,12 +34,20 @@ Built with Python and PySide6 (Qt6), using **yt-dlp** as its download engine, a 
 | yt-dlp | ≥ 2026.3.13 |
 | Playwright | Latest (for Spotify / Channel scraping) |
 
-### Install Dependencies
+### Installation
 
-```bash
-pip install -r requirements.txt
-playwright install chromium
-```
+1. **Install Python dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Install browser binaries (Windows):**
+   Run the following script to install the Chromium browser required for Spotify scraping:
+   ```bash
+   install_playwright.bat
+   ```
+
+*(For Linux/Mac, run `python3 -m playwright install chromium` manually)*
 
 ### Install FFmpeg
 
