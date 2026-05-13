@@ -62,8 +62,8 @@ class SourcePlatform(Enum):
     YOUTUBE         = "youtube"
     YOUTUBE_MUSIC   = "ytmusic"
     SPOTIFY         = "spotify"
-    GENERIC         = auto()   # any yt-dlp-supported site that isn't YouTube/Spotify
-    UNKNOWN         = auto()   # not a valid http/https URL
+    GENERIC         = "generic"
+    UNKNOWN         = "unknown"
 
 
 class UrlKind(Enum):
