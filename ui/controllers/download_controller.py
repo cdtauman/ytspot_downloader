@@ -271,9 +271,8 @@ class DownloadController(QObject):
                             card.set_status("done")
                             continue
 
-            # Clean filename (index + title only, no artist) for any multi-track
-            # download — the folder path already encodes the artist context.
-            is_clean = is_multi or is_solo
+            # Clean filename (index + title only, never include artist name).
+            is_clean = True
 
             req = DownloadRequest(
                 url=card.track_url,
@@ -289,18 +288,9 @@ class DownloadController(QObject):
                 forced_album=card.album,
                 forced_duration=getattr(card, "duration_sec", None),
                 forced_index=(
-                    None if is_solo else (
-                        card.album_index
-                        if (card.release_type in ("album", "ep") and card.album_index > 0)                    
-                        else (
-                            None if card.release_type == "playlist"
-                            else (
-                                card.queue_index
-                                if (self._cfg.playlist_index_prefix and not is_parent_discography)
-                                else None
-                            )
-                        )
-                    )
+                    card.album_index
+                    if (not is_solo and card.release_type in ("album", "ep") and card.album_index > 0)
+                    else None
                 ),
                 cookies_file=self._cfg.cookies_file or None,
                 cookies_browser=self._cfg.cookies_browser or None,

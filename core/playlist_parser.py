@@ -199,8 +199,12 @@ def classify_url(url: str) -> tuple[SourcePlatform, UrlKind]:
         if _YT_PLAYLIST_RE.search(url):
             # Could be a video-in-playlist (v=...&list=...) or pure playlist
             kind = UrlKind.PLAYLIST
+        elif _YT_VIDEO_RE.search(url):
+            kind = UrlKind.SINGLE_VIDEO
+        elif re.search(r"youtube\.com/(@[^/?]+|channel/[^/?]+|user/[^/?]+|c/[^/?]+)", url):
+            kind = UrlKind.ARTIST
         else:
-            kind = UrlKind.SINGLE_VIDEO if _YT_VIDEO_RE.search(url) else UrlKind.UNKNOWN
+            kind = UrlKind.UNKNOWN
         return platform, kind
 
     m = _SPOTIFY_RE.search(url)
@@ -445,8 +449,8 @@ class PlaylistParser:
 
             # ── YOUTUBE ──────────────────────────────────────────────────────
             elif platform == SourcePlatform.YOUTUBE:
-                # Keep a standard yt-dlp parsing path for YouTube and generic URLs.
-                # This preserves P0 error-propagation guarantees and testability.
+                # yt-dlp handles all YouTube URL shapes (videos, playlists, channels,
+                # @handles) natively and reliably — use it for everything.
                 result = self._parse_standard_yt(
                     url,
                     platform=platform,

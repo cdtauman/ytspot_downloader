@@ -492,11 +492,7 @@ class DownloadEngine:
 
         # Build filename
         title  = request.forced_title or "stream"
-        artist = request.forced_artist or ""
-        if artist:
-            stem = f"{artist} - {title}"
-        else:
-            stem = title
+        stem   = title
         # Sanitize
         stem = re.sub(r'[\\/*?:"<>|]', "_", stem)
         if request.forced_index:
@@ -773,13 +769,14 @@ class DownloadEngine:
         ]
         if req.embed_metadata:
             postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
-        if req.embed_thumbnail:
+        use_ytdlp_thumb = req.embed_thumbnail and not req.thumbnail_url
+        if use_ytdlp_thumb:
             postprocessors.append({"key": "EmbedThumbnail"})
 
         opts: dict[str, Any] = {
             "format":         "bestaudio/best",
             "postprocessors": postprocessors,
-            "writethumbnail": req.embed_thumbnail,
+            "writethumbnail": use_ytdlp_thumb,
         }
 
         if req.forced_title or req.forced_artist or req.forced_album:
@@ -804,7 +801,8 @@ class DownloadEngine:
         ]
         if req.embed_metadata:
             postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True})
-        if req.embed_thumbnail:
+        use_ytdlp_thumb = req.embed_thumbnail and not req.thumbnail_url
+        if use_ytdlp_thumb:
             postprocessors.append({"key": "EmbedThumbnail"})
         if req.write_subtitles:
             postprocessors.append({
@@ -816,7 +814,7 @@ class DownloadEngine:
             "format":              req.video_quality.value,
             "postprocessors":      postprocessors,
             "merge_output_format": "mp4",
-            "writethumbnail":      req.embed_thumbnail,
+            "writethumbnail":      use_ytdlp_thumb,
         }
         if req.write_subtitles:
             opts["writesubtitles"]  = True
