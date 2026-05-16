@@ -82,6 +82,8 @@ class MediaType(Enum):
 
 class VideoQuality(Enum):
     BEST   = "bestvideo+bestaudio/best"
+    UHD_4K = "bestvideo[height<=2160]+bestaudio/best[height<=2160]"
+    QHD_2K = "bestvideo[height<=1440]+bestaudio/best[height<=1440]"
     HIGH   = "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
     MEDIUM = "bestvideo[height<=720]+bestaudio/best[height<=720]"
     LOW    = "bestvideo[height<=480]+bestaudio/best[height<=480]"

@@ -39,7 +39,7 @@ AUDIO_QUALITY_OPTIONS: list[str] = [
     "Best (320k)", "High (256k)", "Medium (192k)", "Low (128k)",
 ]
 VIDEO_QUALITY_OPTIONS: list[str] = [
-    "Best", "1080p", "720p", "480p", "Worst",
+    "Best", "2160p (4K)", "1440p (2K)", "1080p", "720p", "480p", "Worst",
 ]
 AUDIO_FORMAT_OPTIONS: list[str] = ["mp3", "m4a", "flac", "opus"]
 

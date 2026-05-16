@@ -776,56 +776,29 @@ class AppWindow(FluentWindow):
         """Entry point for all fetching, intercepting channel URLs to ask what to scrape."""
         platform, kind = classify_url(url)
         if platform == SourcePlatform.YOUTUBE and kind == UrlKind.ARTIST:
-            # Pop up custom dialog for channel scraping options
-            from PySide6.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QHBoxLayout
-            from qfluentwidgets import PrimaryPushButton, PushButton, SubtitleLabel
+            from ui.controllers.channel_flow_controller import ChannelFlowController
 
-            dialog = QDialog(self)
-            dialog.setWindowTitle("אפשרויות סריקת ערוץ")
-            dialog.setFixedSize(350, 250)
-            
-            layout = QVBoxLayout(dialog)
-            layout.addWidget(SubtitleLabel("בחר מה ברצונך להוריד מהערוץ:"))
-            
-            cb_videos = QCheckBox("סרטונים")
-            cb_shorts = QCheckBox("קצרים")
-            cb_releases = QCheckBox("פריטי תוכן")
-            cb_playlists = QCheckBox("פלייליסטים")
-            
-            # Default to videos
-            cb_videos.setChecked(True)
-            
-            layout.addWidget(cb_videos)
-            layout.addWidget(cb_shorts)
-            layout.addWidget(cb_releases)
-            layout.addWidget(cb_playlists)
-            
-            btn_layout = QHBoxLayout()
-            ok_btn = PrimaryPushButton("התחל גירוד")
-            cancel_btn = PushButton("ביטול")
-            btn_layout.addWidget(ok_btn)
-            btn_layout.addWidget(cancel_btn)
-            
-            layout.addLayout(btn_layout)
-            
-            ok_btn.clicked.connect(dialog.accept)
-            cancel_btn.clicked.connect(dialog.reject)
-            
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                channel_tabs = []
-                if cb_videos.isChecked(): channel_tabs.append("סרטונים")
-                if cb_shorts.isChecked(): channel_tabs.append("קצרים")
-                if cb_releases.isChecked(): channel_tabs.append("פריטי תוכן")
-                if cb_playlists.isChecked(): channel_tabs.append("פלייליסטים")
-                
-                if not channel_tabs:
-                    channel_tabs = ["סרטונים"]
-                    
-                self._fetch_ctrl.fetch(url, channel_tabs)
-            else:
-                self._status_bar.set_status("בוטל על ידי המשתמש")
+            ctrl = ChannelFlowController(
+                channel_url=url,
+                channel_name="",
+                config=self._cfg,
+                parent_widget=self,
+                parent=self,
+            )
+            ctrl.tracks_ready.connect(
+                lambda tracks: [self._add_track_to_queue(t) for t in tracks]
+            )
+            ctrl.status_update.connect(self._status_bar.set_status)
+            ctrl.finished.connect(lambda: self._on_channel_flow_finished(ctrl))
+            ctrl.run()
         else:
             self._fetch_ctrl.fetch(url)
+
+    def _on_channel_flow_finished(self, ctrl) -> None:
+        self._last_url_kind = UrlKind.ARTIST
+        channel_name = getattr(ctrl, "_channel_name", "")
+        if channel_name:
+            self._last_playlist_title = channel_name
 
     def _on_fetch_finished(self, result) -> None:
         if hasattr(result, "playlist_title") and result.playlist_title:

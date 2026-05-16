@@ -47,11 +47,13 @@ _AUDIO_QUALITY_MAP = {
     "Low (128k)":    AudioQuality.LOW,
 }
 _VIDEO_QUALITY_MAP = {
-    "Best":  VideoQuality.BEST,
-    "1080p": VideoQuality.HIGH,
-    "720p":  VideoQuality.MEDIUM,
-    "480p":  VideoQuality.LOW,
-    "Worst": VideoQuality.WORST,
+    "Best":       VideoQuality.BEST,
+    "2160p (4K)": VideoQuality.UHD_4K,
+    "1440p (2K)": VideoQuality.QHD_2K,
+    "1080p":      VideoQuality.HIGH,
+    "720p":       VideoQuality.MEDIUM,
+    "480p":       VideoQuality.LOW,
+    "Worst":      VideoQuality.WORST,
 }
 _MULTI_KINDS = {UrlKind.PLAYLIST, UrlKind.ALBUM, UrlKind.ARTIST}
 

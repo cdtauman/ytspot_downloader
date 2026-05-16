@@ -67,7 +67,7 @@ def build_base_ydl_opts(
         # ── Verbosity ─────────────────────────────────────────────────────────
         "quiet":       quiet,
         "no_warnings": False,
-        "no_color":    True,
+        "color":       "no_color",
 
         # ── JS runtime for YouTube player decryption ──────────────────────────
         "js_runtimes": _detect_js_runtimes(),
