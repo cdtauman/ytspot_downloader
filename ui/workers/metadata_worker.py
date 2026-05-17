@@ -21,6 +21,7 @@ from core.metadata_processor import (
     backup_tags,
     build_scan_result,
     scan_folder,
+    scan_folders,
     write_tags,
 )
 
@@ -53,8 +54,10 @@ class MetadataScanWorker(QThread):
     def run(self) -> None:
         tracks: list[AudioTrackItem] = []
         skipped = 0
+        folders: set[Path] = {self._root}
 
         try:
+            folders = scan_folders(self._root, self._recursive)
             for item in scan_folder(self._root, self._recursive):
                 if self._cancel.is_set():
                     break
@@ -65,7 +68,7 @@ class MetadataScanWorker(QThread):
             self.scan_error.emit(str(exc))
             return
 
-        result = build_scan_result(self._root, tracks, skipped)
+        result = build_scan_result(self._root, tracks, skipped, folders)
         self.scan_complete.emit(result)
 
 
@@ -132,6 +135,23 @@ class MetadataApplyWorker(QThread):
                 continue
 
             ok = write_tags(item.path, item.proposed, item.original)
+
+            # Rename file if requested
+            if ok and item.proposed_filename and item.proposed_filename != item.path.name:
+                new_path = item.path.parent / item.proposed_filename
+                try:
+                    if not new_path.exists():
+                        item.path.rename(new_path)
+                        item.path   = new_path
+                        item.folder = new_path.parent
+                    item.proposed_filename = None
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "[MetadataApplyWorker] Rename failed %s → %s: %s",
+                        item.path.name, item.proposed_filename, exc,
+                    )
+
             if ok:
                 item.status = TrackStatus.DONE
                 success += 1

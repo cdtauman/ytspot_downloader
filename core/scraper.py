@@ -310,8 +310,23 @@ def scrape_spotify_artist(url: str, on_item: Optional[Callable[[Dict], None]] = 
                         
                         # Metadata for this grid
                         try:
+                            thumb_url = grid.evaluate("""el => {
+                                let curr = el;
+                                for(let i=0; i<6; i++) {
+                                    if(!curr) break;
+                                    let img = curr.querySelector('img');
+                                    if(img) return img.src;
+                                    let sibling = curr.previousElementSibling;
+                                    while(sibling) {
+                                        let sibImg = sibling.querySelector('img') || (sibling.tagName === 'IMG' ? sibling : null);
+                                        if(sibImg) return sibImg.src;
+                                        sibling = sibling.previousElementSibling;
+                                    }
+                                    curr = curr.parentElement;
+                                }
+                                return "";
+                            }""") or ""
                             rel_container = grid.evaluate_handle("el => el.closest('div:has(h1), div:has(h2), div:has(img), [class*=\"contentSpacing\"]') || el.parentElement")
-                            thumb_url = rel_container.evaluate("el => el.querySelector('img')?.src") or ""
                             # Release label and track count (e.g. "אלבום • 2023 • 16 שירים")
                             # We collect all text from the header container to ensure we find the song count
                             meta_str = rel_container.evaluate("el => el.innerText || ''")

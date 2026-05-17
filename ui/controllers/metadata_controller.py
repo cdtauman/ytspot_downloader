@@ -50,6 +50,7 @@ class MetadataController(QObject):
     track_discovered   = Signal(object)        # AudioTrackItem
     scan_complete      = Signal(object)        # ScanResult
     auto_rules_applied = Signal()
+    tags_modified      = Signal()              # any in-memory tag edit (triggers table refresh)
     apply_started      = Signal()
     apply_progress     = Signal(int, int)      # done, total
     apply_file_done    = Signal(str, bool)     # path, success
@@ -118,17 +119,13 @@ class MetadataController(QObject):
             if num is not None and num != item.original.track_num:
                 p.track_num = num
 
-            # Artist ← grandparent folder (only if we are at least 2 levels deep)
-            grandparent = item.folder.parent
-            if root is None or grandparent != root:
-                artist_name = grandparent.name
-                if artist_name and artist_name != item.original.artist:
-                    p.artist = artist_name
-                    if p.album_artist is None and artist_name != item.original.album_artist:
-                        p.album_artist = artist_name
-
+        changed_count = sum(1 for t in tracks if t.has_changes)
         self.auto_rules_applied.emit()
-        self.status_update.emit("הצעות אוטומטיות חושבו")
+        self.tags_modified.emit()
+        if changed_count:
+            self.status_update.emit(f"סדר אוטומטי: {changed_count} שינויים הוצעו")
+        else:
+            self.status_update.emit("סדר אוטומטי: כל הקבצים כבר מסודרים")
 
     def apply_artist_to_scope(self, artist: str, tracks: list[AudioTrackItem]) -> None:
         """Set proposed.artist (and album_artist) on all given tracks."""
@@ -138,6 +135,7 @@ class MetadataController(QObject):
             item.proposed.artist = artist
             if not item.proposed.album_artist:
                 item.proposed.album_artist = artist
+        self.tags_modified.emit()
         self.status_update.emit(f"אמן '{artist}' הוחל על {len(tracks)} קבצים")
 
     def apply_album_to_folder(
@@ -149,7 +147,19 @@ class MetadataController(QObject):
             if item.status == TrackStatus.UNSUPPORTED:
                 continue
             item.proposed.album = album
+        self.tags_modified.emit()
         self.status_update.emit(f"אלבום '{album}' הוחל על {len(affected)} קבצים")
+
+    def apply_album_to_scope(self, album: str, tracks: list[AudioTrackItem]) -> None:
+        """Set proposed.album on all given tracks (regardless of folder)."""
+        affected = 0
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            item.proposed.album = album
+            affected += 1
+        self.tags_modified.emit()
+        self.status_update.emit(f"אלבום '{album}' הוחל על {affected} קבצים")
 
     def apply_title_from_filename(
         self, tracks: list[AudioTrackItem], strip_numbering: bool = True
@@ -161,6 +171,7 @@ class MetadataController(QObject):
                 item.proposed.title = clean_filename_to_title(item.path.name)
             else:
                 item.proposed.title = item.path.stem
+        self.tags_modified.emit()
 
     def apply_track_from_filename(self, tracks: list[AudioTrackItem]) -> None:
         for item in tracks:
@@ -169,25 +180,36 @@ class MetadataController(QObject):
             num = extract_track_number(item.path.name)
             if num is not None:
                 item.proposed.track_num = num
+        self.tags_modified.emit()
 
     def clear_comments(self, tracks: list[AudioTrackItem]) -> None:
         for item in tracks:
             if item.status == TrackStatus.UNSUPPORTED:
                 continue
             item.proposed.comment = ""
+        self.tags_modified.emit()
 
-    def apply_changes(self, backup_dir: Optional[Path] = None) -> None:
-        """Launch MetadataApplyWorker on all tracks that have proposed changes."""
+    def apply_changes(
+        self,
+        backup_dir: Optional[Path] = None,
+        tracks_to_apply: Optional[list] = None,
+    ) -> None:
+        """Launch MetadataApplyWorker.  If tracks_to_apply is given (checked tracks),
+        only those are written; otherwise every changed track in the session is written."""
         from ui.workers.metadata_worker import MetadataApplyWorker
 
         if self._apply_worker and self._apply_worker.isRunning():
-            return  # already running
+            return
 
-        tracks = self._session.scan_result.tracks if self._session.scan_result else []
-        changed = [t for t in tracks if t.has_changes]
+        candidates = (
+            tracks_to_apply
+            if tracks_to_apply is not None
+            else (self._session.scan_result.tracks if self._session.scan_result else [])
+        )
+        changed = [t for t in candidates if t.has_changes]
 
         if not changed:
-            self.status_update.emit("אין שינויים להחלה")
+            self.status_update.emit("אין שינויים להחלה בקבצים הנבחרים")
             return
 
         bd = backup_dir or _BACKUP_DIR
@@ -198,11 +220,151 @@ class MetadataController(QObject):
         self.apply_started.emit()
         self.status_update.emit(f"כותב תגיות ל-{len(changed)} קבצים…")
 
-        self._apply_worker = MetadataApplyWorker(tracks, backup_path, parent=self)
+        self._apply_worker = MetadataApplyWorker(candidates, backup_path, parent=self)
         self._apply_worker.progress.connect(self._on_apply_progress)
         self._apply_worker.file_done.connect(self.apply_file_done)
         self._apply_worker.finished.connect(self._on_apply_finished)
         self._apply_worker.start()
+
+    # ── New magic operations ───────────────────────────────────────────────────
+
+    def apply_album_artist_from_artist(self, tracks: list[AudioTrackItem]) -> None:
+        """Set album_artist to the current (or proposed) artist value."""
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            src = item.proposed.artist if item.proposed.artist is not None else item.original.artist
+            if src:
+                item.proposed.album_artist = src
+        self.tags_modified.emit()
+        self.status_update.emit(f"אמן אלבום הועתק מ-אמן ({len(tracks)} קבצים)")
+
+    def split_artist_title_from_filename(self, tracks: list[AudioTrackItem]) -> None:
+        """Parse filenames of the form 'Artist – Title.ext' into separate fields."""
+        import re
+        _SPLIT_RE = re.compile(r"^(.+?)\s*[-–—]\s*(.+)$")
+        count = 0
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            m = _SPLIT_RE.match(item.path.stem)
+            if m:
+                item.proposed.artist = m.group(1).strip()
+                item.proposed.title  = m.group(2).strip()
+                count += 1
+        self.tags_modified.emit()
+        self.status_update.emit(f"פיצול אמן-כותרת הושלם ({count} קבצים)")
+
+    def clear_year(self, tracks: list[AudioTrackItem]) -> None:
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            item.proposed.year = ""
+        self.tags_modified.emit()
+        self.status_update.emit("שנה נוקתה")
+
+    def clear_genre(self, tracks: list[AudioTrackItem]) -> None:
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            item.proposed.genre = ""
+        self.tags_modified.emit()
+        self.status_update.emit("ז'אנר נוקה")
+
+    def clear_track_num(self, tracks: list[AudioTrackItem]) -> None:
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            item.proposed.track_num = ""
+        self.tags_modified.emit()
+        self.status_update.emit("מספר רצועה נוקה")
+
+    def normalize_title_spaces(self, tracks: list[AudioTrackItem]) -> None:
+        """Replace underscores with spaces and collapse multiple spaces in title."""
+        count = 0
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            src = item.proposed.title if item.proposed.title is not None else item.original.title
+            if src:
+                cleaned = src.replace("_", " ")
+                cleaned = " ".join(cleaned.split())
+                if cleaned != src:
+                    item.proposed.title = cleaned
+                    count += 1
+        self.tags_modified.emit()
+        self.status_update.emit(f"נוקה רווחים ב-{count} כותרות")
+
+    def strip_web_junk_from_title(self, tracks: list[AudioTrackItem]) -> None:
+        """Remove common YouTube/web annotations from title (Official Video, HD, etc.)."""
+        import re
+        _JUNK_RE = re.compile(
+            r"\s*[\[\(]"
+            r"(?:Official\s*(?:Music\s*)?(?:Video|Audio|Lyric[s]?|MV)|"
+            r"Lyric[s]?|HD|HQ|4K|Visualizer|Audio|Video|"
+            r"feat\.?\s*[^\]\)]+|ft\.?\s*[^\]\)]+|"
+            r"Remastered(?:\s*\d{4})?|Live(?:\s*Version)?|"
+            r"Cover|Remix|Extended|Radio\s*Edit|"
+            r"מוזיקה\s*רשמית|קליפ\s*רשמי)"
+            r"[^\]\)]*[\]\)]",
+            re.IGNORECASE,
+        )
+        count = 0
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            src = item.proposed.title if item.proposed.title is not None else item.original.title
+            if src:
+                cleaned = _JUNK_RE.sub("", src).strip()
+                if cleaned != src:
+                    item.proposed.title = cleaned
+                    count += 1
+        self.tags_modified.emit()
+        self.status_update.emit(f"זבל הוסר מ-{count} כותרות")
+
+    def clean_filename(self, tracks: list[AudioTrackItem]) -> None:
+        """Clean the physical filename (remove underscores, brackets, etc.)."""
+        import re
+        count = 0
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            current_name = item.proposed_filename if item.proposed_filename else item.path.name
+            stem = current_name.rsplit('.', 1)[0] if '.' in current_name else current_name
+            ext = item.path.suffix
+            
+            cleaned = stem.replace("_", " ")
+            cleaned = re.sub(r'\(.*?\)', '', cleaned)
+            cleaned = re.sub(r'\[.*?\]', '', cleaned)
+            cleaned = " ".join(cleaned.split())
+            
+            if cleaned and cleaned != stem:
+                item.proposed_filename = cleaned + ext
+                count += 1
+                
+        self.tags_modified.emit()
+        self.status_update.emit(f"שם קובץ פיזי נוקה עבור {count} קבצים")
+
+    def strip_filename_numbering(self, tracks: list[AudioTrackItem]) -> None:
+        """Remove leading numbering (e.g. '01 - ') from physical filename."""
+        import re
+        _PREFIX_RE = re.compile(r'^\s*\d+\s*[-_.]?\s*')
+        count = 0
+        for item in tracks:
+            if item.status == TrackStatus.UNSUPPORTED:
+                continue
+            current_name = item.proposed_filename if item.proposed_filename else item.path.name
+            stem = current_name.rsplit('.', 1)[0] if '.' in current_name else current_name
+            ext = item.path.suffix
+            
+            cleaned = _PREFIX_RE.sub('', stem).strip()
+            
+            if cleaned and cleaned != stem:
+                item.proposed_filename = cleaned + ext
+                count += 1
+                
+        self.tags_modified.emit()
+        self.status_update.emit(f"מספור הוסר משם הקובץ עבור {count} קבצים")
 
     def cancel_apply(self) -> None:
         if self._apply_worker and self._apply_worker.isRunning():
@@ -212,6 +374,7 @@ class MetadataController(QObject):
         """Clear all proposed tags on every given track."""
         for item in tracks:
             item.proposed.clear()
+        self.tags_modified.emit()
         self.status_update.emit("כל השינויים בוטלו")
 
     # ── Private slots ──────────────────────────────────────────────────────────

@@ -277,7 +277,9 @@ class DownloadOrchestrator:
 
         def on_progress(p: DownloadProgress) -> None:
             if p.thumbnail_url and not getattr(req, "_thumb_sent", False):
-                self._safe_cb("on_track_thumbnail", key, p.thumbnail_url)
+                # Prefer the original thumbnail (e.g. Spotify) if we had one
+                thumb_to_send = req.thumbnail_url if req.thumbnail_url else p.thumbnail_url
+                self._safe_cb("on_track_thumbnail", key, thumb_to_send)
                 req._thumb_sent = True
 
             update_counter[0] += 1

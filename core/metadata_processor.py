@@ -49,13 +49,18 @@ def clean_filename_to_title(filename: str) -> str:
     Convert a filename (with or without extension) to a clean song title.
 
     Examples:
-      "01 - אור.mp3"   → "אור"
-      "02. Track.flac" → "Track"
-      "03_Song.m4a"    → "Song"
-      "No Number.mp3"  → "No Number"
+      "01 - אור.mp3"      → "אור"
+      "02. Track.flac"    → "Track"
+      "03_Song_Name.m4a"  → "Song Name"
+      "No_Number.mp3"     → "No Number"
     """
     stem = Path(filename).stem
+    # Strip leading track number (e.g. "01 - ", "02. ", "003_")
     cleaned = _STRIP_NUM_RE.sub("", stem).strip()
+    # Replace underscores and runs of dashes used as word separators
+    cleaned = cleaned.replace("_", " ")
+    # Collapse multiple spaces
+    cleaned = " ".join(cleaned.split())
     return cleaned if cleaned else stem
 
 
@@ -139,8 +144,41 @@ def scan_folder(
         yield item
 
 
-def build_scan_result(root: Path, tracks: list[AudioTrackItem], skipped: int) -> ScanResult:
-    folder_set = {t.folder for t in tracks}
+def scan_folders(root: Path, recursive: bool = True) -> set[Path]:
+    """Return folders that should be shown in the tag-editor tree."""
+    folders: set[Path] = {root}
+    pattern = "**/*" if recursive else "*"
+
+    for path in root.glob(pattern):
+        try:
+            if path.is_dir():
+                folders.add(path)
+        except OSError:
+            logger.warning("[MetadataProcessor] Could not inspect folder candidate: %s", path)
+
+    return folders
+
+
+def _folder_ancestors_within(root: Path, folder: Path) -> set[Path]:
+    folders: set[Path] = set()
+    current = folder
+    while True:
+        folders.add(current)
+        if current == root or current.parent == current:
+            break
+        current = current.parent
+    return folders
+
+
+def build_scan_result(
+    root: Path,
+    tracks: list[AudioTrackItem],
+    skipped: int,
+    folders: Optional[set[Path]] = None,
+) -> ScanResult:
+    folder_set = set(folders or {root})
+    for track in tracks:
+        folder_set.update(_folder_ancestors_within(root, track.folder))
     result = ScanResult(root=root, tracks=tracks, skipped_count=skipped, folder_set=folder_set)
     return result
 
@@ -211,6 +249,7 @@ def _read_mp3(path: Path) -> OriginalTags:
         track_total  = track_total,
         comment      = comment,
         year         = _text("TDRC"),
+        genre        = _text("TCON"),
     )
 
 
@@ -222,6 +261,11 @@ def _read_flac(path: Path) -> OriginalTags:
     def _get(key: str) -> str:
         vals = audio.get(key.lower(), [])
         return vals[0].strip() if vals else ""
+
+    def _get_multi(key: str) -> str:
+        """Join multiple values (e.g. multiple artist tags) with '; '."""
+        vals = audio.get(key.lower(), [])
+        return "; ".join(v.strip() for v in vals if v.strip())
 
     track_num = None
     track_total = None
@@ -247,13 +291,14 @@ def _read_flac(path: Path) -> OriginalTags:
 
     return OriginalTags(
         title        = _get("title"),
-        artist       = _get("artist"),
+        artist       = _get_multi("artist"),   # join multiple artist values
         album        = _get("album"),
-        album_artist = _get("albumartist"),
+        album_artist = _get_multi("albumartist"),
         track_num    = track_num,
         track_total  = track_total,
         comment      = _get("comment"),
         year         = _get("date"),
+        genre        = _get("genre"),
     )
 
 
@@ -281,6 +326,9 @@ def _read_m4a(path: Path) -> OriginalTags:
         except (TypeError, ValueError, IndexError):
             pass
 
+    # M4A genre: ©gen (text) takes priority over gnre (integer ID)
+    genre = _get_str("\xa9gen")
+
     return OriginalTags(
         title        = _get_str("\xa9nam"),
         artist       = _get_str("\xa9ART"),
@@ -290,6 +338,7 @@ def _read_m4a(path: Path) -> OriginalTags:
         track_total  = track_total,
         comment      = _get_str("\xa9cmt"),
         year         = _get_str("\xa9day"),
+        genre        = genre,
     )
 
 
@@ -333,7 +382,7 @@ def write_tags(path: Path, proposed: ProposedTags, original: OriginalTags) -> bo
 def _write_mp3(path: Path, tags: OriginalTags) -> None:
     from mutagen.id3 import (
         ID3, ID3NoHeaderError,
-        TIT2, TPE1, TALB, TPE2, TRCK, COMM, TDRC,
+        TIT2, TPE1, TALB, TPE2, TRCK, COMM, TDRC, TCON,
         Encoding,
     )
 
@@ -388,6 +437,11 @@ def _write_mp3(path: Path, tags: OriginalTags) -> None:
     if tags.year:
         _set("TDRC", TDRC, text=tags.year)
 
+    if tags.genre:
+        _set("TCON", TCON, text=tags.genre)
+    else:
+        _del("TCON")
+
     audio.save(str(path))
 
 
@@ -402,11 +456,18 @@ def _write_flac(path: Path, tags: OriginalTags) -> None:
         elif key in audio:
             del audio[key]
 
-    _set("title",       tags.title)
-    _set("artist",      tags.artist)
-    _set("album",       tags.album)
-    _set("albumartist", tags.album_artist)
-    _set("comment",     tags.comment)
+    _set("title",   tags.title)
+    _set("album",   tags.album)
+    _set("comment", tags.comment)
+    _set("genre",   tags.genre)
+
+    # Artist and album artist: split "A; B" into multiple FLAC values
+    for flac_key, value in (("artist", tags.artist), ("albumartist", tags.album_artist)):
+        if value:
+            parts = [p.strip() for p in value.split(";") if p.strip()]
+            audio[flac_key] = parts
+        elif flac_key in audio:
+            del audio[flac_key]
 
     if tags.track_num is not None:
         audio["tracknumber"] = str(tags.track_num)
@@ -437,6 +498,7 @@ def _write_m4a(path: Path, tags: OriginalTags) -> None:
     _set("\xa9alb", tags.album)
     _set("aART",    tags.album_artist)
     _set("\xa9cmt", tags.comment)
+    _set("\xa9gen", tags.genre)
 
     if tags.track_num is not None:
         total = tags.track_total or 0

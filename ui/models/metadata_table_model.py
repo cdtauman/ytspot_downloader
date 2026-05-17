@@ -7,8 +7,8 @@ before/after layout.  Changed cells are highlighted in accent colour.
 
 from __future__ import annotations
 
+import bisect
 from pathlib import Path
-from typing import Optional
 
 from PySide6.QtCore import (
     QAbstractTableModel,
@@ -22,18 +22,24 @@ from ui.theme_manager import ACCENT_COLOR, ERROR_COLOR, WARNING_COLOR
 
 # ── Column constants ──────────────────────────────────────────────────────────
 
-COL_CHECK      = 0
-COL_FILENAME   = 1
-COL_TITLE_CUR  = 2
-COL_TITLE_NEW  = 3
-COL_ARTIST_CUR = 4
-COL_ARTIST_NEW = 5
-COL_ALBUM_CUR  = 6
-COL_ALBUM_NEW  = 7
-COL_TRACK_CUR  = 8
-COL_TRACK_NEW  = 9
-COL_STATUS     = 10
-COLUMN_COUNT   = 11
+COL_CHECK        = 0
+COL_FILENAME     = 1
+COL_TITLE_CUR    = 2
+COL_TITLE_NEW    = 3
+COL_ARTIST_CUR   = 4
+COL_ARTIST_NEW   = 5
+COL_ALBUM_CUR    = 6
+COL_ALBUM_NEW    = 7
+COL_TRACK_CUR    = 8
+COL_TRACK_NEW    = 9
+COL_STATUS       = 10
+# Extended columns (hidden by default, user-toggleable)
+COL_FILENAME_NEW = 11
+COL_GENRE_CUR    = 12
+COL_GENRE_NEW    = 13
+COL_COMMENT_CUR  = 14
+COL_COMMENT_NEW  = 15
+COLUMN_COUNT     = 16
 
 _HEADERS = [
     "", "שם קובץ",
@@ -42,6 +48,9 @@ _HEADERS = [
     "אלבום", "אלבום (חדש)",
     "רצועה", "רצועה (חדש)",
     "סטטוס",
+    "שם קובץ חדש",
+    "ז'אנר", "ז'אנר (חדש)",
+    "הערות", "הערות (חדש)",
 ]
 
 # Alpha-blended accent / warning brush colours
@@ -59,20 +68,21 @@ _WARN_BRUSH   = QBrush(_WARN_BG)
 
 class MetadataTableModel(QAbstractTableModel):
     """
-    Displays a filtered list of AudioTrackItem objects.
+    Displays checked AudioTrackItem objects.
 
     All tracks are stored in self._tracks (master list).
-    self._visible holds indices into _tracks after applying folder filter.
+    self._visible holds master-indices of tracks that are currently checked,
+    sorted in discovery order — this is the only filter.
     """
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self._tracks:  list[AudioTrackItem] = []
-        self._checked: set[int] = set()          # indices into _tracks
-        self._filter:  Optional[Path] = None
+        self._tracks:      list[AudioTrackItem] = []
+        self._checked:     set[int] = set()          # indices into _tracks
+        self._path_to_idx: dict[Path, int] = {}      # fast path → master-idx lookup
 
-        # Computed view
-        self._visible: list[int] = []            # indices into _tracks
+        # Computed view: sorted(self._checked)
+        self._visible: list[int] = []
 
     # ── QAbstractTableModel interface ─────────────────────────────────────────
 
@@ -129,6 +139,16 @@ class MetadataTableModel(QAbstractTableModel):
                 return ""
             if col == COL_STATUS:
                 return _status_label(item.status)
+            if col == COL_FILENAME_NEW:
+                return item.proposed_filename or ""
+            if col == COL_GENRE_CUR:
+                return o.genre
+            if col == COL_GENRE_NEW:
+                return p.genre if p.genre is not None else ""
+            if col == COL_COMMENT_CUR:
+                return o.comment
+            if col == COL_COMMENT_NEW:
+                return p.comment if p.comment is not None else ""
             return None
 
         # ── BackgroundRole ────────────────────────────────────────────────────
@@ -144,7 +164,13 @@ class MetadataTableModel(QAbstractTableModel):
                 return _ACCENT_BRUSH
             if col == COL_ALBUM_NEW  and p.album  is not None and p.album  != o.album:
                 return _ACCENT_BRUSH
-            if col == COL_TRACK_NEW  and p.track_num is not None and p.track_num != o.track_num:
+            if col == COL_TRACK_NEW     and p.track_num is not None and p.track_num != o.track_num:
+                return _ACCENT_BRUSH
+            if col == COL_FILENAME_NEW  and item.proposed_filename:
+                return _ACCENT_BRUSH
+            if col == COL_GENRE_NEW     and p.genre    is not None and p.genre    != o.genre:
+                return _ACCENT_BRUSH
+            if col == COL_COMMENT_NEW   and p.comment  is not None and p.comment  != o.comment:
                 return _ACCENT_BRUSH
             return None
 
@@ -157,11 +183,14 @@ class MetadataTableModel(QAbstractTableModel):
 
         # ── FontRole ─────────────────────────────────────────────────────────
         if role == Qt.FontRole:
-            if col in (COL_TITLE_NEW, COL_ARTIST_NEW, COL_ALBUM_NEW, COL_TRACK_NEW):
-                if item.has_changes:
-                    f = QFont()
-                    f.setBold(True)
-                    return f
+            _new_cols = (
+                COL_TITLE_NEW, COL_ARTIST_NEW, COL_ALBUM_NEW, COL_TRACK_NEW,
+                COL_FILENAME_NEW, COL_GENRE_NEW, COL_COMMENT_NEW,
+            )
+            if col in _new_cols and item.has_changes:
+                f = QFont()
+                f.setBold(True)
+                return f
             return None
 
         # ── ToolTipRole ───────────────────────────────────────────────────────
@@ -207,6 +236,12 @@ class MetadataTableModel(QAbstractTableModel):
                     item.proposed.track_num = int(val) if val else None
                 except ValueError:
                     return False
+            elif col == COL_FILENAME_NEW:
+                item.proposed_filename = val if val else None
+            elif col == COL_GENRE_NEW:
+                item.proposed.genre = val
+            elif col == COL_COMMENT_NEW:
+                item.proposed.comment = val
             else:
                 return False
             self.dataChanged.emit(index, index, [Qt.DisplayRole, Qt.BackgroundRole, Qt.FontRole])
@@ -221,7 +256,10 @@ class MetadataTableModel(QAbstractTableModel):
         base = Qt.ItemIsEnabled | Qt.ItemIsSelectable
         if col == COL_CHECK:
             return base | Qt.ItemIsUserCheckable
-        if col in (COL_TITLE_NEW, COL_ARTIST_NEW, COL_ALBUM_NEW, COL_TRACK_NEW):
+        if col in (
+            COL_TITLE_NEW, COL_ARTIST_NEW, COL_ALBUM_NEW, COL_TRACK_NEW,
+            COL_FILENAME_NEW, COL_GENRE_NEW, COL_COMMENT_NEW,
+        ):
             return base | Qt.ItemIsEditable
         return base
 
@@ -232,26 +270,24 @@ class MetadataTableModel(QAbstractTableModel):
         self.beginResetModel()
         self._tracks = list(tracks)
         self._checked.clear()
+        self._path_to_idx = {t.path: i for i, t in enumerate(self._tracks)}
         self._rebuild_visible()
         self.endResetModel()
 
     def add_track(self, item: AudioTrackItem) -> None:
-        """Incrementally insert one track; respects active folder filter."""
+        """Incrementally insert one track. All new tracks start checked and visible."""
         master_idx = len(self._tracks)
         self._tracks.append(item)
+        self._path_to_idx[item.path] = master_idx
+        self._checked.add(master_idx)
 
-        if self._filter is None or item.folder == self._filter:
-            new_vis_row = len(self._visible)
-            self.beginInsertRows(QModelIndex(), new_vis_row, new_vis_row)
-            self._visible.append(master_idx)
-            self.endInsertRows()
+        new_vis_row = len(self._visible)
+        self.beginInsertRows(QModelIndex(), new_vis_row, new_vis_row)
+        self._visible.append(master_idx)
+        self.endInsertRows()
 
-    def set_folder_filter(self, folder: Optional[Path]) -> None:
-        """Show only tracks inside folder (None = show all)."""
-        self.beginResetModel()
-        self._filter = folder
-        self._rebuild_visible()
-        self.endResetModel()
+    def set_folder_filter(self, folder) -> None:
+        """No-op — table always shows checked tracks regardless of folder."""
 
     def get_visible_tracks(self) -> list[AudioTrackItem]:
         return [self._tracks[i] for i in self._visible]
@@ -276,15 +312,12 @@ class MetadataTableModel(QAbstractTableModel):
 
     def set_all_checked(self, checked: bool) -> None:
         if checked:
-            self._checked = set(self._visible)
+            self._checked = set(range(len(self._tracks)))
         else:
-            self._checked -= set(self._visible)
-        if self._visible:
-            self.dataChanged.emit(
-                self.index(0, COL_CHECK),
-                self.index(len(self._visible) - 1, COL_CHECK),
-                [Qt.CheckStateRole],
-            )
+            self._checked = set()
+        self.beginResetModel()
+        self._rebuild_visible()
+        self.endResetModel()
 
     def get_changed_count(self) -> int:
         return sum(1 for t in self._tracks if t.has_changes)
@@ -303,16 +336,43 @@ class MetadataTableModel(QAbstractTableModel):
                 self.index(len(self._visible) - 1, COLUMN_COUNT - 1),
             )
 
+    def set_path_checked(self, path: Path, checked: bool) -> None:
+        """Check or uncheck a track by file path (called from tree checkboxes)."""
+        idx = self._path_to_idx.get(path)
+        if idx is None:
+            return
+
+        if checked and idx not in self._checked:
+            self._checked.add(idx)
+            pos = bisect.bisect_left(self._visible, idx)
+            self.beginInsertRows(QModelIndex(), pos, pos)
+            self._visible.insert(pos, idx)
+            self.endInsertRows()
+
+        elif not checked and idx in self._checked:
+            self._checked.discard(idx)
+            try:
+                pos = self._visible.index(idx)
+                self.beginRemoveRows(QModelIndex(), pos, pos)
+                self._visible.pop(pos)
+                self.endRemoveRows()
+            except ValueError:
+                pass
+
+    def get_visible_row_for_path(self, path: Path) -> int:
+        """Return visible-row index for this path, or -1 if not found/not visible."""
+        idx = self._path_to_idx.get(path)
+        if idx is None:
+            return -1
+        try:
+            return self._visible.index(idx)
+        except ValueError:
+            return -1
+
     # ── Private ───────────────────────────────────────────────────────────────
 
     def _rebuild_visible(self) -> None:
-        if self._filter is None:
-            self._visible = list(range(len(self._tracks)))
-        else:
-            self._visible = [
-                i for i, t in enumerate(self._tracks)
-                if t.folder == self._filter
-            ]
+        self._visible = sorted(self._checked)
 
 
 def _status_label(status: str) -> str:

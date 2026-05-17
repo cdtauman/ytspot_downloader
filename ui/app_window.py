@@ -225,7 +225,7 @@ class AppWindow(FluentWindow):
         self._offline_banner  = OfflineBanner()
         self._dl_bar          = _DownloadBar()
         self._converter_panel  = ConverterPanel()
-        self._metadata_panel   = MetadataEditorPanel()
+        self._metadata_panel   = MetadataEditorPanel(config=self._cfg)
         self._settings_panel   = SettingsPanel(self._cfg, self._theme)
 
         # Queue composite wrapper
@@ -398,15 +398,25 @@ class AppWindow(FluentWindow):
         p.apply_requested.connect(c.apply_changes)
         p.revert_requested.connect(c.revert_all)
         p.artist_to_scope.connect(c.apply_artist_to_scope)
-        p.album_to_folder.connect(c.apply_album_to_folder)
+        p.album_to_scope.connect(c.apply_album_to_scope)
         p.title_from_filename.connect(c.apply_title_from_filename)
         p.track_from_filename.connect(c.apply_track_from_filename)
         p.clear_comments.connect(c.clear_comments)
+        p.album_artist_from_artist.connect(c.apply_album_artist_from_artist)
+        p.split_artist_title.connect(c.split_artist_title_from_filename)
+        p.clear_track_num.connect(c.clear_track_num)
+        p.clear_year.connect(c.clear_year)
+        p.clear_genre.connect(c.clear_genre)
+        p.normalize_title_spaces.connect(c.normalize_title_spaces)
+        p.strip_web_junk.connect(c.strip_web_junk_from_title)
+        p.clean_filename.connect(c.clean_filename)
+        p.strip_filename_numbering.connect(c.strip_filename_numbering)
 
         # Controller → Panel
         c.track_discovered.connect(p.on_track_discovered)
         c.scan_complete.connect(p.on_scan_complete)
         c.auto_rules_applied.connect(p.on_auto_rules_applied)
+        c.tags_modified.connect(p.on_auto_rules_applied)   # refresh table after any in-memory edit
         c.apply_progress.connect(p.on_apply_progress)
         c.apply_file_done.connect(p.on_apply_file_done)
         c.apply_complete.connect(p.on_apply_complete)

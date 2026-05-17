@@ -27,6 +27,7 @@ class OriginalTags:
     track_total:  Optional[int] = None
     comment:      str = ""
     year:         str = ""
+    genre:        str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -38,6 +39,7 @@ class OriginalTags:
             "track_total":  self.track_total,
             "comment":      self.comment,
             "year":         self.year,
+            "genre":        self.genre,
         }
 
 
@@ -57,6 +59,8 @@ class ProposedTags:
     album_artist: Optional[str] = None
     track_num:    Optional[int] = None   # -1 means "clear"
     comment:      Optional[str] = None
+    year:         Optional[str] = None
+    genre:        Optional[str] = None
 
     def has_changes(self, original: OriginalTags) -> bool:
         """True if any proposed field would actually change the original."""
@@ -66,6 +70,8 @@ class ProposedTags:
             (self.album,        original.album),
             (self.album_artist, original.album_artist),
             (self.comment,      original.comment),
+            (self.year,         original.year),
+            (self.genre,        original.genre),
         ]
         for proposed, orig in checks:
             if proposed is not None and proposed != orig:
@@ -91,7 +97,8 @@ class ProposedTags:
             track_num    = track,
             track_total  = original.track_total,
             comment      = pick(self.comment,      original.comment),
-            year         = original.year,
+            year         = pick(self.year,         original.year),
+            genre        = pick(self.genre,        original.genre),
         )
 
     def clear(self) -> None:
@@ -102,6 +109,8 @@ class ProposedTags:
         self.album_artist = None
         self.track_num    = None
         self.comment      = None
+        self.year         = None
+        self.genre        = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -124,6 +133,7 @@ class AudioTrackItem:
     ext:       str        # ".mp3" | ".flac" | ".m4a"
     original:  OriginalTags = field(default_factory=OriginalTags)
     proposed:  ProposedTags = field(default_factory=ProposedTags)
+    proposed_filename: Optional[str] = None   # rename target (None = no rename)
     status:    str = TrackStatus.PENDING
     error_msg: str = ""
 
@@ -133,7 +143,10 @@ class AudioTrackItem:
 
     @property
     def has_changes(self) -> bool:
-        return self.proposed.has_changes(self.original)
+        return (
+            self.proposed.has_changes(self.original)
+            or self.proposed_filename is not None
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

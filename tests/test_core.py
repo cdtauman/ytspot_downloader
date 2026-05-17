@@ -317,6 +317,33 @@ class TestBatchImporter:
         assert result.found_count >= 1
 
 
+class TestMetadataProcessor:
+
+    def test_scan_folders_includes_empty_nested_dirs(self, tmp_path):
+        from core.metadata_processor import scan_folders
+
+        empty = tmp_path / "Album" / "Empty Disc"
+        empty.mkdir(parents=True)
+
+        folders = scan_folders(tmp_path, recursive=True)
+
+        assert tmp_path in folders
+        assert tmp_path / "Album" in folders
+        assert empty in folders
+
+    def test_build_scan_result_keeps_empty_folders(self, tmp_path):
+        from core.metadata_processor import build_scan_result
+
+        empty = tmp_path / "Empty"
+        empty.mkdir()
+
+        result = build_scan_result(tmp_path, [], 0, {tmp_path, empty})
+
+        assert result.files_count == 0
+        assert empty in result.folder_set
+        assert result.folders_count == 2
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 6. Duplicate Checker
 # ──────────────────────────────────────────────────────────────────────────────

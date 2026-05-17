@@ -122,6 +122,9 @@ _DEFAULTS: dict[str, Any] = {
     # ── Auto-resume (smart queue persistence) ─────────────────────────────────
     "queue_state":           [],            # NEW – list[dict] of pending TrackMeta
     "paused_items":          [],            # NEW – list[dict] of paused-item state
+    "magic_auto_ops":        ["title_strip", "track_num", "normalize_spaces"],
+    "tag_editor_zoom":       100,
+    "tag_editor_splitter_sizes": [],
 }
 
 
@@ -633,3 +636,34 @@ class AppConfig:
     @language.setter
     def language(self, value: str) -> None:
         self._data["language"] = value
+
+    @property
+    def magic_auto_ops(self) -> list[str]:
+        val = self._data.get("magic_auto_ops", ["title_strip", "track_num", "normalize_spaces"])
+        return list(val) if isinstance(val, list) else ["title_strip", "track_num", "normalize_spaces"]
+
+    @magic_auto_ops.setter
+    def magic_auto_ops(self, value: list[str]) -> None:
+        self._data["magic_auto_ops"] = list(value)
+
+    @property
+    def tag_editor_zoom(self) -> int:
+        raw = self._data.get("tag_editor_zoom", 100)
+        try:
+            val = int(raw)
+        except (TypeError, ValueError):
+            val = 100
+        return max(50, min(200, val))
+
+    @tag_editor_zoom.setter
+    def tag_editor_zoom(self, value: int) -> None:
+        self._data["tag_editor_zoom"] = max(50, min(200, int(value)))
+
+    @property
+    def tag_editor_splitter_sizes(self) -> list[int]:
+        val = self._data.get("tag_editor_splitter_sizes", [])
+        return val if isinstance(val, list) else []
+
+    @tag_editor_splitter_sizes.setter
+    def tag_editor_splitter_sizes(self, value: list[int]) -> None:
+        self._data["tag_editor_splitter_sizes"] = list(value)

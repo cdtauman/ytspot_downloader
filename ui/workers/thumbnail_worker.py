@@ -65,6 +65,9 @@ class ThumbnailWorker(QThread):
             return
 
         try:
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
             response = requests.get(
                 self._url,
                 timeout=self._timeout,
@@ -77,6 +80,7 @@ class ThumbnailWorker(QThread):
                     )
                 },
                 stream=False,
+                verify=False,
             )
             response.raise_for_status()
 
