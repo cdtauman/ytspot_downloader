@@ -411,6 +411,8 @@ class AppWindow(FluentWindow):
         p.strip_web_junk.connect(c.strip_web_junk_from_title)
         p.clean_filename.connect(c.clean_filename)
         p.strip_filename_numbering.connect(c.strip_filename_numbering)
+        p.find_duplicates_requested.connect(lambda f, r: c.find_duplicates(f, r))
+        p.delete_duplicates_requested.connect(c.delete_duplicate_files)
 
         # Controller → Panel
         c.track_discovered.connect(p.on_track_discovered)
@@ -421,6 +423,10 @@ class AppWindow(FluentWindow):
         c.apply_file_done.connect(p.on_apply_file_done)
         c.apply_complete.connect(p.on_apply_complete)
         c.status_update.connect(p.on_status_update)
+        c.duplicate_scan_progress.connect(p.on_duplicate_scan_progress)
+        c.duplicate_scan_complete.connect(p.on_duplicate_scan_complete)
+        c.duplicate_scan_error.connect(p.on_duplicate_scan_error)
+        c.duplicate_delete_complete.connect(p.on_duplicate_delete_complete)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Background workers startup

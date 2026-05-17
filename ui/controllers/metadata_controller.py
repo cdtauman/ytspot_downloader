@@ -58,10 +58,17 @@ class MetadataController(QObject):
     apply_error        = Signal(str)
     status_update      = Signal(str)
 
+    # Duplicate detector signals
+    duplicate_scan_progress  = Signal(int, int, str)     # done, total, eta_str
+    duplicate_scan_complete  = Signal(object, float, str) # groups dict, elapsed, strategy
+    duplicate_scan_error     = Signal(str)
+    duplicate_delete_complete = Signal(int, int)          # success, fail
+
     def __init__(self, parent: QObject = None) -> None:
         super().__init__(parent)
         self._scan_worker  = None
         self._apply_worker = None
+        self._dup_worker   = None
         self._session      = TagEditSession()
 
     # ── Public API ─────────────────────────────────────────────────────────────
@@ -366,6 +373,45 @@ class MetadataController(QObject):
         self.tags_modified.emit()
         self.status_update.emit(f"מספור הוסר משם הקובץ עבור {count} קבצים")
 
+    def find_duplicates(self, folder: Path, recursive: bool) -> None:
+        """Launch DuplicateDetectorWorker to scan for duplicate audio files."""
+        from ui.workers.duplicate_detector_worker import DuplicateDetectorWorker
+
+        if self._dup_worker and self._dup_worker.isRunning():
+            self._dup_worker.cancel()
+            self._dup_worker.wait(1000)
+
+        self.status_update.emit(f"מחפש כפילויות ב-{folder.name}…")
+        self._dup_worker = DuplicateDetectorWorker(folder, recursive, parent=self)
+        self._dup_worker.progress.connect(self.duplicate_scan_progress)
+        self._dup_worker.finished.connect(self._on_dup_finished)
+        self._dup_worker.error.connect(self.duplicate_scan_error)
+        self._dup_worker.start()
+
+    def delete_duplicate_files(self, paths: list) -> None:
+        """Delete the given file paths, preferring send2trash (Recycle Bin)."""
+        success = 0
+        fail    = 0
+        for p in paths:
+            path = Path(p) if not isinstance(p, Path) else p
+            if not path.exists():
+                logger.warning("[MetadataController] File already gone, skipping: %s", path)
+                continue
+            try:
+                try:
+                    import send2trash
+                    send2trash.send2trash(str(path))
+                except ImportError:
+                    path.unlink()
+                success += 1
+            except Exception as exc:
+                logger.warning("[MetadataController] Delete failed %s: %s", path, exc)
+                fail += 1
+
+        self.duplicate_delete_complete.emit(success, fail)
+        note = f", {fail} שגיאות" if fail else ""
+        self.status_update.emit(f"נמחקו {success} קבצים כפולים{note}")
+
     def cancel_apply(self) -> None:
         if self._apply_worker and self._apply_worker.isRunning():
             self._apply_worker.cancel()
@@ -411,6 +457,15 @@ class MetadataController(QObject):
         self.status_update.emit(
             f"הושלם — {success} הצליחו, {fail} נכשלו, {skip} דולגו{bp_note}"
         )
+
+    def _on_dup_finished(self, groups: dict, elapsed: float, strategy: str) -> None:
+        n_groups = len(groups)
+        n_files  = sum(len(v) for v in groups.values())
+        strat_lbl = "גודל קובץ" if strategy == "size" else "MD5"
+        self.status_update.emit(
+            f"נמצאו {n_files} כפילויות ב-{n_groups} קבוצות ({strat_lbl}, {elapsed:.1f}s)"
+        )
+        self.duplicate_scan_complete.emit(groups, elapsed, strategy)
 
     def _cancel_scan(self) -> None:
         if self._scan_worker and self._scan_worker.isRunning():

@@ -605,6 +605,10 @@ class MetadataEditorPanel(QWidget):
     clean_filename           = Signal(list)
     strip_filename_numbering = Signal(list)
 
+    # Duplicate file detector signals
+    find_duplicates_requested   = Signal(object, bool)  # (Path, recursive)
+    delete_duplicates_requested = Signal(list)           # list[Path]
+
     def __init__(self, config: Optional[AppConfig] = None, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("metadataEditorPage")
@@ -714,6 +718,13 @@ class MetadataEditorPanel(QWidget):
         self._revert_btn.setEnabled(False)
         self._revert_btn.clicked.connect(self._on_revert)
         layout.addWidget(self._revert_btn)
+
+        self._dupes_btn = QPushButton("🔍 חפש כפילויות")
+        self._dupes_btn.setFixedHeight(32)
+        self._dupes_btn.setEnabled(False)
+        self._dupes_btn.setToolTip("סרוק את התיקייה לאיתור קבצי מוזיקה כפולים")
+        self._dupes_btn.clicked.connect(self._on_find_duplicates)
+        layout.addWidget(self._dupes_btn)
 
         layout.addStretch()
 
@@ -1164,6 +1175,13 @@ class MetadataEditorPanel(QWidget):
     def _on_revert(self) -> None:
         self.revert_requested.emit(self._model.get_all_tracks())
 
+    def _on_find_duplicates(self) -> None:
+        if not self._root_folder:
+            return
+        self._dupes_btn.setEnabled(False)
+        self._summary_lbl.setText("מחפש כפילויות…")
+        self.find_duplicates_requested.emit(self._root_folder, True)  # always recursive
+
     # ── Tree handlers ─────────────────────────────────────────────────────────
 
     _ROLE_IS_FILE = Qt.UserRole + 1
@@ -1318,6 +1336,7 @@ class MetadataEditorPanel(QWidget):
         self._auto_btn.setEnabled(n > 0)
         self._apply_btn.setEnabled(n > 0)
         self._revert_btn.setEnabled(n > 0)
+        self._dupes_btn.setEnabled(True)
         self._update_summary()
 
         if self._tree.topLevelItemCount() > 0:
@@ -1370,6 +1389,31 @@ class MetadataEditorPanel(QWidget):
 
     def on_status_update(self, msg: str) -> None:
         self._summary_lbl.setText(msg)
+
+    def on_duplicate_scan_progress(self, done: int, total: int, eta: str) -> None:
+        self._summary_lbl.setText(f"מחפש כפילויות… {done}/{total}  ({eta})")
+
+    def on_duplicate_scan_complete(self, groups: dict, elapsed: float, strategy: str) -> None:
+        self._dupes_btn.setEnabled(True)
+        if not groups:
+            self.on_status_update(f"לא נמצאו כפילויות ({elapsed:.1f}s)")
+            self._update_summary()
+            return
+
+        from ui.dialogs.duplicate_files_dialog import DuplicateFilesDialog
+        dlg = DuplicateFilesDialog(groups, elapsed, strategy, self._root_folder, parent=self)
+        if dlg.exec() == QDialog.Accepted and dlg.files_to_delete:
+            self.delete_duplicates_requested.emit(dlg.files_to_delete)
+
+    def on_duplicate_scan_error(self, msg: str) -> None:
+        self._dupes_btn.setEnabled(True)
+        self.on_status_update(f"שגיאה בחיפוש כפילויות: {msg}")
+        self._update_summary()
+
+    def on_duplicate_delete_complete(self, success: int, fail: int) -> None:
+        note = f" ({fail} שגיאות)" if fail else ""
+        self.on_status_update(f"נמחקו {success} קבצים כפולים{note}")
+        self._on_scan()   # trigger full folder rescan → refreshes tree and table
 
     # ── Tree construction helpers ─────────────────────────────────────────────
 
