@@ -20,6 +20,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "search": "Search",
         "history": "History",
         "settings": "Settings",
+        "tag_editor": "Tag Editor",
 
         # ── Download bar ────────────────────────────────────────────────────────
         "no_tracks_selected": "No tracks selected",
@@ -247,6 +248,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "search": "חיפוש",
         "history": "היסטוריה",
         "settings": "הגדרות",
+        "tag_editor": "עורך תגיות",
 
         # ── Download bar ────────────────────────────────────────────────────────
         "no_tracks_selected": "לא נבחרו שירים",

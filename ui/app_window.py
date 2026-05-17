@@ -54,14 +54,18 @@ from ui.workers.clipboard_worker import ClipboardWorker
 from ui.workers.update_worker    import UpdateWorker
 
 # ── Panels ─────────────────────────────────────────────────────────────────────
-from ui.panels.url_bar           import UrlBar
-from ui.panels.search_panel      import SearchPanel
-from ui.panels.queue_panel       import QueuePanel
-from ui.panels.history_panel     import HistoryPanel
-from ui.panels.options_bar       import OptionsBar
-from ui.panels.status_bar        import StatusBar
-from ui.panels.settings_panel    import SettingsPanel
-from ui.panels.converter_panel   import ConverterPanel
+from ui.panels.url_bar              import UrlBar
+from ui.panels.search_panel         import SearchPanel
+from ui.panels.queue_panel          import QueuePanel
+from ui.panels.history_panel        import HistoryPanel
+from ui.panels.options_bar          import OptionsBar
+from ui.panels.status_bar           import StatusBar
+from ui.panels.settings_panel       import SettingsPanel
+from ui.panels.converter_panel      import ConverterPanel
+from ui.panels.metadata_editor_panel import MetadataEditorPanel
+
+# ── Tag-editor controller ──────────────────────────────────────────────────────
+from ui.controllers.metadata_controller import MetadataController
 
 # ── Components ─────────────────────────────────────────────────────────────────
 from ui.components.track_card     import TrackCard
@@ -220,8 +224,9 @@ class AppWindow(FluentWindow):
         self._update_banner   = UpdateBanner()
         self._offline_banner  = OfflineBanner()
         self._dl_bar          = _DownloadBar()
-        self._converter_panel = ConverterPanel()
-        self._settings_panel  = SettingsPanel(self._cfg, self._theme)
+        self._converter_panel  = ConverterPanel()
+        self._metadata_panel   = MetadataEditorPanel()
+        self._settings_panel   = SettingsPanel(self._cfg, self._theme)
 
         # Queue composite wrapper
         queue_wrapper = QWidget()
@@ -253,6 +258,7 @@ class AppWindow(FluentWindow):
     def _build_controllers(self) -> None:
         self._fetch_ctrl    = FetchController(self._cfg, parent=self)
         self._search_ctrl   = SearchController(self._cfg, parent=self)
+        self._metadata_ctrl = MetadataController(parent=self)
         self._download_ctrl = DownloadController(
             config=self._cfg,
             engine=self._engine,
@@ -291,6 +297,11 @@ class AppWindow(FluentWindow):
         self._converter_panel.setObjectName("converterPage")
         self.addSubInterface(
             self._converter_panel, FluentIcon.SYNC, "Converter",
+            position=NavigationItemPosition.TOP,
+        )
+        self._metadata_panel.setObjectName("metadataEditorPage")
+        self.addSubInterface(
+            self._metadata_panel, FluentIcon.TAG, t("tag_editor"),
             position=NavigationItemPosition.TOP,
         )
         self._settings_panel.setObjectName("settingsPage")
@@ -372,6 +383,34 @@ class AppWindow(FluentWindow):
         # ── History panel ──────────────────────────────────────────────────────
         self._history_panel.redownload_requested.connect(self._on_redownload)
         self._history_panel.open_folder_requested.connect(self._on_open_folder)
+
+        # ── Metadata (Tag Editor) ──────────────────────────────────────────────
+        self._connect_metadata_signals()
+
+    def _connect_metadata_signals(self) -> None:
+        """Wire MetadataEditorPanel ↔ MetadataController."""
+        p  = self._metadata_panel
+        c  = self._metadata_ctrl
+
+        # Panel → Controller
+        p.scan_requested.connect(lambda folder, rec: c.scan(folder, rec))
+        p.auto_requested.connect(c.apply_auto_rules)
+        p.apply_requested.connect(c.apply_changes)
+        p.revert_requested.connect(c.revert_all)
+        p.artist_to_scope.connect(c.apply_artist_to_scope)
+        p.album_to_folder.connect(c.apply_album_to_folder)
+        p.title_from_filename.connect(c.apply_title_from_filename)
+        p.track_from_filename.connect(c.apply_track_from_filename)
+        p.clear_comments.connect(c.clear_comments)
+
+        # Controller → Panel
+        c.track_discovered.connect(p.on_track_discovered)
+        c.scan_complete.connect(p.on_scan_complete)
+        c.auto_rules_applied.connect(p.on_auto_rules_applied)
+        c.apply_progress.connect(p.on_apply_progress)
+        c.apply_file_done.connect(p.on_apply_file_done)
+        c.apply_complete.connect(p.on_apply_complete)
+        c.status_update.connect(p.on_status_update)
 
     # ──────────────────────────────────────────────────────────────────────────
     # Background workers startup
@@ -1092,9 +1131,9 @@ class AppWindow(FluentWindow):
         search_worker = self._search_ctrl._search_worker  # noqa: SLF001
         scraper_worker= self._fetch_ctrl._scraper_worker  # noqa: SLF001
         for attr_name, w in (
-            ("FetchWorker",  fetch_worker),
-            ("SearchWorker", search_worker),
-            ("ScraperWorker",scraper_worker),
+            ("FetchWorker",   fetch_worker),
+            ("SearchWorker",  search_worker),
+            ("ScraperWorker", scraper_worker),
         ):
             if w and w.isRunning():
                 if hasattr(w, "cancel"):
@@ -1102,6 +1141,10 @@ class AppWindow(FluentWindow):
                 finished = w.wait(2000)
                 if not finished:
                     logger.warning("[AppWindow] %s did not finish within 2s", attr_name)
+
+        # Cancel metadata workers
+        self._metadata_ctrl.cancel_scan()
+        self._metadata_ctrl.cancel_apply()
 
         # 5. Hotkeys
         try:
