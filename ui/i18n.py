@@ -71,15 +71,16 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "search_error": "❌  Search: {message}",
         "scraper_error": "❌  Scraper: {message}",
         
-        # ── Bot Bypass Browser ──────────────────────────────────────────────────
-        "bot_bypass_title": "Bot Verification Required",
+        # ── Browser sign-in (authentication for restricted content) ────────────
+        "bot_bypass_title": "Sign-in Required",
         "bot_bypass_instructions": (
-            "YouTube or the target server has blocked this request. "
-            "Please solve any CAPTCHAs, acknowledge warnings, or log in to verify your age below. "
-            "Once the video page loads successfully, click 'Save Cookies' to continue downloading."
+            "YouTube or the target server is asking for verification before serving this URL. "
+            "Please solve any CAPTCHAs and, if needed, sign in to your account below to confirm "
+            "your age or access members-only content. Once the video page loads successfully, "
+            "click 'Save Cookies' to continue downloading."
         ),
         "bot_bypass_save": "Save Cookies",
-        "bypass_bot_btn": "Bypass Protection 🛡️",
+        "bypass_bot_btn": "Sign in to YouTube 🔑",
 
         # ── URL bar ─────────────────────────────────────────────────────────────
         "fetching_button": "Fetching…",
@@ -228,7 +229,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # ── Browser cookies ─────────────────────────────────────────────────────
         "browser_cookies":      "Browser Cookies Source",
-        "browser_cookies_desc": "Extract cookies from your browser to bypass bot checks and age gates",
+        "browser_cookies_desc": "Read cookies from your browser to authenticate access to age-restricted or members-only content",
         "disabled":             "Disabled",
 
         # ── Release types ───────────────────────────────────────────────────────
@@ -299,15 +300,16 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "search_error": "❌  שגיאת חיפוש: {message}",
         "scraper_error": "❌  שגיאת סריקה: {message}",
         
-        # ── Bot Bypass Browser ──────────────────────────────────────────────────
-        "bot_bypass_title": "נדרש אימות אנושי",
+        # ── Browser sign-in (authentication for restricted content) ────────────
+        "bot_bypass_title": "נדרשת התחברות",
         "bot_bypass_instructions": (
-            "השרת חסם את הבקשה האוטומטית. "
-            "אנא פתור אתגר רובוטים (CAPTCHA) או התחבר לחשבון שלך למטה כדי לאמת גיל. "
-            "כאשר דף הסרטון ייטען בהצלחה ללא הודעות חסימה, לחץ על 'שמור קובצי עוגיות' להמשך ההורדה."
+            "השרת מבקש אימות לפני הגישה לכתובת זו. "
+            "פתור אתגר רובוטים (CAPTCHA) במידת הצורך, והתחבר לחשבונך למטה כדי לאמת "
+            "גיל או לגשת לתוכן שמיועד רק לחברים. "
+            "כאשר דף הסרטון ייטען בהצלחה, לחץ על 'שמור קובצי עוגיות' להמשך ההורדה."
         ),
         "bot_bypass_save": "שמור עוגיות",
-        "bypass_bot_btn": "עקוף הגנה 🛡️",
+        "bypass_bot_btn": "התחבר ליוטיוב 🔑",
 
         # ── URL bar ─────────────────────────────────────────────────────────────
         "fetching_button": "טוען…",
@@ -456,7 +458,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # ── Browser cookies ─────────────────────────────────────────────────────
         "browser_cookies":      "מקור עוגיות דפדפן",
-        "browser_cookies_desc": "חלץ עוגיות מהדפדפן שלך לעקיפת זיהוי רובוטים ובדיקות גיל",
+        "browser_cookies_desc": "קרא קובצי עוגיות מהדפדפן שלך כדי לאמת גישה לתוכן המוגבל בגיל או שמיועד רק לחברים",
         "disabled":             "מושבת",
 
         # ── Release types ───────────────────────────────────────────────────────

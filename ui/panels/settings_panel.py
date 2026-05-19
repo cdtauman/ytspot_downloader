@@ -487,7 +487,7 @@ class SettingsPanel(QScrollArea):
             text="התחבר עכשיו",
             icon=FluentIcon.PEOPLE,
             title="התחברות לאתר חיצוני (קוקיז)",
-            content="התחבר ליוטיוב או לכל אתר אחר ישירות מהתוכנה כדי לשמור פרטי גישה ולעקוף חסימות.",
+            content="התחבר ליוטיוב או לכל אתר אחר ישירות מהתוכנה כדי לשמור פרטי גישה ולפתור בקשות אימות.",
             parent=auth_grp,
         )
         self._login_fix_card.clicked.connect(self.login_fix_requested)

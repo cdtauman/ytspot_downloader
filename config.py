@@ -1,11 +1,12 @@
 """
-config.py  –  Persistent user-preferences manager  (v3.1 - Anti-Ban Update)
+config.py  –  Persistent user-preferences manager  (v3.1)
 ==========================================================================
 Backward-compatible additive update: every v1/v2 key is preserved.
 New keys for Phase 2 features are purely additive.
-Updated with safety measures to prevent IP flagging and Rate Limiting.
+Includes politeness defaults (request throttling, UA rotation) so the
+client stays well within typical service rate limits.
 
-New fields (Phase 2 & Anti-Ban)
+New fields (Phase 2 & rate-limit handling)
 --------------------
   accent_color             – custom accent hex (theme_manager v3)
   sponsorblock_enabled     – SponsorBlock segment removal
@@ -21,7 +22,7 @@ New fields (Phase 2 & Anti-Ban)
   global_hotkeys_enabled   – register OS-level pause/open hotkeys
   queue_state              – serialised queue for smart auto-resume
   paused_items             – items paused by the user (cancel+part file)
-  download_delay_range     – Min/Max seconds between requests to avoid bans
+  download_delay_range     – Min/Max seconds between requests (rate-limit politeness)
   randomize_user_agent     – Rotate browser headers
 """
 
@@ -95,7 +96,7 @@ _DEFAULTS: dict[str, Any] = {
     "spotify_client_secret":    "",
     "spotify_app_api_key":      "c6ffadbe3f5cb7146a72d91364c0a3cd981a90d67c167fc6acf44db4f3cbf8ad",
 
-    # ── Anti-Ban & Parallelism ────────────────────────────────────────────────
+    # ── Rate-limit politeness & parallelism ───────────────────────────────────
     "max_parallel_downloads": 3,           # Safer sweet spot
     "download_delay_range":   [1.5, 4.0],  # Min/Max seconds between requests
     "randomize_user_agent":   True,        # Rotate browser headers
@@ -466,7 +467,7 @@ class AppConfig:
     def max_parallel_downloads(self, value: int) -> None:
         self._data["max_parallel_downloads"] = max(1, min(6, int(value)))
 
-    # ── Anti-Ban typed properties ─────────────────────────────────────────────
+    # ── Rate-limit politeness typed properties ────────────────────────────────
 
     @property
     def download_delay_range(self) -> list[float]:

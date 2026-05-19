@@ -137,8 +137,9 @@ ytspot_downloader/
     │   │                      found. Shows version and release notes preview.
     │   │
     │   └── browser_window.py  Embedded Chromium (QtWebEngine) window for
-    │                          solving Cloudflare/Turnstile bot challenges.
-    │                          Saves bypass cookies/HTML for subsequent fetches.
+    │                          solving Cloudflare / Turnstile / sign-in challenges.
+    │                          Saves the resulting cookies + HTML so the
+    │                          authenticated session is reused on subsequent fetches.
     │
     └── workers/
         ├── fetch_worker.py    QThread — calls PlaylistParser to resolve a URL

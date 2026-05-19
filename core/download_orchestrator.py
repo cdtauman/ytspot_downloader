@@ -194,7 +194,8 @@ class DownloadOrchestrator:
                 if self._engine._cancel_event.is_set():
                     break
                     
-                # Stagger the starts to avoid "Burst" detection (Anti-Ban)
+                # Stagger the starts so the batch does not hit the server
+                # as a burst — keeps the request rate under typical limits.
                 if i > 0 and delay_range:
                     sleep_time = random.uniform(*delay_range)
                     logger.debug(f"[Orchestrator] Staggering start: sleeping {sleep_time:.2f}s")

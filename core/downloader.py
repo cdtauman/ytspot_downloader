@@ -174,7 +174,7 @@ class DownloadRequest:
     square_thumbnails:      bool = False   # crop embedded art to 1:1 square
     expand_thumbnails:      bool = False   # pad 1:1 art to 16:9 for video
     clean_filename:         bool = False   # use minimal filename (Title only)
-    randomize_user_agent:   bool = False   # rotate UA string per download (anti-ban) (kept for signature but unused)
+    randomize_user_agent:   bool = False   # rotate UA string per request (kept for signature; rotation not yet wired through to yt-dlp opts)
     is_solo:                bool = False   # single track download flag (no folder, no index, no artist name)
 
     # Universal / HLS / DASH stream (set when URL came from universal_extractor)
@@ -235,7 +235,7 @@ def _get_friendly_error(raw_err: str) -> str:
         return (
             f"{clean}\n\n"
             "💡 טיפ: דפדפן Chrome נעול או מוצפן. סגור את הדפדפן לגמרי ונסה שוב.\n"
-            "אם זה לא עוזר, השתמש בלחצן 'תיקון התחברות (פשוט)' כדי לעקוף את ההצפנה של כרום."
+            "אם זה לא עוזר, השתמש בלחצן 'תיקון התחברות (פשוט)' כדי לקרוא את קובצי העוגיות המוצפנים של כרום."
         )
 
     if "Signature solving failed" in clean or "n challenge solving failed" in clean:

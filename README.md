@@ -18,7 +18,7 @@ Built with Python and PySide6 (Qt6), using **yt-dlp** as its download engine, a 
 | **Search** | YouTube videos, YouTube Music (songs/albums/artists/playlists), Spotify proxy |
 | **History** | SQLite-backed download log with full-text search and CSV export |
 | **Post-processing** | Lyrics embed, ReplayGain, MusicBrainz tag enrichment, square thumbnail crop |
-| **Anti-ban** | Random delays, rotating yt-dlp clients, SponsorBlock, retry-with-backoff |
+| **Reliability** | Random request delays, rotating yt-dlp clients, SponsorBlock, retry-with-backoff |
 | **Themes** | Dark, Light, OLED + custom accent colour |
 | **Languages** | English, Hebrew (RTL layout) |
 | **Auto-update** | GitHub Releases checker on startup |
@@ -280,7 +280,7 @@ Each step runs sequentially after yt-dlp finishes. All steps are individually gu
 
 ## Authentication — YouTube Cookie Wizard
 
-To bypass YouTube age-gates and bot-protection:
+To authenticate downloads of age-restricted or members-only content:
 
 1. Go to **Settings → Authentication → Open Login Wizard**.
 2. A browser window opens. Log into YouTube normally.
@@ -293,7 +293,7 @@ To bypass YouTube age-gates and bot-protection:
 
 ---
 
-## Download Engine & Anti-Ban Strategy
+## Download Engine & Reliability
 
 ### yt-dlp Client Strategy
 - **Primary clients**: `android_vr`, `web_safari`, `tv_downgraded`
@@ -301,11 +301,11 @@ To bypass YouTube age-gates and bot-protection:
 - **Retry policy**: Up to 3 automatic retries with exponential backoff (1s → 2s → 4s) for transient errors (HTTP 429, 503, timeouts, DNS failures)
 - **Permanent errors** (private video, geo-block, DMCA) are never retried
 
-### Anti-Ban Measures
+### Rate-limit & politeness defaults
 | Measure | Default |
 |---|---|
 | Random delay between downloads | 1.5–4.0 seconds (configurable) |
-| Staggered batch start | Yes (prevents burst detection) |
+| Staggered batch start | Yes (avoids burst request patterns) |
 | User-agent rotation | Enabled |
 | Max parallel downloads | 3 (configurable 1–6) |
 
@@ -625,10 +625,10 @@ Usually a YouTube rate-limit (HTTP 429). The app has built-in retries and config
 These are suppressed internal yt-dlp retry messages — not real failures. They appear only with `--debug`. Install `pip install quickjs` if they appear as actual errors.
 
 **Chrome cookie lock error**  
-Close Chrome completely before extracting cookies. If the problem persists, use the Cookie Wizard (which bypasses Chrome's DPAPI encryption entirely).
+Close Chrome completely before extracting cookies. If the problem persists, use the Cookie Wizard, which uses Playwright to read cookies through a separate browser session (no DPAPI decryption).
 
 **Generic / external site not downloading**  
-The app will automatically fall back to Playwright network interception. If that also fails, the site may use DRM or require authentication the app cannot bypass.
+The app automatically falls back to Playwright network interception. If that also fails, the site is likely DRM-protected or requires credentials the app does not have — only content you have rights to access can be downloaded.
 
 ---
 
