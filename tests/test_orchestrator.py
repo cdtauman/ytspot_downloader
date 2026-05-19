@@ -177,3 +177,92 @@ class TestDownloadOrchestrator:
         assert result.total == 0
         assert result.completed == 0
         assert cb.batch_done is True
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# History platform persistence (S1-1 regression guard)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class _RecordingDB:
+    """In-memory stand-in for HistoryDB.insert that records every record."""
+
+    def __init__(self) -> None:
+        self.records: list = []
+
+    def insert(self, record) -> None:
+        self.records.append(record)
+
+
+def _make_job_with_platform(key, url, platform):
+    return (key, DownloadRequest(
+        url=url,
+        output_dir="/tmp",
+        media_type=MediaType.AUDIO,
+        forced_title=key,
+        platform=platform,
+    ))
+
+
+class TestHistoryPlatform:
+    """The orchestrator persisted platform='youtube' for every download
+    regardless of source. The history panel filters and colour-codes by
+    platform, so YT Music and Spotify downloads were mis-tagged."""
+
+    def test_ytmusic_persists_as_ytmusic(self):
+        from core.download_orchestrator import DownloadOrchestrator
+        from core.playlist_parser import SourcePlatform
+
+        db = _RecordingDB()
+        engine = FakeEngine()
+        cb = FakeCallbacks()
+        orch = DownloadOrchestrator(engine=engine, callbacks=cb, db=db, max_workers=1)
+
+        orch.run_batch([
+            _make_job_with_platform("a", "http://yt-music", SourcePlatform.YOUTUBE_MUSIC),
+        ])
+
+        assert len(db.records) == 1
+        assert db.records[0].platform == "ytmusic"
+
+    def test_spotify_persists_as_spotify(self):
+        from core.download_orchestrator import DownloadOrchestrator
+        from core.playlist_parser import SourcePlatform
+
+        db = _RecordingDB()
+        engine = FakeEngine()
+        cb = FakeCallbacks()
+        orch = DownloadOrchestrator(engine=engine, callbacks=cb, db=db, max_workers=1)
+
+        orch.run_batch([
+            _make_job_with_platform("a", "http://spot", SourcePlatform.SPOTIFY),
+        ])
+
+        assert db.records[0].platform == "spotify"
+
+    def test_missing_platform_persists_as_unknown(self):
+        from core.download_orchestrator import DownloadOrchestrator
+
+        db = _RecordingDB()
+        engine = FakeEngine()
+        cb = FakeCallbacks()
+        orch = DownloadOrchestrator(engine=engine, callbacks=cb, db=db, max_workers=1)
+
+        # platform defaults to None on DownloadRequest
+        orch.run_batch([_make_job("a", "http://something")])
+
+        assert db.records[0].platform == "unknown"
+
+    def test_youtube_persists_as_youtube(self):
+        from core.download_orchestrator import DownloadOrchestrator
+        from core.playlist_parser import SourcePlatform
+
+        db = _RecordingDB()
+        engine = FakeEngine()
+        cb = FakeCallbacks()
+        orch = DownloadOrchestrator(engine=engine, callbacks=cb, db=db, max_workers=1)
+
+        orch.run_batch([
+            _make_job_with_platform("a", "http://yt", SourcePlatform.YOUTUBE),
+        ])
+
+        assert db.records[0].platform == "youtube"

@@ -40,6 +40,7 @@ from core.downloader import (
     DownloadStatus,
     MediaType,
 )
+from core.playlist_parser import SourcePlatform
 from core.retry_policy import DEFAULT_POLICY, retry_download
 from error_handler import classify_error, ErrorInfo
 
@@ -362,6 +363,20 @@ class DownloadOrchestrator:
         if self._db is None:
             return
         try:
+            # Derive history platform from the request. HistoryDB recognises
+            # "youtube" | "ytmusic" | "spotify" | "unknown" (see history_db.py).
+            # SourcePlatform.value already produces the right string for each
+            # known platform; GENERIC and missing platform fall through to
+            # "unknown" so per-platform stats stay honest.
+            if isinstance(req.platform, SourcePlatform) and req.platform in (
+                SourcePlatform.YOUTUBE,
+                SourcePlatform.YOUTUBE_MUSIC,
+                SourcePlatform.SPOTIFY,
+            ):
+                platform_str = req.platform.value
+            else:
+                platform_str = "unknown"
+
             record = DownloadRecord(
                 title=prog.title or req.forced_title or "",
                 artist=req.forced_artist or "",
@@ -371,7 +386,7 @@ class DownloadOrchestrator:
                 file_size_mb=None,
                 duration_sec=req.forced_duration,
                 thumbnail_url="",
-                platform="youtube",
+                platform=platform_str,
             )
             self._db.insert(record)
         except Exception as exc:  # noqa: BLE001

@@ -287,6 +287,18 @@ class DownloadController(QObject):
                             card.set_status("done")
                             continue
 
+            # Map the card.platform string to a SourcePlatform enum so the
+            # orchestrator can persist the correct platform on the history
+            # record. Unknown / missing values pass through as None and the
+            # orchestrator records them as "unknown".
+            card_platform_str = (card.platform or "").lower()
+            req_platform = {
+                "youtube": SourcePlatform.YOUTUBE,
+                "ytmusic": SourcePlatform.YOUTUBE_MUSIC,
+                "spotify": SourcePlatform.SPOTIFY,
+                "generic": SourcePlatform.GENERIC,
+            }.get(card_platform_str)
+
             req = DownloadRequest(
                 url=card.track_url,
                 output_dir=output_dir,
@@ -311,6 +323,7 @@ class DownloadController(QObject):
                     card, track_playlist_name, is_parent_discography
                 ),
                 thumbnail_url=card.thumbnail_url,
+                platform=req_platform,
                 sponsorblock=self._cfg.sponsorblock_enabled,
                 sponsorblock_categories=self._cfg.get("sponsorblock_categories") or None,
                 embed_lyrics=self._cfg.lyrics_enabled,
