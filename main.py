@@ -42,11 +42,12 @@ def main() -> int:
     )
 
     # 3. Construct the global QApplication object IMMEDIATELY
+    from version import __version__ as APP_VERSION, PRODUCT_NAME, COMPANY_NAME
     app = QApplication(sys.argv)
-    app.setApplicationName("YTSpot Downloader")
-    app.setApplicationDisplayName("YTSpot Downloader")
-    app.setApplicationVersion("1.0.0")
-    app.setOrganizationName("YTSpot")
+    app.setApplicationName(PRODUCT_NAME)
+    app.setApplicationDisplayName(PRODUCT_NAME)
+    app.setApplicationVersion(APP_VERSION)
+    app.setOrganizationName(COMPANY_NAME)
 
     # 4. Now that QApplication is alive, safely import backend & UI singletons
     from config import AppConfig

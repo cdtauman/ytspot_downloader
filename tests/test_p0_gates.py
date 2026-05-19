@@ -515,6 +515,50 @@ class TestUpdateCheckerDefaults:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 11b. Version consistency across all declared sources
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestVersionConsistency:
+    """The release process requires a single canonical version string.
+    The source of truth is ``version.__version__``. Every other site
+    that declares the version must match.
+
+    A drift here is a release blocker: the EXE VS_VERSIONINFO, the
+    Inno Setup metadata, the update banner ("you are running v…"), and
+    the MusicBrainz User-Agent all read from these sources.
+    """
+
+    def test_version_module_is_source_of_truth(self):
+        from version import __version__, VERSION_INFO
+        assert isinstance(__version__, str) and __version__.count(".") == 2
+        major, minor, patch = VERSION_INFO
+        assert __version__ == f"{major}.{minor}.{patch}"
+
+    def test_update_checker_matches_version_module(self):
+        from version import __version__
+        from core.update_checker import CURRENT_VERSION
+        assert CURRENT_VERSION == __version__, (
+            f"core.update_checker.CURRENT_VERSION ({CURRENT_VERSION}) "
+            f"must equal version.__version__ ({__version__})"
+        )
+
+    def test_pyproject_version_matches_version_module(self):
+        import re
+        from pathlib import Path
+        from version import __version__
+
+        pyproject = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(
+            encoding="utf-8"
+        )
+        m = re.search(r'(?m)^version\s*=\s*"([^"]+)"', pyproject)
+        assert m is not None, "pyproject.toml is missing a [project] version"
+        assert m.group(1) == __version__, (
+            f"pyproject.toml version ({m.group(1)}) must equal "
+            f"version.__version__ ({__version__})"
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 11. SearchPanel restores "ytmusic" as last_search_platform (S1-4 guard)
 # ──────────────────────────────────────────────────────────────────────────────
 

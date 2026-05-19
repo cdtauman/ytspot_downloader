@@ -45,10 +45,13 @@ import httpx
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Version constant  –  update this on every release
+# Version constant
 # ──────────────────────────────────────────────────────────────────────────────
+# Sourced from the top-level version module so a single bump propagates
+# to the update checker, MusicBrainz User-Agent, CLI --version, and the
+# Qt setApplicationVersion call in main.py.
 
-CURRENT_VERSION: str = "1.0.0"
+from version import __version__ as CURRENT_VERSION  # noqa: E402
 
 
 # ──────────────────────────────────────────────────────────────────────────────
