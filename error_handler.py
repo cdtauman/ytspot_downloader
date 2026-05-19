@@ -306,50 +306,188 @@ def _match_patterns(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Pre-flight checks  (called once at startup from main.py)
+# Pre-flight checks  (called once at startup from main.py and by `cli --doctor`)
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+def check_playwright() -> bool:
+    """Return True if the playwright Chromium browser is installed.
+
+    Playwright is an optional runtime dependency used by the channel
+    scraper, cookie wizard, and universal stream extractor. The browser
+    binaries are not bundled with the EXE because they add ~300 MB; the
+    user runs ``playwright install chromium`` once after first install.
+
+    A missing browser is a warning, not a fatal error: most download
+    flows do not need Playwright.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return False
+
+    try:
+        with sync_playwright() as p:
+            exe = p.chromium.executable_path
+            from pathlib import Path
+            return bool(exe) and Path(exe).exists()
+    except Exception:
+        return False
+
+
+def check_output_dir_writable(path: str) -> tuple[bool, str]:
+    """Return ``(ok, detail)`` for the configured download directory.
+
+    Used by both the GUI preflight and the CLI ``--doctor`` so the
+    user sees the same diagnostic on both paths. Creates the
+    directory if it does not exist (matches DownloadController
+    behaviour); the failure mode is permission denied.
+    """
+    from pathlib import Path
+    try:
+        p = Path(path).expanduser()
+        p.mkdir(parents=True, exist_ok=True)
+        # Round-trip a small file to confirm write permission.
+        probe = p / ".ytspot_write_probe"
+        probe.write_bytes(b"ok")
+        probe.unlink(missing_ok=True)
+        return True, str(p)
+    except (OSError, PermissionError) as exc:
+        return False, f"{path!r}: {exc}"
+
+
+def check_cookies_file_valid(path: str) -> tuple[bool, str]:
+    """Return ``(ok, detail)`` for the configured cookies.txt.
+
+    Empty path = nothing configured = treated as OK (None is a valid
+    user choice). Returns False only when the file is set but
+    unreadable or malformed.
+    """
+    if not path:
+        return True, "no cookies file configured"
+    try:
+        from utils.cookie_validator import check_cookies_valid
+        ok, msg = check_cookies_valid(path)
+        return bool(ok), msg or ("OK" if ok else "cookies file invalid")
+    except Exception as exc:
+        return False, f"cookies validator raised: {exc}"
+
 
 @dataclass
 class PreflightResult:
-    ffmpeg_ok:    bool
-    network_ok:   bool
-    warnings:     list[str]
+    ffmpeg_ok:      bool
+    network_ok:     bool
+    output_dir_ok:  bool
+    cookies_ok:     bool
+    playwright_ok:  bool
+    warnings:       list[str]
+    # Per-check detail lines for the --doctor CLI output. The GUI uses
+    # ``warnings`` for the MessageBox; --doctor prints details too.
+    details:        list[str]
 
     def all_ok(self) -> bool:
-        return self.ffmpeg_ok and self.network_ok
+        # Playwright is optional; not having it is a warning, not a
+        # blocker. Cookies validity is informational unless the user
+        # explicitly configured a file (handled in run_preflight).
+        return self.ffmpeg_ok and self.network_ok and self.output_dir_ok
 
     def warning_text(self) -> str:
         return "\n\n".join(self.warnings)
 
+    def detail_text(self) -> str:
+        return "\n".join(self.details)
 
-def run_preflight() -> PreflightResult:
+
+def run_preflight(
+    output_dir: str = "",
+    cookies_file: str = "",
+) -> PreflightResult:
     """
     Run startup checks. Returns a PreflightResult the GUI can inspect.
     Does NOT raise – all failures are captured into the result.
+
+    Parameters
+    ----------
+    output_dir   : Optional path to the configured download folder. When
+                   provided, writability is checked. Empty string skips
+                   the check (used by the CLI before any download).
+    cookies_file : Optional path to a cookies.txt. When non-empty, the
+                   file is validated (existence + minimal Netscape
+                   header). Empty string skips the check.
     """
     warnings: list[str] = []
-    ffmpeg_ok  = check_ffmpeg()
-    network_ok = probe_connectivity()
+    details: list[str] = []
 
+    ffmpeg_ok = check_ffmpeg()
+    details.append(f"FFmpeg          : {'OK' if ffmpeg_ok else 'MISSING'}")
     if not ffmpeg_ok:
         warnings.append(
             "⚠  FFmpeg was not found on your PATH.\n\n"
             "Audio/video conversion and thumbnail embedding will not work.\n\n"
-            "Install FFmpeg:\n"
+            "If you installed YTSpot via the official EXE, FFmpeg should be\n"
+            "bundled in the app folder. If you are running from source:\n"
             "  Windows : winget install Gyan.FFmpeg\n"
             "  macOS   : brew install ffmpeg\n"
             "  Linux   : sudo apt install ffmpeg\n\n"
             "Then restart YTSpot Downloader."
         )
 
+    network_ok = probe_connectivity()
+    details.append(f"Network         : {'OK' if network_ok else 'OFFLINE'}")
     if not network_ok:
         warnings.append(
             "⚠  No internet connection detected.\n\n"
             "Fetching metadata and downloading will fail until the connection is restored."
         )
 
+    output_dir_ok = True
+    if output_dir:
+        output_dir_ok, output_detail = check_output_dir_writable(output_dir)
+        details.append(
+            f"Output directory: {'OK' if output_dir_ok else 'NOT WRITABLE'}  ({output_detail})"
+        )
+        if not output_dir_ok:
+            warnings.append(
+                f"⚠  The configured download folder is not writable:\n{output_detail}\n\n"
+                "Choose a different folder in Settings or check permissions."
+            )
+
+    cookies_ok = True
+    if cookies_file:
+        cookies_ok, cookies_detail = check_cookies_file_valid(cookies_file)
+        details.append(
+            f"Cookies file    : {'OK' if cookies_ok else 'INVALID'}  ({cookies_detail})"
+        )
+        if not cookies_ok:
+            warnings.append(
+                f"⚠  The configured cookies.txt is invalid or unreadable:\n{cookies_detail}\n\n"
+                "Re-export cookies or clear the cookies file in Settings."
+            )
+    else:
+        details.append("Cookies file    : not configured (optional)")
+
+    playwright_ok = check_playwright()
+    details.append(
+        f"Playwright      : {'OK' if playwright_ok else 'NOT INSTALLED'} "
+        "(needed for channel scraping, cookie wizard, universal extractor)"
+    )
+    if not playwright_ok:
+        warnings.append(
+            "ℹ  Playwright Chromium is not installed.\n\n"
+            "Most downloads work without it, but these features are disabled:\n"
+            "  • Channel and artist discography scraping\n"
+            "  • Cookie sign-in wizard\n"
+            "  • Universal stream extractor (generic video sites)\n\n"
+            "Run `python -m playwright install chromium` from the install folder\n"
+            "(or use the bundled `scripts/install_playwright.ps1`) to enable them."
+        )
+
     return PreflightResult(
         ffmpeg_ok=ffmpeg_ok,
         network_ok=network_ok,
+        output_dir_ok=output_dir_ok,
+        cookies_ok=cookies_ok,
+        playwright_ok=playwright_ok,
         warnings=warnings,
+        details=details,
     )

@@ -83,7 +83,35 @@ def main() -> int:
         svc.close()
         return 1
 
-    # 8. Event loop
+    # 8. Preflight — surface missing FFmpeg / unwritable output / dead
+    #    network up front. Playwright + cookie file diagnostics are
+    #    informational and don't block startup. Wrapped in try/except so
+    #    a buggy preflight can never crash the app.
+    try:
+        from error_handler import run_preflight
+        preflight = run_preflight(
+            output_dir=cfg.output_dir,
+            cookies_file=cfg.cookies_file,
+        )
+        for line in preflight.details:
+            logger.info("[Preflight] %s", line)
+        if not preflight.all_ok():
+            try:
+                from qfluentwidgets import MessageBox
+                MessageBox(
+                    "Startup warning",
+                    preflight.warning_text(),
+                    window,
+                ).exec()
+            except Exception:
+                logger.warning(
+                    "[Preflight] Could not show MessageBox; warnings:\n%s",
+                    preflight.warning_text(),
+                )
+    except Exception:
+        logger.warning("[Preflight] check failed (non-fatal)", exc_info=True)
+
+    # 9. Event loop
     exit_code = app.exec()
 
     # 9. Cleanup (AppWindow.closeEvent handles most of this,

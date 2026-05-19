@@ -559,6 +559,69 @@ class TestVersionConsistency:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 11c. CLI release flags: --version and --doctor (commercial-release delta C-2)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestCLIReleaseFlags:
+    """`--version` and `--doctor` must work without a positional URL.
+
+    The release process and the user-facing troubleshooting docs both
+    rely on these flags; a regression would surface as a confusing
+    'URL is required' error on a freshly-installed EXE.
+    """
+
+    def test_version_flag_prints_version_and_exits_zero(self, capsys):
+        from cli import build_parser
+        from version import __version__
+
+        parser = build_parser()
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(["--version"])
+        # argparse `version` action exits with code 0.
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        # argparse writes version to stdout in Python 3.4+.
+        out = captured.out + captured.err
+        assert __version__ in out
+        assert "ytspot-cli" in out
+
+    def test_doctor_flag_runs_without_url(self):
+        from cli import build_parser, _run_doctor
+
+        parser = build_parser()
+        args = parser.parse_args(["--doctor"])
+        assert args.doctor is True
+        assert args.url is None
+
+        # _run_doctor must not raise even if checks fail; it returns
+        # an int exit code.
+        rc = _run_doctor(args)
+        assert isinstance(rc, int)
+        assert rc in (0, 1)
+
+    def test_missing_url_without_release_flag_is_friendly_error(self):
+        # main() prints a clear message and returns 2 when neither
+        # --version nor --doctor is set and no URL is supplied.
+        from cli import build_parser, main as cli_main
+        import sys as _sys
+
+        parser = build_parser()
+        args = parser.parse_args([])
+        assert args.url is None
+        assert args.doctor is False
+
+        # Run main() with a synthetic argv to avoid touching the real
+        # one. patch sys.argv just for the call.
+        original_argv = _sys.argv
+        try:
+            _sys.argv = ["cli.py"]
+            rc = cli_main()
+        finally:
+            _sys.argv = original_argv
+        assert rc == 2
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 11. SearchPanel restores "ytmusic" as last_search_platform (S1-4 guard)
 # ──────────────────────────────────────────────────────────────────────────────
 

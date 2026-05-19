@@ -103,9 +103,11 @@ class TerminalCallbacks:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
+    from version import __version__, PRODUCT_NAME
+
     p = argparse.ArgumentParser(
         prog="ytspot-cli",
-        description="YTSpot Downloader — headless CLI mode",
+        description=f"{PRODUCT_NAME} — headless CLI mode",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
@@ -113,9 +115,30 @@ def build_parser() -> argparse.ArgumentParser:
             "  %(prog)s https://youtube.com/playlist?list=PLxxx --format mp4\n"
             "  %(prog)s https://open.spotify.com/album/xxx --audio-format flac\n"
             "  %(prog)s URL --list\n"
+            "  %(prog)s --version\n"
+            "  %(prog)s --doctor\n"
         ),
     )
-    p.add_argument("url", help="YouTube, Spotify, or supported URL")
+    p.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
+    p.add_argument(
+        "--doctor",
+        action="store_true",
+        help=(
+            "Run startup diagnostics (FFmpeg, network, output dir, "
+            "cookies, Playwright) and exit. URL not required."
+        ),
+    )
+    # URL is optional so --version / --doctor work without it. main()
+    # enforces the requirement once the early-exit flags are handled.
+    p.add_argument(
+        "url",
+        nargs="?",
+        help="YouTube, Spotify, or supported URL",
+    )
     p.add_argument(
         "-o", "--output",
         default=str(Path.home() / "Downloads" / "YTSpot"),
@@ -195,10 +218,58 @@ def _resolve_quality(label: str, is_audio: bool):
 # Main
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _run_doctor(args) -> int:
+    """Print preflight diagnostics and exit.
+
+    Does not require a URL and never raises. Returns 0 if every
+    blocking check passes (FFmpeg, network, output dir); 1 otherwise.
+    Informational checks (Playwright, cookies file) print their state
+    but do not change the exit code.
+    """
+    from error_handler import run_preflight
+    from version import __version__, PRODUCT_NAME
+
+    output_dir = args.output if args.output else ""
+    cookies_file = args.cookies if args.cookies else ""
+
+    print(f"{PRODUCT_NAME} v{__version__}  —  diagnostics")
+    print("=" * 60)
+    result = run_preflight(output_dir=output_dir, cookies_file=cookies_file)
+    print(result.detail_text())
+    print("=" * 60)
+    if result.all_ok():
+        print("All blocking checks PASSED.")
+        if result.warnings:
+            print()
+            print("Informational warnings:")
+            print(result.warning_text())
+        return 0
+    print("FAILED — at least one blocking check did not pass:")
+    print()
+    print(result.warning_text())
+    return 1
+
+
 def main() -> int:
     args = build_parser().parse_args()
     setup_logging(debug=args.debug)
     logger = logging.getLogger("cli")
+
+    # ── 0. Early-exit flags ──────────────────────────────────────────────
+    # --version is handled by argparse before this point.
+    if args.doctor:
+        return _run_doctor(args)
+
+    # URL is required for every other path. argparse made it optional so
+    # --version / --doctor could run without it; enforce the requirement
+    # here with a friendly error.
+    if not args.url:
+        print(
+            "error: URL is required (use --version or --doctor for "
+            "no-URL operations)",
+            file=sys.stderr,
+        )
+        return 2
 
     # ── 1. Parse URL → track list ─────────────────────────────────────────
     from core.playlist_parser import PlaylistParser, TrackMeta, classify_url, SourcePlatform
