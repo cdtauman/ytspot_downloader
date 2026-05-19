@@ -498,13 +498,20 @@ class TestSearchCategoryBudget:
 
 class TestPlaylistSync:
 
+    # YouTube video IDs are always 11 characters. Test fixtures elsewhere
+    # in this file use 12-char placeholders for classify_url tests that
+    # only inspect URL shape; extract_video_id actually parses the ID and
+    # truncates to 11 chars per the YT spec, so this test class uses
+    # 11-char fixtures.
+    _VID = "TESTVIDEOAA"  # 11 chars
+
     def test_extract_video_id_watch(self):
         from core.playlist_sync import extract_video_id
-        assert extract_video_id("https://www.youtube.com/watch?v=TESTVIDEOAAA") == "TESTVIDEOAAA"
+        assert extract_video_id(f"https://www.youtube.com/watch?v={self._VID}") == self._VID
 
     def test_extract_video_id_short(self):
         from core.playlist_sync import extract_video_id
-        assert extract_video_id("https://youtu.be/TESTVIDEOAAA") == "TESTVIDEOAAA"
+        assert extract_video_id(f"https://youtu.be/{self._VID}") == self._VID
 
     def test_extract_video_id_none(self):
         from core.playlist_sync import extract_video_id
@@ -512,7 +519,7 @@ class TestPlaylistSync:
 
     def test_extract_video_id_embed(self):
         from core.playlist_sync import extract_video_id
-        assert extract_video_id("https://youtube.com/embed/TESTVIDEOAAA") == "TESTVIDEOAAA"
+        assert extract_video_id(f"https://youtube.com/embed/{self._VID}") == self._VID
 
 
 # ──────────────────────────────────────────────────────────────────────────────
