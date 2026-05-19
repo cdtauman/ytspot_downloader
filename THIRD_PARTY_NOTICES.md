@@ -64,7 +64,7 @@ by license.
 | syncedlyrics | MIT | yes | Disabled by default. |
 | **PySide6** | **LGPL v3** (with Qt commercial alternative) | yes | LGPL is satisfied by Qt's dynamic-link model + the LGPL v3 text in this file. PySide6 wheels are distributed under LGPL v3. No commercial Qt license is required for this usage. |
 | **PySide6-Fluent-Widgets** | **GPL v3 / Commercial dual-license** | yes | **REVIEW REQUIRED** — the community version is GPL v3. The author sells a commercial license at https://qfluentwidgets.com/pages/pro. For a commercial closed-source EXE distribution either (a) acquire the commercial license, (b) release the entire YTSpot source under GPL v3, or (c) replace the dependency with a permissive Qt theme. |
-| **PySideSix-Frameless-Window** | **GPL v3** | yes | **REVIEW REQUIRED** — same situation as Fluent Widgets. Acquire commercial license OR remove the frameless-window feature OR open-source the app. |
+| PySideSix-Frameless-Window | LGPL v3 | yes, transitively via PySide6-Fluent-Widgets | Transitive dependency of Fluent Widgets; not imported directly by this app. Treat like other LGPL v3 Qt-adjacent components: ship the LGPL v3 text and preserve user replaceability of the installed files. |
 | requests | Apache 2.0 | yes | |
 | httpx | BSD-3-Clause | yes | |
 | beautifulsoup4 | MIT | yes | |
@@ -126,6 +126,5 @@ following with counsel:
 - [ ] LGPL v2.1 / LGPL v3 license texts are accessible to the end user (bundle into installer or link from the About dialog).
 - [ ] Mutagen GPL obligations addressed: either commercial license, source-release, or replacement library.
 - [ ] PySide6-Fluent-Widgets commercial license acquired OR app open-sourced under GPL v3.
-- [ ] PySideSix-Frameless-Window commercial license acquired OR feature removed OR app open-sourced.
 - [ ] User-facing terms of service / EULA drafted for the EXE distribution.
 - [ ] Privacy notice covers: clipboard monitor (optional), cookies file reading, history database location.

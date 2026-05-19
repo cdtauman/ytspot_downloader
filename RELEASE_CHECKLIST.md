@@ -10,7 +10,7 @@ catches packaging, bundling, and installer regressions.
 - [ ] `version.__version__` bumped (and the test in `tests/test_p0_gates.py::TestVersionConsistency` passes).
 - [ ] `pyproject.toml` `version` matches.
 - [ ] CHANGELOG / release notes drafted.
-- [ ] `THIRD_PARTY_NOTICES.md` reviewed; the **REVIEW REQUIRED** items (Mutagen, PySide6-Fluent-Widgets, PySideSix-Frameless-Window) all resolved.
+- [ ] `THIRD_PARTY_NOTICES.md` reviewed; the **REVIEW REQUIRED** items (Mutagen, PySide6-Fluent-Widgets) all resolved.
 - [ ] LGPL FFmpeg + ffprobe placed in `packaging/ffmpeg/` (NOT the gyan.dev essentials GPL build).
 - [ ] `git status` clean; no `.env`, secrets, local IDE files staged.
 - [ ] `git ls-files | grep -E "(egg-info|\.pyc|build/|dist/)"` returns empty.

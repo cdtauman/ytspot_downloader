@@ -15,7 +15,6 @@ syncedlyrics>=0.4.0        # Lyrics (disabled by default)
 # ── GUI Framework (PySide6 + Fluent Widgets) ──────────────────────────────────
 PySide6>=6.8.0                         # Latest stable Qt6 bindings
 PySide6-Fluent-Widgets>=1.11.0         # Adjusted to available versions
-PySideSix-Frameless-Window>=0.8.0      # Modern frameless window support
 
 # ── Networking & Scraping (The new "Universal" engine) ───────────────────────
 requests>=2.31.0           # Standard HTTP for thumbnails & updates
