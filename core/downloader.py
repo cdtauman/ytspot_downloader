@@ -261,16 +261,27 @@ def _get_friendly_error(raw_err: str) -> str:
 
 
 def _sanitize_filename(name: str) -> str:
-    if not name: return "Unknown"
+    """Sanitise a string for use as a filename stem on Windows + POSIX.
+
+    Single source of truth: imported by ``core.duplicate_checker`` so the
+    pre-download duplicate check builds the exact same stem the downloader
+    writes to disk. Any change here must preserve byte equality with the
+    on-disk filename.
+
+    Truncates to 200 chars to stay under the Windows MAX_PATH=260 limit
+    once a typical playlist subfolder and extension are added.
+    """
+    if not name:
+        return "Unknown"
     # Replace restricted Windows characters with safer alternatives
     # Use two single quotes for double quotes (common practice for "שיר לממ''ד")
     # Replace colon with hyphen space for better flow
     name = name.replace('"', "''").replace(":", " - ").replace("/", "-").replace("\\", "-").replace("|", "-")
     # Remove remaining truly forbidden characters
     name = re.sub(r'[*?<>:]', " ", name)
-    name = re.sub(r'\s+', " ", name) # Collapse multiple spaces
+    name = re.sub(r'\s+', " ", name)  # Collapse multiple spaces
     name = re.sub(r'[\x00-\x1f]', "", name)
-    return name.strip(". ")
+    return name.strip(". ")[:200]
 
 
 def _sanitize_folder_name(name: str) -> str:

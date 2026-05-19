@@ -355,12 +355,42 @@ class TestDuplicateChecker:
         assert expected_stem("My Song", "Artist") == "Artist - My Song"
 
     def test_expected_stem_with_index(self):
+        # The on-disk filename built by downloader._build_ydl_opts is
+        # "<NN> - <Artist> - <Title>.<ext>" — note the " - " after the
+        # zero-padded index. The stem must mirror that byte-for-byte.
         from core.duplicate_checker import expected_stem
-        assert expected_stem("My Song", "Artist", index=3) == "03 Artist - My Song"
+        assert expected_stem("My Song", "Artist", index=3) == "03 - Artist - My Song"
 
     def test_expected_stem_no_index(self):
         from core.duplicate_checker import expected_stem
         assert expected_stem("My Song", "Artist", index=3, include_index=False) == "Artist - My Song"
+
+    def test_expected_stem_clean_filename_no_artist(self):
+        # download_controller forces is_clean=True, so the on-disk filename
+        # is "<NN> - <Title>.<ext>" with no artist segment. The duplicate
+        # checker must accept the same convention or it will never match.
+        from core.duplicate_checker import expected_stem
+        assert expected_stem("My Song", "Artist", index=3, include_artist=False) == "03 - My Song"
+        assert expected_stem("My Song", "Artist", include_artist=False) == "My Song"
+
+    def test_expected_stem_truncates_to_200(self):
+        # Both downloader._sanitize_filename and expected_stem must cap at
+        # 200 chars to stay under Windows MAX_PATH.
+        from core.duplicate_checker import expected_stem
+        long_title = "A" * 300
+        stem = expected_stem(long_title, "Artist", include_artist=False)
+        assert len(stem) == 200
+
+    def test_expected_stem_matches_downloader_sanitiser(self):
+        # Regression guard for S0-4: the duplicate checker must call the
+        # exact same sanitiser as the downloader so any future change to
+        # filename rules cannot drift between the two.
+        from core.duplicate_checker import expected_stem
+        from core.downloader import _sanitize_filename
+
+        title = 'Wei"rd / Title : Test'
+        stem = expected_stem(title, "Artist", include_artist=False)
+        assert stem == _sanitize_filename(title)
 
     def test_find_duplicate_no_dir(self, tmp_path):
         from core.duplicate_checker import find_duplicate
@@ -375,6 +405,20 @@ class TestDuplicateChecker:
         stem = expected_stem("My Song", "Example Artist")
         (tmp_path / f"{stem}.mp3").write_bytes(b"\x00" * 100)
         result = find_duplicate(str(tmp_path), "My Song", "Example Artist")
+        assert result is not None
+        assert result.name == f"{stem}.mp3"
+
+    def test_find_duplicate_clean_filename_match(self, tmp_path):
+        # End-to-end S0-4 regression guard: a download written by the
+        # downloader in clean-filename mode must be discoverable by
+        # find_duplicate when called with include_artist=False.
+        from core.duplicate_checker import find_duplicate, expected_stem
+        stem = expected_stem("My Song", "Artist", index=3, include_artist=False)
+        (tmp_path / f"{stem}.mp3").write_bytes(b"\x00" * 100)
+        result = find_duplicate(
+            str(tmp_path), "My Song", "Artist",
+            index=3, include_index=True, include_artist=False,
+        )
         assert result is not None
         assert result.name == f"{stem}.mp3"
 

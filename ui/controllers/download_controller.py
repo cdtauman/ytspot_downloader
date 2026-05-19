@@ -244,15 +244,29 @@ class DownloadController(QObject):
             # above only for the mkdir check; the actual base is cfg.output_dir)
             output_dir = str(Path(self._cfg.output_dir))
 
-            # Duplicate detection
+            # Clean filename (index + title only, never include artist name).
+            # The duplicate checker must use the same convention or it will
+            # never find an existing file on disk.
+            is_clean = True
+
+            # Duplicate detection — pass include_artist=False to match the
+            # is_clean filename layout produced below.
             if self._cfg.duplicate_action != "overwrite":
                 from core.duplicate_checker import find_duplicate
+                # For solo downloads the downloader strips the index prefix
+                # entirely; mirror that here so the stem is byte-identical.
+                check_index = (
+                    card.queue_index
+                    if (self._cfg.playlist_index_prefix and not is_solo)
+                    else None
+                )
                 dup = find_duplicate(
                     output_dir=output_dir,
                     title=card.title,
                     artist=card.artist,
-                    index=card.queue_index if self._cfg.playlist_index_prefix else None,
-                    include_index=self._cfg.playlist_index_prefix,
+                    index=check_index,
+                    include_index=self._cfg.playlist_index_prefix and not is_solo,
+                    include_artist=not is_clean,
                     duration_s=None,
                     playlist_name=self._get_dynamic_folder(
                         card, track_playlist_name, is_parent_discography
@@ -272,9 +286,6 @@ class DownloadController(QObject):
                         if not box.exec():
                             card.set_status("done")
                             continue
-
-            # Clean filename (index + title only, never include artist name).
-            is_clean = True
 
             req = DownloadRequest(
                 url=card.track_url,
