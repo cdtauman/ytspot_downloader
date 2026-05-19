@@ -396,7 +396,7 @@ The database includes automatic integrity checking on startup. If corruption is 
 
 ## Auto-Update Checker
 
-On startup, the app queries the GitHub Releases API (`api.github.com/repos/cdtauman/ytspot_downloader/releases/latest`) and compares the remote version against the installed version using **semantic versioning** (SemVer).
+On startup, the app queries the GitHub Releases API (`api.github.com/repos/cdtauman-projects/ytspot_downloader/releases/latest`) and compares the remote version against the installed version using **semantic versioning** (SemVer).
 
 - An **update banner** appears at the top of the window when a newer version is found
 - Pre-releases are skipped by default

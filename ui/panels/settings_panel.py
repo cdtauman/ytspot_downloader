@@ -567,7 +567,7 @@ class SettingsPanel(QScrollArea):
         # ── 9. About ───────────────────────────────────────────────────────────
         about_grp = SettingCardGroup(t("about"), content)
         about_grp.addSettingCard(HyperlinkCard(
-            url="https://github.com/ytspot/ytspot",
+            url="https://github.com/cdtauman-projects/ytspot_downloader",
             text="GitHub",
             icon=FluentIcon.GITHUB,
             title=t("about_app"),

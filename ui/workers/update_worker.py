@@ -31,10 +31,8 @@ class UpdateWorker(QThread):
 
     Parameters
     ----------
-    repo_owner          : GitHub username / org that owns the repo.
-                          Replace with your actual GitHub username before release.
+    repo_owner          : GitHub org / user that owns the repository.
     repo_name           : Repository name on GitHub.
-                          Replace with your actual repo name before release.
     include_prereleases : When True, pre-release versions are also considered.
                           Controlled by a settings toggle (default False).
     parent              : Optional Qt parent object.
@@ -50,7 +48,7 @@ class UpdateWorker(QThread):
 
     def __init__(
         self,
-        repo_owner:          str  = "cdtauman",
+        repo_owner:          str  = "cdtauman-projects",
         repo_name:           str  = "ytspot_downloader",
         include_prereleases: bool = False,
         parent=None,

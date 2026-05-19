@@ -22,12 +22,17 @@ from typing import Optional
 
 import httpx
 
+from core.update_checker import CURRENT_VERSION
+
 logger = logging.getLogger(__name__)
 
 # MusicBrainz JSON API base
 _MB_BASE = "https://musicbrainz.org/ws/2"
 _MB_HEADERS = {
-    "User-Agent": "YTSpotDownloader/3.0 (https://github.com/ytspot)",
+    "User-Agent": (
+        f"YTSpotDownloader/{CURRENT_VERSION} "
+        f"(https://github.com/cdtauman-projects/ytspot_downloader)"
+    ),
     "Accept": "application/json",
 }
 

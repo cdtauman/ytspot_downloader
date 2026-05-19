@@ -166,7 +166,7 @@ class UpdateChecker:
 
     def __init__(
         self,
-        repo_owner: str = "cdtauman",
+        repo_owner: str = "cdtauman-projects",
         repo_name:  str = "ytspot_downloader",
         timeout:    float = 8.0,
     ) -> None:

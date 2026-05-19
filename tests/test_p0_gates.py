@@ -461,3 +461,54 @@ class TestOrchestratorRetryIntegration:
         assert call_count[0] == 1, f"Non-retriable error must not be retried, got {call_count[0]} attempts"
         assert "track1" in errored_keys, "on_track_error must fire for permanent failure"
         assert "track1" not in finished_keys
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 10. UpdateChecker / UpdateWorker default repo (P0 — wrong owner silently
+#     breaks the update check)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestUpdateCheckerDefaults:
+    """Default GitHub owner must match the live remote so the update banner
+    actually surfaces new releases. The wrong default silently returns None
+    for every check because the repo URL 404s.
+
+    The canonical owner is `cdtauman-projects`; the repo name is
+    `ytspot_downloader`. If this changes in the future, also update
+    `core/update_checker.py`, `ui/workers/update_worker.py`,
+    `README.md`, `ui/panels/settings_panel.py`, and
+    `core/musicbrainz_enricher.py` (User-Agent URL).
+    """
+
+    EXPECTED_OWNER = "cdtauman-projects"
+    EXPECTED_REPO = "ytspot_downloader"
+
+    def test_update_checker_default_owner(self):
+        from core.update_checker import UpdateChecker
+
+        checker = UpdateChecker()
+        assert checker._repo_owner == self.EXPECTED_OWNER, (
+            f"UpdateChecker default repo_owner must be "
+            f"{self.EXPECTED_OWNER!r} so the GitHub Releases API returns "
+            f"a live response. Got {checker._repo_owner!r}."
+        )
+        assert checker._repo_name == self.EXPECTED_REPO
+
+    def test_update_worker_default_owner(self):
+        # Importing UpdateWorker requires PySide6 — skip cleanly in
+        # headless CI where Qt is not installed.
+        try:
+            from ui.workers.update_worker import UpdateWorker  # noqa: F401
+        except ImportError:
+            pytest.skip("PySide6 not available in this environment")
+            return
+
+        import inspect
+        sig = inspect.signature(UpdateWorker.__init__)
+        owner_default = sig.parameters["repo_owner"].default
+        repo_default = sig.parameters["repo_name"].default
+        assert owner_default == self.EXPECTED_OWNER, (
+            f"UpdateWorker default repo_owner must be "
+            f"{self.EXPECTED_OWNER!r}. Got {owner_default!r}."
+        )
+        assert repo_default == self.EXPECTED_REPO

@@ -258,7 +258,7 @@ if __name__ == "__main__":
 
     sample_release = ReleaseInfo(
         version="2.1.0",
-        release_url="https://github.com/your-username/ytspot-downloader/releases/tag/v2.1.0",
+        release_url="https://github.com/cdtauman-projects/ytspot_downloader/releases/tag/v2.1.0",
         release_notes=(
             "## Highlights\n\n"
             "- **Clipboard Monitor** now detects media links from additional sources\n"
@@ -266,7 +266,7 @@ if __name__ == "__main__":
             "- Search panel now shows album art for Spotify results\n"
         ),
         published_at="2025-07-15T10:00:00Z",
-        asset_url="https://github.com/your-username/ytspot-downloader/releases/download/v2.1.0/YTSpot-Setup.exe",
+        asset_url="https://github.com/cdtauman-projects/ytspot_downloader/releases/download/v2.1.0/YTSpot-Setup.exe",
     )
 
     dismissed_flag = [False]
