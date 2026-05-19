@@ -421,8 +421,17 @@ def run_preflight(
     warnings: list[str] = []
     details: list[str] = []
 
-    ffmpeg_ok = check_ffmpeg()
-    details.append(f"FFmpeg          : {'OK' if ffmpeg_ok else 'MISSING'}")
+    from utils.paths import get_bundled_ffmpeg_dir, get_ffmpeg_executable
+
+    ffmpeg_exe = get_ffmpeg_executable()
+    bundled_ffmpeg_dir = get_bundled_ffmpeg_dir()
+    ffmpeg_ok = ffmpeg_exe is not None
+    if ffmpeg_ok and bundled_ffmpeg_dir is not None:
+        details.append(f"FFmpeg          : OK (bundled: {ffmpeg_exe})")
+    elif ffmpeg_ok:
+        details.append(f"FFmpeg          : OK (PATH: {ffmpeg_exe})")
+    else:
+        details.append("FFmpeg          : MISSING")
     if not ffmpeg_ok:
         warnings.append(
             "⚠  FFmpeg was not found on your PATH.\n\n"

@@ -9,9 +9,9 @@
     3. Regenerates packaging/version_info.txt from version.py.
     4. Runs PyInstaller against packaging/ytspot.spec.
     5. Produces:
-         dist/ytspot/                - one-folder portable build (input for Inno Setup)
-         dist/ytspot-portable.zip    - portable ZIP for direct distribution
-         dist/SHA256SUMS.txt         - SHA-256 checksums for the ZIP
+         dist/ytspot/                               - one-folder portable build (input for Inno Setup)
+         dist/ytspot-<version>-windows-portable.zip - portable ZIP for direct distribution
+         dist/SHA256SUMS.txt                        - SHA-256 checksums for the ZIP
     6. Prints a short summary with sizes and exact next-step commands.
 
 .PARAMETER RequireBundledFfmpeg
@@ -42,6 +42,149 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+function Get-BuildRelatedProcesses {
+    param(
+        [Parameter(Mandatory = $true)]
+        [int]$RootProcessId,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $all = @(Get-CimInstance Win32_Process)
+    $descendantIds = New-Object 'System.Collections.Generic.HashSet[int]'
+    $queue = New-Object 'System.Collections.Generic.Queue[int]'
+    $queue.Enqueue($RootProcessId)
+
+    while ($queue.Count -gt 0) {
+        $parentId = $queue.Dequeue()
+        foreach ($proc in $all | Where-Object { [int]$_.ParentProcessId -eq $parentId }) {
+            $processId = [int]$proc.ProcessId
+            if ($descendantIds.Add($processId)) {
+                $queue.Enqueue($processId)
+            }
+        }
+    }
+
+    $targets = @()
+    foreach ($proc in $all) {
+        $processId = [int]$proc.ProcessId
+        if ($processId -eq $PID) {
+            continue
+        }
+
+        $name = ([string]$proc.Name).ToLowerInvariant()
+        $cmd = [string]$proc.CommandLine
+        $isDescendant = $descendantIds.Contains($processId)
+        $isRepoRelated = $cmd -and $cmd.Contains($RepoRoot)
+        $isBuildTool = $name -in @('node.exe', 'playwright.exe', 'pyinstaller.exe') -or (
+            $name -in @('python.exe', 'python3.exe', 'py.exe') -and
+            $cmd -match '(?i)pyinstaller|playwright'
+        )
+
+        if ($isBuildTool -and ($isDescendant -or $isRepoRelated)) {
+            $targets += $proc
+        }
+    }
+
+    return $targets
+}
+
+function Stop-BuildRelatedProcesses {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $targets = @(Get-BuildRelatedProcesses -RootProcessId $PID -RepoRoot $RepoRoot)
+    foreach ($proc in $targets) {
+        $processId = [int]$proc.ProcessId
+        $name = [string]$proc.Name
+        Write-Host "    Stopping leftover build child process: $name (PID $processId)" -ForegroundColor Yellow
+        try {
+            Stop-Process -Id $processId -Force -ErrorAction Stop
+        } catch {
+            Write-Warning "Could not stop $name (PID $processId): $($_.Exception.Message)"
+        }
+    }
+}
+
+function Get-LockedFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    foreach ($file in Get-ChildItem -Path $Path -Recurse -File) {
+        $stream = $null
+        try {
+            $stream = [System.IO.File]::Open(
+                $file.FullName,
+                [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Read,
+                [System.IO.FileShare]::Read
+            )
+        } catch [System.IO.IOException] {
+            return $file.FullName
+        } finally {
+            if ($stream) {
+                $stream.Dispose()
+            }
+        }
+    }
+
+    return $null
+}
+
+function New-PortableZip {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$SourceDir,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ZipPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    $maxAttempts = 5
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        Stop-BuildRelatedProcesses -RepoRoot $RepoRoot
+
+        $locked = Get-LockedFile -Path $SourceDir
+        if ($locked) {
+            Write-Warning "File is still locked before ZIP attempt ${attempt}/${maxAttempts}: $locked"
+            Start-Sleep -Seconds $attempt
+            continue
+        }
+
+        if (Test-Path $ZipPath) {
+            Remove-Item -Force $ZipPath
+        }
+
+        try {
+            [System.IO.Compression.ZipFile]::CreateFromDirectory(
+                $SourceDir,
+                $ZipPath,
+                [System.IO.Compression.CompressionLevel]::Optimal,
+                $false
+            )
+            return
+        } catch [System.IO.IOException] {
+            Write-Warning "ZIP attempt ${attempt}/${maxAttempts} failed: $($_.Exception.Message)"
+            if (Test-Path $ZipPath) {
+                Remove-Item -Force $ZipPath -ErrorAction SilentlyContinue
+            }
+            Start-Sleep -Seconds $attempt
+        }
+    }
+
+    throw "Failed to create ZIP after $maxAttempts attempts. A build or Playwright file is still locked under $SourceDir."
+}
 
 # Normalise working directory to the repo root.
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -80,13 +223,17 @@ if ($RequireBundledFfmpeg) {
 
     if ($MissingFfmpegFiles.Count -gt 0) {
         $NewLine = [Environment]::NewLine
-        $MissingList = ($MissingFfmpegFiles -join $NewLine)
-        $Message = "Required bundled FFmpeg files are missing:$NewLine$MissingList$NewLine"
-        $Message += "Stage an LGPL FFmpeg build in packaging\ffmpeg\ or rerun without -RequireBundledFfmpeg."
+        $MissingList = (($MissingFfmpegFiles | ForEach-Object { "  - $_" }) -join $NewLine)
+        $Message = "Required bundled FFmpeg files are missing:$NewLine$MissingList$NewLine$NewLine"
+        $Message += "Place LGPL-licensed Windows FFmpeg binaries exactly here:$NewLine"
+        $Message += "  $FfmpegDir\ffmpeg.exe$NewLine"
+        $Message += "  $FfmpegDir\ffprobe.exe$NewLine$NewLine"
+        $Message += "This script does not auto-download FFmpeg because the release must not accidentally bundle a GPL build."
         throw $Message
     }
 
     Write-Host "    Found ffmpeg.exe and ffprobe.exe."
+    Write-Host "    Build will fail if PyInstaller does not copy both next to ytspot.exe."
 } else {
     if (Test-Path (Join-Path $FfmpegDir 'ffmpeg.exe')) {
         Write-Host "    Bundling FFmpeg from $FfmpegDir"
@@ -126,17 +273,36 @@ Write-Host "==> Running PyInstaller" -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed. See output above."
 }
+Stop-BuildRelatedProcesses -RepoRoot $RepoRoot
 
 $DistDir = Join-Path $RepoRoot 'dist\ytspot'
 if (-not (Test-Path $DistDir)) {
     throw "Expected $DistDir to exist after PyInstaller run."
 }
 
+if ($RequireBundledFfmpeg) {
+    $MissingDistFfmpeg = @()
+    foreach ($name in @('ffmpeg.exe', 'ffprobe.exe')) {
+        $path = Join-Path $DistDir $name
+        if (-not (Test-Path -Path $path -PathType Leaf)) {
+            $MissingDistFfmpeg += $path
+        }
+    }
+
+    if ($MissingDistFfmpeg.Count -gt 0) {
+        $NewLine = [Environment]::NewLine
+        $MissingList = (($MissingDistFfmpeg | ForEach-Object { "  - $_" }) -join $NewLine)
+        throw "PyInstaller did not copy the required bundled FFmpeg files next to ytspot.exe:$NewLine$MissingList"
+    }
+
+    Write-Host "    Bundled FFmpeg confirmed in dist\ytspot\ next to ytspot.exe."
+}
+
 # Portable ZIP.
 $ZipName = "ytspot-$AppVersion-windows-portable.zip"
 $ZipPath = Join-Path $RepoRoot "dist\$ZipName"
 Write-Host "==> Creating portable ZIP: $ZipName" -ForegroundColor Cyan
-Compress-Archive -Path "$DistDir\*" -DestinationPath $ZipPath -Force
+New-PortableZip -SourceDir $DistDir -ZipPath $ZipPath -RepoRoot $RepoRoot
 
 # SHA-256 checksums.
 $ChecksumPath = Join-Path $RepoRoot 'dist\SHA256SUMS.txt'
