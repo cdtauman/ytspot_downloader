@@ -48,13 +48,16 @@ class SearchWorker(QThread):
 
     Parameters
     ----------
-    query            : The search string typed by the user.
-    platform         : "youtube" | "spotify" | "both" – which engine to query.
-    max_results      : Maximum number of results to fetch (1–50).
-    cookies_file     : Optional cookies.txt path forwarded to SearchEngine.
+    query                 : The search string typed by the user.
+    platform              : "youtube" | "ytmusic" | "spotify" | "both".
+    youtube_max_results   : Maximum YouTube / YT Music results (1–100).
+    spotify_max_results   : Maximum Spotify results (1–100).
+    cookies_file          : Optional cookies.txt path forwarded to SearchEngine.
     spotify_client_id     : Spotify Web API client ID (empty → proxy fallback).
     spotify_client_secret : Spotify Web API client secret.
-    parent           : Optional Qt parent object.
+    proxy_url             : Spotify proxy server URL.
+    proxy_token           : Spotify proxy auth token (X-App-Token).
+    parent                : Optional Qt parent object.
     """
 
     # ── Signals ───────────────────────────────────────────────────────────────

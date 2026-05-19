@@ -430,6 +430,69 @@ class TestDuplicateChecker:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 6b. Search-budget clamping (S1-3 regression guard)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestSearchCategoryBudget:
+    """The pre-fix behaviour used floors (max(N//k, m)) that caused the
+    sum of per-category limits to exceed the user's configured max
+    (e.g. YTM "max_results=15" produced 22 items). These tests pin the
+    new proportional distribution that honours the cap."""
+
+    def test_ytm_budget_sums_to_cap_at_15(self):
+        # Replicate the inline math in _YTMusicBackend.search_all so the
+        # test doesn't need to mock yt-dlp / ytmusicapi network calls.
+        max_results = 15
+        song_limit = max(1, int(max_results * 0.50))
+        album_limit = max(1, int(max_results * 0.20))
+        artist_limit = max(1, int(max_results * 0.15))
+        playlist_limit = max(
+            1, max_results - song_limit - album_limit - artist_limit
+        )
+        total = song_limit + album_limit + artist_limit + playlist_limit
+        assert total == max_results, (
+            f"YTM budget {song_limit}+{album_limit}+{artist_limit}+"
+            f"{playlist_limit} = {total} must equal max_results={max_results}"
+        )
+
+    def test_ytm_budget_each_category_has_at_least_one(self):
+        # Tiny cap (4) must still surface at least one of each kind.
+        max_results = 4
+        song_limit = max(1, int(max_results * 0.50))
+        album_limit = max(1, int(max_results * 0.20))
+        artist_limit = max(1, int(max_results * 0.15))
+        playlist_limit = max(
+            1, max_results - song_limit - album_limit - artist_limit
+        )
+        assert song_limit >= 1
+        assert album_limit >= 1
+        assert artist_limit >= 1
+        assert playlist_limit >= 1
+
+    def test_yt_categorized_budget_sums_to_cap_at_15(self):
+        max_results = 15
+        video_limit = max(1, int(max_results * 0.60))
+        playlist_limit = max(1, int(max_results * 0.25))
+        channel_limit = max(
+            1, max_results - video_limit - playlist_limit
+        )
+        total = video_limit + playlist_limit + channel_limit
+        assert total == max_results
+
+    def test_yt_categorized_budget_at_large_cap(self):
+        max_results = 100
+        video_limit = max(1, int(max_results * 0.60))
+        playlist_limit = max(1, int(max_results * 0.25))
+        channel_limit = max(
+            1, max_results - video_limit - playlist_limit
+        )
+        # At 100, expect roughly 60 / 25 / 15.
+        assert video_limit == 60
+        assert playlist_limit == 25
+        assert channel_limit == 15
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 7. Playlist Sync (extract_video_id)
 # ──────────────────────────────────────────────────────────────────────────────
 

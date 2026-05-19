@@ -445,16 +445,25 @@ class _YTMusicBackend:
         Results are emitted incrementally via on_result as each category
         completes so the UI can populate sections in real-time.
 
-        FIX 4: rebalanced per-category budgets so albums, artists, and
-        playlists each receive a meaningful quota instead of the previous
-        floor of 3.  With max_results=20 the new budgets are:
-          songs=8, albums=5, artists=4, playlists=5.
+        Budgets are proportional to max_results so the combined result
+        count honours the configured cap. With max_results=15 the
+        distribution is songs=7, albums=3, artists=2, playlists=3
+        (total 15). A minimum of 1 per category is enforced so very
+        small caps still surface at least one item per kind; the total
+        in that case may slightly exceed max_results (4 minimum) — a
+        deliberate trade-off so the UI never shows an empty section
+        when the user asked for any results at all.
         """
-        # Category budgets – balanced so every section is meaningfully filled.
-        song_limit     = max(max_results // 3,  8)
-        album_limit    = max(max_results // 5,  5)
-        artist_limit   = max(max_results // 6,  4)
-        playlist_limit = max(max_results // 5,  5)
+        # Proportional distribution. songs gets the biggest slice; the
+        # remainder is split across albums/artists/playlists.
+        song_limit     = max(1, int(max_results * 0.50))
+        album_limit    = max(1, int(max_results * 0.20))
+        artist_limit   = max(1, int(max_results * 0.15))
+        # playlists absorb the remainder so the total equals max_results
+        # when max_results is at least 4 (one per category).
+        playlist_limit = max(
+            1, max_results - song_limit - album_limit - artist_limit
+        )
 
         combined: list[SearchResult] = []
         global_idx = 1
@@ -829,9 +838,14 @@ class SearchEngine:
                     except Exception:
                         pass
 
-        video_limit    = max(max_results, 10)
-        playlist_limit = max(max_results // 3, 5)
-        channel_limit  = max(max_results // 5, 3)
+        # Proportional split so the total honours max_results. Videos
+        # get the dominant share; playlists and channels split the
+        # remainder. Minimum of 1 per category for sparse caps.
+        video_limit    = max(1, int(max_results * 0.60))
+        playlist_limit = max(1, int(max_results * 0.25))
+        channel_limit  = max(
+            1, max_results - video_limit - playlist_limit
+        )
 
         _re_index_and_emit(
             self._ytdlp.search_videos(
