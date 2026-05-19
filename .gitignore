@@ -1,14 +1,35 @@
-**/__pycache__/
-my_venv/
-v e n v / 
- 
- . i d e a / 
- 
- venv/
-.idea/
-*.bak
+# ── Python bytecode and caches ─────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environments ───────────────────────────────────────────────────
 venv/
+.venv/
+my_venv/
+env/
+.env
+
+# ── Build / packaging artifacts ────────────────────────────────────────────
+build/
+dist/
+*.egg-info/
+*.egg
+wheels/
+.eggs/
+
+# ── IDE / editor scratch ───────────────────────────────────────────────────
 .idea/
-*.bak
-.venv
+.vscode/
 .claude/
+*.bak
+*.swp
+*~
+
+# ── Logs and temp ──────────────────────────────────────────────────────────
+*.log
+*.tmp
+.DS_Store
