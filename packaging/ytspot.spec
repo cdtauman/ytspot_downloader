@@ -7,8 +7,8 @@ needed to run on a clean Windows machine with no Python installed.
 
 Build by running ``scripts/build_windows.ps1`` from the repo root.
 That script regenerates ``packaging/version_info.txt`` from
-``version.py`` and copies bundled FFmpeg binaries (if present) into
-``packaging/ffmpeg/`` before invoking PyInstaller.
+``version.py`` before invoking PyInstaller. Staged FFmpeg binaries in
+``packaging/ffmpeg/`` are bundled when present.
 
 This spec deliberately does not bundle Playwright browsers (~300 MB).
 The user installs them once via ``scripts/install_playwright.ps1``.
@@ -72,10 +72,10 @@ for pkg in ('yt-dlp', 'mutagen', 'ytmusicapi', 'PySide6'):
         # version='unknown' for any package that needs it.
         pass
 
-# Bundled FFmpeg / ffprobe (LGPL build). The build script downloads
-# them into packaging/ffmpeg/ before invoking PyInstaller; if the
-# folder is absent we ship without them and the user gets the
-# preflight warning at startup.
+# Bundled FFmpeg / ffprobe (LGPL build). Stage them in
+# packaging/ffmpeg/ before invoking PyInstaller; if the folder is
+# absent we ship without them and the user gets the preflight warning
+# at startup.
 FFMPEG_DIR = HERE / 'ffmpeg'
 binaries: list[tuple[str, str]] = []
 if FFMPEG_DIR.exists():

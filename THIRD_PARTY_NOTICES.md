@@ -25,10 +25,10 @@ extraction, thumbnail embedding, SponsorBlock chapter removal) and by
 `core/hls_downloader.py` (direct HLS / DASH download).
 
 The Windows EXE bundles the **LGPL-licensed** FFmpeg build only.
-The release build script (`scripts/build_windows.ps1 -BundleFfmpeg`)
-intentionally requires the maintainer to download the LGPL build
-manually rather than auto-downloading the more common GPL essentials
-build, so a wrong license cannot ship by accident.
+The release build script (`scripts/build_windows.ps1 -RequireBundledFfmpeg`)
+fails unless the maintainer has staged `ffmpeg.exe` and `ffprobe.exe`
+manually. It does not auto-download FFmpeg, so a wrong license cannot
+ship by accident.
 
 | Field | Value |
 |---|---|
