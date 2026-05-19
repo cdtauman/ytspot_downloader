@@ -240,9 +240,12 @@ class DownloadController(QObject):
             if is_solo:
                 track_playlist_name = ""
 
-            # Always use config output_dir as the base (opts["output_dir"] is verified
-            # above only for the mkdir check; the actual base is cfg.output_dir)
-            output_dir = str(Path(self._cfg.output_dir))
+            # Use the same path the writability check ran against. opts["output_dir"]
+            # comes from OptionsBar and reflects either the user's typed path
+            # (persisted to config on editingFinished) or the browse-button
+            # selection. Falling back to cfg.output_dir would silently drop a
+            # path the user typed but hasn't committed yet.
+            output_dir = str(Path(base_output_dir).expanduser())
 
             # Clean filename (index + title only, never include artist name).
             # The duplicate checker must use the same convention or it will

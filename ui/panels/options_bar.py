@@ -210,6 +210,10 @@ class OptionsBar(QFrame):
             LineEdit:focus {{ border-color: {ACCENT_COLOR}; }}
         """)
         self._dir_entry.textChanged.connect(lambda _: self.options_changed.emit())
+        # Persist edits to config when the user commits the change (Enter or
+        # focus-out). textChanged alone fires on every keystroke and would
+        # write a half-typed path; editingFinished gives us the final value.
+        self._dir_entry.editingFinished.connect(self._on_dir_committed)
         row.addWidget(self._dir_entry, stretch=1)
 
         browse_btn = ToolButton()
@@ -280,6 +284,17 @@ class OptionsBar(QFrame):
             self._config.output_dir = path
             self._config.save()
             self.options_changed.emit()
+
+    def _on_dir_committed(self) -> None:
+        """Persist a manually-typed output directory to config.
+
+        The path is not validated here — DownloadController.start_batch
+        runs the writability check before any download starts.
+        """
+        path = self._dir_entry.text().strip()
+        if path and path != self._config.output_dir:
+            self._config.output_dir = path
+            self._config.save()
 
     def _on_clip_toggle(self, checked: bool) -> None:
         self._config.clipboard_monitor = checked
