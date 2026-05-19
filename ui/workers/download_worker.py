@@ -104,7 +104,8 @@ class DownloadWorker(QThread):
     jobs        : List of (key, DownloadRequest) tuples.
     engine      : Shared DownloadEngine.
     db          : Optional HistoryDB.
-    max_workers : Concurrent download limit (1–5).
+    max_workers : Concurrent download limit (1-6). Matches the
+                  AppConfig.max_parallel_downloads clamp.
     parent      : Optional Qt parent.
     """
 

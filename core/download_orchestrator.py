@@ -97,7 +97,8 @@ class DownloadOrchestrator:
     engine      : Shared DownloadEngine instance.
     db          : Optional HistoryDB for post-download persistence.
     callbacks   : Implementation of OrchestratorCallbacks.
-    max_workers : Concurrent download limit (1–5).
+    max_workers : Concurrent download limit (1-6). Clamped internally to
+                  match AppConfig.max_parallel_downloads.
     """
 
     def __init__(

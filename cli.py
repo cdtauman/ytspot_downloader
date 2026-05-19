@@ -141,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--parallel", "-j",
         type=int, default=3,
-        help="Concurrent downloads (1–5, default: 3)",
+        help="Concurrent downloads (1-6, default: 3)",
     )
     p.add_argument(
         "--cookies",
@@ -297,7 +297,7 @@ def main() -> int:
         engine=engine,
         callbacks=cb,
         db=db,
-        max_workers=max(1, min(5, args.parallel)),
+        max_workers=max(1, min(6, args.parallel)),
     )
 
     print(
