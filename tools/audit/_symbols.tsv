@@ -1,0 +1,2985 @@
+path	kind	name	parent	lineno
+cli.py	from	__future__.annotations		33
+cli.py	import	argparse		35
+cli.py	import	sys		36
+cli.py	import	os		37
+cli.py	import	logging		38
+cli.py	import	threading		39
+cli.py	from	pathlib.Path		40
+cli.py	from	utils.logging_config.setup_logging		43
+cli.py	class	TerminalCallbacks		50
+cli.py	method	__init__	TerminalCallbacks	53
+cli.py	method	on_track_progress	TerminalCallbacks	60
+cli.py	method	on_track_status	TerminalCallbacks	69
+cli.py	method	on_track_finished	TerminalCallbacks	72
+cli.py	method	on_track_error	TerminalCallbacks	79
+cli.py	method	on_overall_progress	TerminalCallbacks	85
+cli.py	method	on_metrics	TerminalCallbacks	88
+cli.py	method	on_status_message	TerminalCallbacks	93
+cli.py	method	on_batch_finished	TerminalCallbacks	97
+cli.py	func	build_parser		105
+cli.py	func	_resolve_quality		173
+cli.py	func	main		198
+config.py	from	__future__.annotations		28
+config.py	import	json		30
+config.py	import	os		31
+config.py	import	tempfile		32
+config.py	from	pathlib.Path		33
+config.py	from	typing.Any		34
+config.py	from	config_migrate.migrate		36
+config.py	const	_DEFAULTS		43
+config.py	func	_config_path		145
+config.py	func	_default_db_path		153
+config.py	class	AppConfig		161
+config.py	method	__init__	AppConfig	169
+config.py	method	_load	AppConfig	176
+config.py	method	save	AppConfig	200
+config.py	method	reset_to_defaults	AppConfig	216
+config.py	method	__enter__	AppConfig	222
+config.py	method	__exit__	AppConfig	225
+config.py	method	get	AppConfig	230
+config.py	method	set	AppConfig	233
+config.py	method	as_dict	AppConfig	236
+config.py	method	output_dir	AppConfig	244
+config.py	method	output_dir	AppConfig	249
+config.py	method	media_format	AppConfig	253
+config.py	method	media_format	AppConfig	257
+config.py	method	audio_quality	AppConfig	261
+config.py	method	audio_quality	AppConfig	265
+config.py	method	video_quality	AppConfig	269
+config.py	method	video_quality	AppConfig	273
+config.py	method	audio_format	AppConfig	277
+config.py	method	audio_format	AppConfig	281
+config.py	method	embed_thumbnail	AppConfig	285
+config.py	method	embed_thumbnail	AppConfig	289
+config.py	method	embed_metadata	AppConfig	293
+config.py	method	embed_metadata	AppConfig	297
+config.py	method	cookies_file	AppConfig	301
+config.py	method	cookies_file	AppConfig	305
+config.py	method	window_geometry	AppConfig	309
+config.py	method	window_geometry	AppConfig	313
+config.py	method	window_state	AppConfig	317
+config.py	method	window_state	AppConfig	321
+config.py	method	clipboard_monitor	AppConfig	325
+config.py	method	clipboard_monitor	AppConfig	329
+config.py	method	check_updates	AppConfig	333
+config.py	method	check_updates	AppConfig	337
+config.py	method	history_db_path	AppConfig	341
+config.py	method	history_db_path	AppConfig	345
+config.py	method	resolved_history_db_path	AppConfig	348
+config.py	method	last_search_query	AppConfig	353
+config.py	method	last_search_query	AppConfig	357
+config.py	method	last_search_platform	AppConfig	361
+config.py	method	last_search_platform	AppConfig	366
+config.py	method	search_max_results	AppConfig	370
+config.py	method	search_max_results	AppConfig	379
+config.py	method	youtube_max_results	AppConfig	383
+config.py	method	youtube_max_results	AppConfig	392
+config.py	method	spotify_max_results	AppConfig	396
+config.py	method	spotify_max_results	AppConfig	405
+config.py	method	batch_import_dir	AppConfig	409
+config.py	method	batch_import_dir	AppConfig	413
+config.py	method	proxy_server_url	AppConfig	417
+config.py	method	proxy_server_url	AppConfig	421
+config.py	method	cookies_browser	AppConfig	425
+config.py	method	cookies_browser	AppConfig	429
+config.py	method	spotify_client_id	AppConfig	433
+config.py	method	spotify_client_id	AppConfig	437
+config.py	method	spotify_client_secret	AppConfig	441
+config.py	method	spotify_client_secret	AppConfig	445
+config.py	method	spotify_app_api_key	AppConfig	449
+config.py	method	spotify_app_api_key	AppConfig	453
+config.py	method	max_parallel_downloads	AppConfig	457
+config.py	method	max_parallel_downloads	AppConfig	466
+config.py	method	download_delay_range	AppConfig	472
+config.py	method	download_delay_range	AppConfig	477
+config.py	method	randomize_user_agent	AppConfig	482
+config.py	method	randomize_user_agent	AppConfig	486
+config.py	method	accent_color	AppConfig	494
+config.py	method	accent_color	AppConfig	498
+config.py	method	accessibility_mode	AppConfig	502
+config.py	method	accessibility_mode	AppConfig	506
+config.py	method	tray_on_close	AppConfig	510
+config.py	method	tray_on_close	AppConfig	514
+config.py	method	global_hotkeys_enabled	AppConfig	518
+config.py	method	global_hotkeys_enabled	AppConfig	522
+config.py	method	sponsorblock_enabled	AppConfig	526
+config.py	method	sponsorblock_enabled	AppConfig	530
+config.py	method	lyrics_enabled	AppConfig	534
+config.py	method	lyrics_enabled	AppConfig	539
+config.py	method	replay_gain_enabled	AppConfig	543
+config.py	method	replay_gain_enabled	AppConfig	548
+config.py	method	square_thumbnails	AppConfig	552
+config.py	method	square_thumbnails	AppConfig	557
+config.py	method	expand_thumbnails	AppConfig	561
+config.py	method	expand_thumbnails	AppConfig	566
+config.py	method	musicbrainz_enabled	AppConfig	570
+config.py	method	musicbrainz_enabled	AppConfig	574
+config.py	method	playlist_subfolders	AppConfig	578
+config.py	method	playlist_subfolders	AppConfig	582
+config.py	method	playlist_index_prefix	AppConfig	586
+config.py	method	playlist_index_prefix	AppConfig	590
+config.py	method	duplicate_action	AppConfig	594
+config.py	method	duplicate_action	AppConfig	599
+config.py	method	queue_state	AppConfig	605
+config.py	method	queue_state	AppConfig	610
+config.py	method	paused_items	AppConfig	614
+config.py	method	paused_items	AppConfig	619
+config.py	method	__repr__	AppConfig	622
+config.py	method	theme	AppConfig	631
+config.py	method	theme	AppConfig	636
+config.py	method	language	AppConfig	642
+config.py	method	language	AppConfig	647
+config.py	method	magic_auto_ops	AppConfig	651
+config.py	method	magic_auto_ops	AppConfig	656
+config.py	method	tag_editor_zoom	AppConfig	660
+config.py	method	tag_editor_zoom	AppConfig	669
+config.py	method	tag_editor_splitter_sizes	AppConfig	673
+config.py	method	tag_editor_splitter_sizes	AppConfig	678
+config.py	method	tag_clean_title_remove_brackets	AppConfig	684
+config.py	method	tag_clean_title_remove_brackets	AppConfig	688
+config.py	method	tag_clean_title_remove_web_junk	AppConfig	692
+config.py	method	tag_clean_title_remove_web_junk	AppConfig	696
+config.py	method	tag_clean_title_remove_hebrew	AppConfig	700
+config.py	method	tag_clean_title_remove_hebrew	AppConfig	704
+config.py	method	tag_clean_title_fix_punctuation	AppConfig	708
+config.py	method	tag_clean_title_fix_punctuation	AppConfig	712
+config.py	method	tag_clean_filename_smart_brackets	AppConfig	716
+config.py	method	tag_clean_filename_smart_brackets	AppConfig	720
+config.py	method	tag_clean_filename_remove_domains	AppConfig	724
+config.py	method	tag_clean_filename_remove_domains	AppConfig	728
+config.py	method	tag_clean_filename_remove_emojis	AppConfig	732
+config.py	method	tag_clean_filename_remove_emojis	AppConfig	736
+config.py	method	tag_clean_filename_fix_spaces	AppConfig	740
+config.py	method	tag_clean_filename_fix_spaces	AppConfig	744
+config_migrate.py	from	__future__.annotations		27
+config_migrate.py	import	logging		29
+config_migrate.py	from	typing.Callable		30
+config_migrate.py	const	logger		32
+config_migrate.py	const	CURRENT_VERSION		35
+config_migrate.py	const	_MIGRATIONS		44
+config_migrate.py	func	migrate		71
+core/batch_importer.py	from	__future__.annotations		58
+core/batch_importer.py	import	re		60
+core/batch_importer.py	from	pathlib.Path		61
+core/batch_importer.py	from	typing.Optional		62
+core/batch_importer.py	from	urllib.parse.urlparse		63
+core/batch_importer.py	from	core.playlist_parser.classify_url		65
+core/batch_importer.py	from	core.playlist_parser.SourcePlatform		65
+core/batch_importer.py	const	_URL_RE		76
+core/batch_importer.py	const	_COMMENT_RE		84
+core/batch_importer.py	const	_BLANK_RE		85
+core/batch_importer.py	class	ImportResult		92
+core/batch_importer.py	method	__init__	ImportResult	105
+core/batch_importer.py	method	found_count	ImportResult	120
+core/batch_importer.py	method	youtube_urls	ImportResult	124
+core/batch_importer.py	method	spotify_urls	ImportResult	131
+core/batch_importer.py	method	summary	ImportResult	137
+core/batch_importer.py	method	__repr__	ImportResult	161
+core/batch_importer.py	class	BatchImporter		173
+core/batch_importer.py	method	from_text_file	BatchImporter	185
+core/batch_importer.py	method	from_raw_text	BatchImporter	233
+core/batch_importer.py	method	from_clipboard_text	BatchImporter	269
+core/batch_importer.py	method	_parse_text	BatchImporter	290
+core/batch_importer.py	method	_validate_and_deduplicate	BatchImporter	343
+core/channel_tab_discoverer.py	from	__future__.annotations		11
+core/channel_tab_discoverer.py	import	logging		13
+core/channel_tab_discoverer.py	from	dataclasses.dataclass		14
+core/channel_tab_discoverer.py	from	dataclasses.field		14
+core/channel_tab_discoverer.py	from	typing.Optional		15
+core/channel_tab_discoverer.py	const	logger		17
+core/channel_tab_discoverer.py	const	_TAB_MAP		23
+core/channel_tab_discoverer.py	const	_IGNORE_TABS		34
+core/channel_tab_discoverer.py	class	TabInfo		38
+core/channel_tab_discoverer.py	class	DiscoveryResult		47
+core/channel_tab_discoverer.py	method	success	DiscoveryResult	53
+core/channel_tab_discoverer.py	func	discover_tabs		59
+core/channel_tab_discoverer.py	func	_extract_channel_name		146
+core/channel_tab_discoverer.py	func	_extract_tabs		166
+core/channel_tab_discoverer.py	func	_tab_from_element		190
+core/channel_tab_discoverer.py	func	_default_tabs		223
+core/channel_tab_discoverer.py	func	_strip_tab_suffix		232
+core/cookie_wizard.py	from	__future__.annotations		12
+core/cookie_wizard.py	import	logging		14
+core/cookie_wizard.py	from	pathlib.Path		15
+core/cookie_wizard.py	from	playwright.sync_api.sync_playwright		17
+core/cookie_wizard.py	from	utils.paths.get_app_cookies_path		19
+core/cookie_wizard.py	const	logger		21
+core/cookie_wizard.py	func	format_netscape_cookies		24
+core/cookie_wizard.py	func	run_cookie_wizard		45
+core/download_orchestrator.py	from	__future__.annotations		25
+core/download_orchestrator.py	import	time		27
+core/download_orchestrator.py	import	random		28
+core/download_orchestrator.py	import	logging		29
+core/download_orchestrator.py	import	threading		30
+core/download_orchestrator.py	from	concurrent.futures.ThreadPoolExecutor		31
+core/download_orchestrator.py	from	concurrent.futures.as_completed		31
+core/download_orchestrator.py	from	dataclasses.dataclass		32
+core/download_orchestrator.py	from	typing.Optional		33
+core/download_orchestrator.py	from	typing.Protocol		33
+core/download_orchestrator.py	from	typing.Tuple		33
+core/download_orchestrator.py	from	core.history_db.DownloadRecord		35
+core/download_orchestrator.py	from	core.history_db.HistoryDB		35
+core/download_orchestrator.py	from	core.downloader.DownloadEngine		36
+core/download_orchestrator.py	from	core.downloader.DownloadProgress		36
+core/download_orchestrator.py	from	core.downloader.DownloadRequest		36
+core/download_orchestrator.py	from	core.downloader.DownloadStatus		36
+core/download_orchestrator.py	from	core.downloader.MediaType		36
+core/download_orchestrator.py	from	core.retry_policy.DEFAULT_POLICY		43
+core/download_orchestrator.py	from	core.retry_policy.retry_download		43
+core/download_orchestrator.py	from	error_handler.classify_error		44
+core/download_orchestrator.py	from	error_handler.ErrorInfo		44
+core/download_orchestrator.py	const	logger		46
+core/download_orchestrator.py	class	OrchestratorCallbacks		53
+core/download_orchestrator.py	method	on_track_progress	OrchestratorCallbacks	60
+core/download_orchestrator.py	method	on_track_speed	OrchestratorCallbacks	61
+core/download_orchestrator.py	method	on_track_status	OrchestratorCallbacks	62
+core/download_orchestrator.py	method	on_track_finished	OrchestratorCallbacks	63
+core/download_orchestrator.py	method	on_track_error	OrchestratorCallbacks	64
+core/download_orchestrator.py	method	on_overall_progress	OrchestratorCallbacks	65
+core/download_orchestrator.py	method	on_metrics	OrchestratorCallbacks	66
+core/download_orchestrator.py	method	on_status_message	OrchestratorCallbacks	67
+core/download_orchestrator.py	method	on_job_count_changed	OrchestratorCallbacks	68
+core/download_orchestrator.py	method	on_batch_finished	OrchestratorCallbacks	69
+core/download_orchestrator.py	method	on_track_thumbnail	OrchestratorCallbacks	70
+core/download_orchestrator.py	class	BatchResult		78
+core/download_orchestrator.py	class	DownloadOrchestrator		90
+core/download_orchestrator.py	method	__init__	DownloadOrchestrator	102
+core/download_orchestrator.py	method	cancel	DownloadOrchestrator	128
+core/download_orchestrator.py	method	cancel_track	DownloadOrchestrator	141
+core/download_orchestrator.py	method	run_batch	DownloadOrchestrator	150
+core/download_orchestrator.py	method	_download_one	DownloadOrchestrator	266
+core/download_orchestrator.py	method	_persist_record	DownloadOrchestrator	361
+core/download_orchestrator.py	method	_safe_cb	DownloadOrchestrator	382
+core/downloader.py	from	__future__.annotations		18
+core/downloader.py	import	logging		20
+core/downloader.py	import	os		21
+core/downloader.py	import	re		22
+core/downloader.py	import	threading		23
+core/downloader.py	import	time		24
+core/downloader.py	from	dataclasses.dataclass		25
+core/downloader.py	from	dataclasses.field		25
+core/downloader.py	from	enum.Enum		26
+core/downloader.py	from	enum.auto		26
+core/downloader.py	from	pathlib.Path		27
+core/downloader.py	from	typing.Any		28
+core/downloader.py	from	typing.Callable		28
+core/downloader.py	from	typing.Optional		28
+core/downloader.py	import	yt_dlp		30
+core/downloader.py	from	utils.cookie_validator.check_cookies_valid		36
+core/downloader.py	from	utils.paths.get_app_cookies_path		37
+core/downloader.py	from	utils.yt_dlp_opts.build_base_ydl_opts		38
+core/downloader.py	from	core.playlist_parser.SourcePlatform		39
+core/downloader.py	const	logger		42
+core/downloader.py	class	SilentLogger		45
+core/downloader.py	method	debug	SilentLogger	47
+core/downloader.py	method	info	SilentLogger	52
+core/downloader.py	method	warning	SilentLogger	55
+core/downloader.py	method	error	SilentLogger	68
+core/downloader.py	class	MediaType		78
+core/downloader.py	classvar	AUDIO	MediaType	79
+core/downloader.py	classvar	VIDEO	MediaType	80
+core/downloader.py	class	VideoQuality		83
+core/downloader.py	classvar	BEST	VideoQuality	84
+core/downloader.py	classvar	UHD_4K	VideoQuality	85
+core/downloader.py	classvar	QHD_2K	VideoQuality	86
+core/downloader.py	classvar	HIGH	VideoQuality	87
+core/downloader.py	classvar	MEDIUM	VideoQuality	88
+core/downloader.py	classvar	LOW	VideoQuality	89
+core/downloader.py	classvar	WORST	VideoQuality	90
+core/downloader.py	class	AudioQuality		93
+core/downloader.py	classvar	BEST	AudioQuality	94
+core/downloader.py	classvar	HIGH	AudioQuality	95
+core/downloader.py	classvar	MEDIUM	AudioQuality	96
+core/downloader.py	classvar	LOW	AudioQuality	97
+core/downloader.py	class	DownloadStatus		100
+core/downloader.py	classvar	QUEUED	DownloadStatus	101
+core/downloader.py	classvar	EXTRACTING	DownloadStatus	102
+core/downloader.py	classvar	DOWNLOADING	DownloadStatus	103
+core/downloader.py	classvar	PROCESSING	DownloadStatus	104
+core/downloader.py	classvar	FINISHED	DownloadStatus	105
+core/downloader.py	classvar	ERROR	DownloadStatus	106
+core/downloader.py	classvar	CANCELLED	DownloadStatus	107
+core/downloader.py	classvar	PAUSED	DownloadStatus	108
+core/downloader.py	class	DownloadProgress		116
+core/downloader.py	class	DownloadRequest		134
+core/downloader.py	func	_strip_ansi_codes		213
+core/downloader.py	func	_get_friendly_error		220
+core/downloader.py	func	_sanitize_filename		263
+core/downloader.py	func	_sanitize_folder_name		276
+core/downloader.py	func	_bytes_to_mb		297
+core/downloader.py	class	DownloadEngine		307
+core/downloader.py	method	__init__	DownloadEngine	315
+core/downloader.py	method	cancel_all	DownloadEngine	319
+core/downloader.py	method	download	DownloadEngine	324
+core/downloader.py	method	download_async	DownloadEngine	462
+core/downloader.py	method	cancel	DownloadEngine	476
+core/downloader.py	method	_download_hls_stream	DownloadEngine	481
+core/downloader.py	method	_download_with_stream_intercept	DownloadEngine	536
+core/downloader.py	method	_build_ydl_opts	DownloadEngine	670
+core/downloader.py	method	_audio_opts	DownloadEngine	764
+core/downloader.py	method	_video_opts	DownloadEngine	800
+core/downloader.py	method	_make_progress_hook	DownloadEngine	843
+core/downloader.py	method	_make_pp_hook	DownloadEngine	893
+core/downloader.py	method	_run_final_pipeline	DownloadEngine	912
+core/downloader.py	method	_fire	DownloadEngine	1011
+core/duplicate_checker.py	from	__future__.annotations		23
+core/duplicate_checker.py	import	logging		25
+core/duplicate_checker.py	import	re		26
+core/duplicate_checker.py	from	pathlib.Path		27
+core/duplicate_checker.py	from	typing.Optional		28
+core/duplicate_checker.py	const	logger		30
+core/duplicate_checker.py	const	_AUDIO_EXTS		33
+core/duplicate_checker.py	func	_sanitize		38
+core/duplicate_checker.py	func	expected_stem		48
+core/duplicate_checker.py	func	find_duplicate		64
+core/duplicate_checker.py	func	_get_duration		117
+core/duplicate_detector.py	from	__future__.annotations		11
+core/duplicate_detector.py	from	dataclasses.dataclass		13
+core/duplicate_detector.py	from	dataclasses.field		13
+core/duplicate_detector.py	from	typing.Optional		14
+core/duplicate_detector.py	class	VideoInfo		20
+core/duplicate_detector.py	class	DuplicateGroup		37
+core/duplicate_detector.py	method	tab_names	DuplicateGroup	49
+core/duplicate_detector.py	method	is_cross_tab	DuplicateGroup	58
+core/duplicate_detector.py	class	DuplicateDecision		67
+core/duplicate_detector.py	method	keep_all	DuplicateDecision	80
+core/duplicate_detector.py	method	keep_non_playlist	DuplicateDecision	84
+core/duplicate_detector.py	method	keep_playlist	DuplicateDecision	92
+core/duplicate_detector.py	func	_appearance_key		100
+core/duplicate_detector.py	func	detect_duplicates		106
+core/duplicate_detector.py	func	apply_decisions		141
+core/history_db.py	from	__future__.annotations		32
+core/history_db.py	import	csv		34
+core/history_db.py	import	logging		35
+core/history_db.py	import	shutil		36
+core/history_db.py	import	sqlite3		37
+core/history_db.py	import	threading		38
+core/history_db.py	from	dataclasses.dataclass		39
+core/history_db.py	from	dataclasses.field		39
+core/history_db.py	from	dataclasses.fields		39
+core/history_db.py	from	dataclasses.asdict		39
+core/history_db.py	from	datetime.datetime		40
+core/history_db.py	from	datetime.timezone		40
+core/history_db.py	from	pathlib.Path		41
+core/history_db.py	from	typing.Optional		42
+core/history_db.py	const	logger		44
+core/history_db.py	from	utils.time_format.seconds_to_str		46
+core/history_db.py	class	DownloadRecord		54
+core/history_db.py	method	duration_str	DownloadRecord	90
+core/history_db.py	method	file_size_str	DownloadRecord	94
+core/history_db.py	method	display_date	DownloadRecord	102
+core/history_db.py	const	_CREATE_TABLE_SQL		117
+core/history_db.py	const	_CREATE_FTS_SQL		134
+core/history_db.py	const	_CREATE_TRIGGERS_SQL		145
+core/history_db.py	const	_INSERT_SQL		164
+core/history_db.py	const	_FETCH_ALL_SQL		172
+core/history_db.py	const	_SEARCH_SQL		180
+core/history_db.py	const	_DELETE_SQL		190
+core/history_db.py	const	_CLEAR_SQL		191
+core/history_db.py	const	_COUNT_SQL		192
+core/history_db.py	class	HistoryDB		199
+core/history_db.py	classvar	_DEFAULT_LIMIT	HistoryDB	212
+core/history_db.py	method	__init__	HistoryDB	214
+core/history_db.py	method	_initialise_schema	HistoryDB	252
+core/history_db.py	method	insert	HistoryDB	264
+core/history_db.py	method	delete	HistoryDB	292
+core/history_db.py	method	clear_all	HistoryDB	301
+core/history_db.py	method	fetch_all	HistoryDB	316
+core/history_db.py	method	search	HistoryDB	324
+core/history_db.py	method	_search_fallback	HistoryDB	352
+core/history_db.py	method	count	HistoryDB	366
+core/history_db.py	method	export_csv	HistoryDB	375
+core/history_db.py	method	_check_integrity	HistoryDB	415
+core/history_db.py	method	_backup_and_recreate	HistoryDB	433
+core/history_db.py	method	close	HistoryDB	471
+core/history_db.py	method	__enter__	HistoryDB	479
+core/history_db.py	method	__exit__	HistoryDB	482
+core/history_db.py	method	_default_path	HistoryDB	488
+core/history_db.py	method	__repr__	HistoryDB	496
+core/history_db.py	func	_utc_now		504
+core/history_db.py	func	_row_to_record		509
+core/history_db.py	func	_escape_fts5		530
+core/hls_downloader.py	from	__future__.annotations		11
+core/hls_downloader.py	import	logging		13
+core/hls_downloader.py	import	os		14
+core/hls_downloader.py	import	subprocess		15
+core/hls_downloader.py	import	tempfile		16
+core/hls_downloader.py	import	time		17
+core/hls_downloader.py	from	pathlib.Path		18
+core/hls_downloader.py	from	typing.Callable		19
+core/hls_downloader.py	from	typing.Optional		19
+core/hls_downloader.py	const	logger		21
+core/hls_downloader.py	const	_AUDIO_FORMATS		24
+core/hls_downloader.py	const	_VIDEO_FORMATS		25
+core/hls_downloader.py	func	_find_ffmpeg		28
+core/hls_downloader.py	func	download_hls		41
+core/hls_downloader.py	func	_netscape_to_cookie_header		139
+core/hls_downloader.py	func	probe_stream		171
+core/listing_scraper.py	from	__future__.annotations		12
+core/listing_scraper.py	import	logging		14
+core/listing_scraper.py	import	re		15
+core/listing_scraper.py	import	time		16
+core/listing_scraper.py	from	typing.Callable		17
+core/listing_scraper.py	from	typing.Dict		17
+core/listing_scraper.py	from	typing.List		17
+core/listing_scraper.py	from	typing.Optional		17
+core/listing_scraper.py	from	typing.Tuple		17
+core/listing_scraper.py	from	urllib.parse.urljoin		18
+core/listing_scraper.py	from	urllib.parse.urlparse		18
+core/listing_scraper.py	const	logger		20
+core/listing_scraper.py	const	_USER_AGENT		23
+core/listing_scraper.py	func	_parse_duration_str		30
+core/listing_scraper.py	func	_base_url		52
+core/listing_scraper.py	func	_page_url		58
+core/listing_scraper.py	func	_block_media		71
+core/listing_scraper.py	func	scrape_listing_page		79
+core/lyrics_embedder.py	from	__future__.annotations		21
+core/lyrics_embedder.py	import	logging		23
+core/lyrics_embedder.py	from	pathlib.Path		24
+core/lyrics_embedder.py	from	typing.Optional		25
+core/lyrics_embedder.py	const	logger		27
+core/lyrics_embedder.py	class	LyricsError		30
+core/lyrics_embedder.py	func	_fetch_lyrics		34
+core/lyrics_embedder.py	func	embed_lyrics		62
+core/lyrics_embedder.py	func	_embed_mp3		121
+core/lyrics_embedder.py	func	_embed_m4a		142
+core/lyrics_embedder.py	func	_embed_flac		152
+core/lyrics_embedder.py	func	_embed_ogg		160
+core/metadata_models.py	from	__future__.annotations		8
+core/metadata_models.py	from	dataclasses.dataclass		10
+core/metadata_models.py	from	dataclasses.field		10
+core/metadata_models.py	from	pathlib.Path		11
+core/metadata_models.py	from	typing.Optional		12
+core/metadata_models.py	class	OriginalTags		20
+core/metadata_models.py	method	to_dict	OriginalTags	32
+core/metadata_models.py	class	ProposedTags		47
+core/metadata_models.py	method	has_changes	ProposedTags	65
+core/metadata_models.py	method	effective_tags	ProposedTags	83
+core/metadata_models.py	method	clear	ProposedTags	104
+core/metadata_models.py	class	TrackStatus		120
+core/metadata_models.py	classvar	PENDING	TrackStatus	121
+core/metadata_models.py	classvar	CHANGED	TrackStatus	122
+core/metadata_models.py	classvar	DONE	TrackStatus	123
+core/metadata_models.py	classvar	ERROR	TrackStatus	124
+core/metadata_models.py	classvar	UNSUPPORTED	TrackStatus	125
+core/metadata_models.py	class	AudioTrackItem		129
+core/metadata_models.py	method	display_name	AudioTrackItem	141
+core/metadata_models.py	method	has_changes	AudioTrackItem	145
+core/metadata_models.py	class	ScanResult		157
+core/metadata_models.py	method	files_count	ScanResult	164
+core/metadata_models.py	method	folders_count	ScanResult	168
+core/metadata_models.py	class	TagEditSession		173
+core/metadata_processor.py	from	__future__.annotations		16
+core/metadata_processor.py	import	json		18
+core/metadata_processor.py	import	logging		19
+core/metadata_processor.py	import	re		20
+core/metadata_processor.py	from	datetime.datetime		21
+core/metadata_processor.py	from	pathlib.Path		22
+core/metadata_processor.py	from	typing.Generator		23
+core/metadata_processor.py	from	typing.Optional		23
+core/metadata_processor.py	from	core.metadata_models.AudioTrackItem		25
+core/metadata_processor.py	from	core.metadata_models.OriginalTags		25
+core/metadata_processor.py	from	core.metadata_models.ProposedTags		25
+core/metadata_processor.py	from	core.metadata_models.ScanResult		25
+core/metadata_processor.py	from	core.metadata_models.TrackStatus		25
+core/metadata_processor.py	const	logger		33
+core/metadata_processor.py	const	_SUPPORTED_EXTS		35
+core/metadata_processor.py	const	_TRACK_NUM_RE		38
+core/metadata_processor.py	const	_STRIP_NUM_RE		40
+core/metadata_processor.py	func	clean_filename_to_title		47
+core/metadata_processor.py	func	extract_track_number		67
+core/metadata_processor.py	func	scan_folder		88
+core/metadata_processor.py	func	scan_folders		147
+core/metadata_processor.py	func	_folder_ancestors_within		162
+core/metadata_processor.py	func	build_scan_result		173
+core/metadata_processor.py	func	read_tags		190
+core/metadata_processor.py	func	_read_mp3		205
+core/metadata_processor.py	func	_read_flac		256
+core/metadata_processor.py	func	_read_m4a		305
+core/metadata_processor.py	func	write_tags		349
+core/metadata_processor.py	func	_write_mp3		382
+core/metadata_processor.py	func	_write_flac		448
+core/metadata_processor.py	func	_write_m4a		482
+core/metadata_processor.py	func	backup_tags		516
+core/musicbrainz_enricher.py	from	__future__.annotations		17
+core/musicbrainz_enricher.py	import	logging		19
+core/musicbrainz_enricher.py	import	time		20
+core/musicbrainz_enricher.py	from	typing.Optional		21
+core/musicbrainz_enricher.py	import	httpx		23
+core/musicbrainz_enricher.py	const	logger		25
+core/musicbrainz_enricher.py	const	_MB_BASE		28
+core/musicbrainz_enricher.py	const	_MB_HEADERS		29
+core/musicbrainz_enricher.py	func	enrich_file		37
+core/musicbrainz_enricher.py	func	_find_recording		65
+core/musicbrainz_enricher.py	func	_extract_tags		120
+core/musicbrainz_enricher.py	func	_write_enriched_tags		167
+core/musicbrainz_enricher.py	func	_write_mp3		202
+core/musicbrainz_enricher.py	func	_write_flac		223
+core/musicbrainz_enricher.py	func	_write_m4a		235
+core/musicbrainz_enricher.py	func	_write_ogg		253
+core/offline_monitor.py	from	__future__.annotations		25
+core/offline_monitor.py	import	logging		27
+core/offline_monitor.py	import	threading		28
+core/offline_monitor.py	import	time		29
+core/offline_monitor.py	from	typing.Callable		30
+core/offline_monitor.py	from	typing.Optional		30
+core/offline_monitor.py	from	utils.network_probe.probe_network		32
+core/offline_monitor.py	const	logger		34
+core/offline_monitor.py	const	_POLL_INTERVAL		36
+core/offline_monitor.py	const	_INITIAL_DELAY		37
+core/offline_monitor.py	class	NetworkMonitor		40
+core/offline_monitor.py	method	__init__	NetworkMonitor	55
+core/offline_monitor.py	method	start	NetworkMonitor	71
+core/offline_monitor.py	method	stop	NetworkMonitor	81
+core/offline_monitor.py	method	is_online	NetworkMonitor	86
+core/offline_monitor.py	method	_run	NetworkMonitor	92
+core/offline_monitor.py	method	_check	NetworkMonitor	102
+core/parallel_enricher.py	from	__future__.annotations		31
+core/parallel_enricher.py	import	logging		33
+core/parallel_enricher.py	import	threading		34
+core/parallel_enricher.py	from	concurrent.futures.ThreadPoolExecutor		35
+core/parallel_enricher.py	from	concurrent.futures.as_completed		35
+core/parallel_enricher.py	from	dataclasses.dataclass		36
+core/parallel_enricher.py	from	typing.Callable		37
+core/parallel_enricher.py	from	typing.Generic		37
+core/parallel_enricher.py	from	typing.Optional		37
+core/parallel_enricher.py	from	typing.TypeVar		37
+core/parallel_enricher.py	const	logger		39
+core/parallel_enricher.py	const	T		41
+core/parallel_enricher.py	const	R		42
+core/parallel_enricher.py	class	EnrichResult		50
+core/parallel_enricher.py	func	enrich_parallel		58
+core/parallel_enricher.py	func	_safe_enrich		154
+core/parallel_enricher.py	func	enrich_spotify_tracks		167
+core/playlist_parser.py	from	__future__.annotations		32
+core/playlist_parser.py	import	logging		34
+core/playlist_parser.py	import	re		35
+core/playlist_parser.py	import	threading		36
+core/playlist_parser.py	from	dataclasses.dataclass		37
+core/playlist_parser.py	from	dataclasses.field		37
+core/playlist_parser.py	from	enum.Enum		38
+core/playlist_parser.py	from	enum.auto		38
+core/playlist_parser.py	from	typing.Callable		39
+core/playlist_parser.py	from	typing.Iterator		39
+core/playlist_parser.py	from	typing.Optional		39
+core/playlist_parser.py	from	urllib.parse.urlparse		40
+core/playlist_parser.py	from	urllib.parse.parse_qs		40
+core/playlist_parser.py	import	yt_dlp		42
+core/playlist_parser.py	from	utils.impersonate.ImpersonateTarget		48
+core/playlist_parser.py	from	utils.impersonate.CURL_CFFI_AVAILABLE		48
+core/playlist_parser.py	from	utils.time_format.seconds_to_str		49
+core/playlist_parser.py	from	utils.logger.SilentLogger		50
+core/playlist_parser.py	from	utils.yt_dlp_opts.build_parse_ydl_opts		51
+core/playlist_parser.py	from	utils.artwork_cleaner.clean_artwork_url		52
+core/playlist_parser.py	const	logger		54
+core/playlist_parser.py	class	SourcePlatform		61
+core/playlist_parser.py	classvar	YOUTUBE	SourcePlatform	62
+core/playlist_parser.py	classvar	YOUTUBE_MUSIC	SourcePlatform	63
+core/playlist_parser.py	classvar	SPOTIFY	SourcePlatform	64
+core/playlist_parser.py	classvar	GENERIC	SourcePlatform	65
+core/playlist_parser.py	classvar	UNKNOWN	SourcePlatform	66
+core/playlist_parser.py	class	UrlKind		69
+core/playlist_parser.py	classvar	SINGLE_VIDEO	UrlKind	70
+core/playlist_parser.py	classvar	PLAYLIST	UrlKind	71
+core/playlist_parser.py	classvar	ALBUM	UrlKind	72
+core/playlist_parser.py	classvar	ARTIST	UrlKind	73
+core/playlist_parser.py	classvar	UNKNOWN	UrlKind	74
+core/playlist_parser.py	class	TrackMeta		78
+core/playlist_parser.py	method	format_duration	TrackMeta	113
+core/playlist_parser.py	method	__post_init__	TrackMeta	117
+core/playlist_parser.py	class	ParseResult		124
+core/playlist_parser.py	method	success	ParseResult	138
+core/playlist_parser.py	method	summary	ParseResult	141
+core/playlist_parser.py	const	_YT_PLAYLIST_RE		160
+core/playlist_parser.py	const	_YT_VIDEO_RE		161
+core/playlist_parser.py	const	_YTM_RE		162
+core/playlist_parser.py	const	_SPOTIFY_RE		163
+core/playlist_parser.py	const	_USER_LISTING_RE		167
+core/playlist_parser.py	func	classify_url		170
+core/playlist_parser.py	func	_best_thumbnail		236
+core/playlist_parser.py	func	_entry_to_track		266
+core/playlist_parser.py	class	PlaylistParser		324
+core/playlist_parser.py	method	__init__	PlaylistParser	350
+core/playlist_parser.py	method	parse	PlaylistParser	355
+core/playlist_parser.py	method	parse_async	PlaylistParser	516
+core/playlist_parser.py	method	cancel	PlaylistParser	549
+core/playlist_parser.py	method	_build_opts	PlaylistParser	556
+core/playlist_parser.py	method	_parse_standard_yt	PlaylistParser	563
+core/playlist_parser.py	method	_parse_universal_fallback	PlaylistParser	620
+core/playlist_parser.py	method	_notify	PlaylistParser	755
+core/playlist_parser.py	func	fetch_playlist_metadata		767
+core/playlist_sync.py	from	__future__.annotations		20
+core/playlist_sync.py	import	logging		22
+core/playlist_sync.py	import	re		23
+core/playlist_sync.py	from	dataclasses.dataclass		24
+core/playlist_sync.py	from	typing.Optional		25
+core/playlist_sync.py	const	logger		27
+core/playlist_sync.py	const	_YT_ID_RE		30
+core/playlist_sync.py	class	SyncResult		36
+core/playlist_sync.py	func	extract_video_id		45
+core/playlist_sync.py	func	diff_playlist		51
+core/playlist_sync.py	func	filter_new_items		104
+core/playlist_sync.py	func	_get_downloaded_ids		124
+core/progress_estimator.py	from	__future__.annotations		37
+core/progress_estimator.py	import	time		39
+core/progress_estimator.py	from	collections.deque		40
+core/progress_estimator.py	from	dataclasses.dataclass		41
+core/progress_estimator.py	from	dataclasses.field		41
+core/progress_estimator.py	from	typing.Optional		42
+core/progress_estimator.py	class	_Sample		46
+core/progress_estimator.py	class	ProgressEstimator		52
+core/progress_estimator.py	method	__init__	ProgressEstimator	62
+core/progress_estimator.py	method	update	ProgressEstimator	71
+core/progress_estimator.py	method	reset	ProgressEstimator	112
+core/progress_estimator.py	method	speed_bps	ProgressEstimator	122
+core/progress_estimator.py	method	eta_seconds	ProgressEstimator	127
+core/progress_estimator.py	method	speed_str	ProgressEstimator	132
+core/progress_estimator.py	method	eta_str	ProgressEstimator	137
+core/progress_estimator.py	class	BatchEstimator		146
+core/progress_estimator.py	method	__init__	BatchEstimator	154
+core/progress_estimator.py	method	update	BatchEstimator	160
+core/progress_estimator.py	method	mark_completed	BatchEstimator	171
+core/progress_estimator.py	method	aggregate_speed_bps	BatchEstimator	175
+core/progress_estimator.py	method	aggregate_speed_str	BatchEstimator	184
+core/progress_estimator.py	method	completed_count	BatchEstimator	188
+core/progress_estimator.py	method	fraction	BatchEstimator	192
+core/progress_estimator.py	method	reset	BatchEstimator	197
+core/progress_estimator.py	func	format_speed		206
+core/progress_estimator.py	func	format_eta		216
+core/queue_persistence.py	from	__future__.annotations		34
+core/queue_persistence.py	import	json		36
+core/queue_persistence.py	import	logging		37
+core/queue_persistence.py	import	threading		38
+core/queue_persistence.py	from	dataclasses.dataclass		39
+core/queue_persistence.py	from	dataclasses.field		39
+core/queue_persistence.py	from	dataclasses.asdict		39
+core/queue_persistence.py	from	typing.Optional		40
+core/queue_persistence.py	const	logger		42
+core/queue_persistence.py	class	QueueItem		50
+core/queue_persistence.py	method	to_dict	QueueItem	68
+core/queue_persistence.py	method	from_dict	QueueItem	72
+core/queue_persistence.py	class	QueueStateManager		82
+core/queue_persistence.py	method	__init__	QueueStateManager	91
+core/queue_persistence.py	method	set_batch	QueueStateManager	99
+core/queue_persistence.py	method	mark_completed	QueueStateManager	115
+core/queue_persistence.py	method	mark_failed	QueueStateManager	124
+core/queue_persistence.py	method	save	QueueStateManager	134
+core/queue_persistence.py	method	clear	QueueStateManager	152
+core/queue_persistence.py	method	load_pending	QueueStateManager	163
+core/queue_persistence.py	method	pending_count	QueueStateManager	183
+core/queue_persistence.py	method	completed_count	QueueStateManager	188
+core/queue_persistence.py	method	total_count	QueueStateManager	193
+core/replay_gain.py	from	__future__.annotations		26
+core/replay_gain.py	import	logging		28
+core/replay_gain.py	import	shutil		29
+core/replay_gain.py	import	subprocess		30
+core/replay_gain.py	from	pathlib.Path		31
+core/replay_gain.py	from	typing.Optional		32
+core/replay_gain.py	const	logger		34
+core/replay_gain.py	const	_REFERENCE_LUFS		37
+core/replay_gain.py	func	analyse_and_embed		40
+core/replay_gain.py	func	_analyse_with_rsgain		61
+core/replay_gain.py	func	_analyse_with_pyloudnorm		89
+core/replay_gain.py	func	_write_tags		134
+core/replay_gain.py	func	_write_mp3		155
+core/replay_gain.py	func	_write_flac		172
+core/replay_gain.py	func	_write_m4a		181
+core/replay_gain.py	func	_write_ogg		197
+core/retry_policy.py	from	__future__.annotations		16
+core/retry_policy.py	import	logging		18
+core/retry_policy.py	import	re		19
+core/retry_policy.py	import	time		20
+core/retry_policy.py	import	threading		21
+core/retry_policy.py	from	dataclasses.dataclass		22
+core/retry_policy.py	from	typing.Callable		23
+core/retry_policy.py	from	typing.Optional		23
+core/retry_policy.py	const	logger		25
+core/retry_policy.py	const	_RETRIABLE_PATTERNS		33
+core/retry_policy.py	const	_PERMANENT_PATTERNS		48
+core/retry_policy.py	func	is_retriable		60
+core/retry_policy.py	class	RetryPolicy		81
+core/retry_policy.py	method	delay_for_attempt	RetryPolicy	97
+core/retry_policy.py	const	DEFAULT_POLICY		104
+core/retry_policy.py	func	retry_download		107
+core/scraper.py	from	playwright.sync_api.sync_playwright		7
+core/scraper.py	from	playwright.sync_api.Page		7
+core/scraper.py	from	typing.Callable		8
+core/scraper.py	from	typing.Optional		8
+core/scraper.py	from	typing.Dict		8
+core/scraper.py	from	typing.List		8
+core/scraper.py	from	typing.Tuple		8
+core/scraper.py	import	logging		9
+core/scraper.py	import	re		10
+core/scraper.py	import	yt_dlp		11
+core/scraper.py	from	utils.yt_dlp_opts.build_parse_ydl_opts		12
+core/scraper.py	from	utils.logger.SilentLogger		13
+core/scraper.py	const	logger		14
+core/scraper.py	const	_USER_AGENT		17
+core/scraper.py	func	_block_heavy_resources		18
+core/scraper.py	func	_ensure_high_res_spotify_image		33
+core/scraper.py	func	_scrape_standard_ydl		44
+core/scraper.py	func	_scrape_spotify_grid_on_page		84
+core/scraper.py	func	scrape_spotify_playlist		184
+core/scraper.py	func	scrape_spotify_album		193
+core/scraper.py	func	scrape_spotify_track		202
+core/scraper.py	func	scrape_spotify_artist		238
+core/scraper.py	func	scrape_ytm_playlist		403
+core/scraper.py	func	scrape_ytm_album		443
+core/scraper.py	func	scrape_ytm_track		448
+core/scraper.py	func	scrape_ytm_artist		481
+core/scraper.py	func	scrape_youtube_playlist		559
+core/scraper.py	func	scrape_youtube_track		562
+core/scraper.py	func	scrape_youtube_channel		565
+core/scraper.py	func	_scraper_best_thumbnail		603
+core/search_engine.py	from	__future__.annotations		42
+core/search_engine.py	import	re		44
+core/search_engine.py	import	threading		45
+core/search_engine.py	import	urllib.parse		46
+core/search_engine.py	from	dataclasses.dataclass		47
+core/search_engine.py	from	dataclasses.field		47
+core/search_engine.py	from	enum.Enum		48
+core/search_engine.py	from	typing.Callable		49
+core/search_engine.py	from	typing.Optional		49
+core/search_engine.py	import	httpx		51
+core/search_engine.py	import	yt_dlp		52
+core/search_engine.py	from	bs4.BeautifulSoup		53
+core/search_engine.py	from	ytmusicapi.YTMusic		54
+core/search_engine.py	from	core.playlist_parser.SourcePlatform		56
+core/search_engine.py	from	core.playlist_parser.classify_url		56
+core/search_engine.py	from	core.playlist_parser._best_thumbnail		56
+core/search_engine.py	from	utils.logger.SilentLogger		57
+core/search_engine.py	from	utils.time_format.seconds_to_str		58
+core/search_engine.py	from	utils.yt_dlp_opts.build_search_ydl_opts		59
+core/search_engine.py	from	utils.artwork_cleaner.clean_artwork_url		60
+core/search_engine.py	class	ResultKind		67
+core/search_engine.py	classvar	TRACK	ResultKind	69
+core/search_engine.py	classvar	ALBUM	ResultKind	70
+core/search_engine.py	classvar	PLAYLIST	ResultKind	71
+core/search_engine.py	classvar	ARTIST	ResultKind	72
+core/search_engine.py	classvar	CHANNEL	ResultKind	73
+core/search_engine.py	class	SearchResult		77
+core/search_engine.py	class	SearchError		101
+core/search_engine.py	class	ScraperError		105
+core/search_engine.py	func	_seconds_to_duration		113
+core/search_engine.py	func	_pick_thumbnail		117
+core/search_engine.py	func	_ytdlp_entry_to_result		129
+core/search_engine.py	class	_YTMusicBackend		200
+core/search_engine.py	classvar	_DURATION_RE	_YTMusicBackend	209
+core/search_engine.py	method	__init__	_YTMusicBackend	211
+core/search_engine.py	method	_parse_duration	_YTMusicBackend	217
+core/search_engine.py	method	_ytm_song_url	_YTMusicBackend	230
+core/search_engine.py	method	_ytm_album_url	_YTMusicBackend	234
+core/search_engine.py	method	_ytm_artist_url	_YTMusicBackend	238
+core/search_engine.py	method	_ytm_playlist_url	_YTMusicBackend	242
+core/search_engine.py	method	search_songs	_YTMusicBackend	259
+core/search_engine.py	method	search_albums	_YTMusicBackend	304
+core/search_engine.py	method	search_artists	_YTMusicBackend	344
+core/search_engine.py	method	search_playlists	_YTMusicBackend	379
+core/search_engine.py	method	search_all	_YTMusicBackend	434
+core/search_engine.py	class	_YTDLPBackend		500
+core/search_engine.py	method	__init__	_YTDLPBackend	506
+core/search_engine.py	method	_opts	_YTDLPBackend	509
+core/search_engine.py	method	search_videos	_YTDLPBackend	516
+core/search_engine.py	method	search_playlists	_YTDLPBackend	566
+core/search_engine.py	method	search_channels	_YTDLPBackend	652
+core/search_engine.py	class	SearchEngine		701
+core/search_engine.py	method	__init__	SearchEngine	716
+core/search_engine.py	method	cancel	SearchEngine	723
+core/search_engine.py	method	reset	SearchEngine	727
+core/search_engine.py	method	search_youtube_music	SearchEngine	733
+core/search_engine.py	method	search_ytm_songs	SearchEngine	760
+core/search_engine.py	method	search_youtube	SearchEngine	778
+core/search_engine.py	method	search_youtube_categorized	SearchEngine	799
+core/search_engine.py	method	search_spotify	SearchEngine	861
+core/search_engine.py	const	_INLINE_URL_PATTERNS		1005
+core/search_engine.py	class	PageScraper		1015
+core/search_engine.py	method	__init__	PageScraper	1027
+core/search_engine.py	method	cancel	PageScraper	1031
+core/search_engine.py	method	reset	PageScraper	1034
+core/search_engine.py	method	scrape	PageScraper	1037
+core/services.py	from	__future__.annotations		31
+core/services.py	import	logging		33
+core/services.py	from	dataclasses.dataclass		34
+core/services.py	from	dataclasses.field		34
+core/services.py	from	typing.Optional		35
+core/services.py	from	config.AppConfig		37
+core/services.py	from	core.history_db.HistoryDB		38
+core/services.py	from	core.downloader.DownloadEngine		39
+core/services.py	const	logger		41
+core/services.py	class	ServiceContainer		45
+core/services.py	method	create_default	ServiceContainer	60
+core/services.py	method	close	ServiceContainer	80
+core/spotify_match_scorer.py	from	__future__.annotations		37
+core/spotify_match_scorer.py	import	logging		39
+core/spotify_match_scorer.py	import	re		40
+core/spotify_match_scorer.py	from	dataclasses.dataclass		41
+core/spotify_match_scorer.py	from	difflib.SequenceMatcher		42
+core/spotify_match_scorer.py	from	typing.Optional		43
+core/spotify_match_scorer.py	const	logger		45
+core/spotify_match_scorer.py	class	MatchResult		53
+core/spotify_match_scorer.py	const	_STRIP_PATTERNS		69
+core/spotify_match_scorer.py	const	_BRANDED_CHANNEL_RE		84
+core/spotify_match_scorer.py	const	_TOPIC_RE		85
+core/spotify_match_scorer.py	const	_OFFICIAL_RE		86
+core/spotify_match_scorer.py	func	_normalize		89
+core/spotify_match_scorer.py	func	_title_score		101
+core/spotify_match_scorer.py	func	_duration_score		111
+core/spotify_match_scorer.py	func	_artist_score		131
+core/spotify_match_scorer.py	func	_channel_score		167
+core/spotify_match_scorer.py	func	score_candidate		186
+core/spotify_match_scorer.py	func	find_best_youtube_match		229
+core/thumbnail_cropper.py	from	__future__.annotations		16
+core/thumbnail_cropper.py	import	io		18
+core/thumbnail_cropper.py	import	logging		19
+core/thumbnail_cropper.py	import	urllib.error		20
+core/thumbnail_cropper.py	import	urllib.request		21
+core/thumbnail_cropper.py	from	pathlib.Path		22
+core/thumbnail_cropper.py	from	typing.Optional		23
+core/thumbnail_cropper.py	const	logger		32
+core/thumbnail_cropper.py	func	crop_embedded_thumbnail		35
+core/thumbnail_cropper.py	func	embed_custom_thumbnail		63
+core/thumbnail_cropper.py	const	_YTIMG_FALLBACKS		86
+core/thumbnail_cropper.py	func	_ytimg_fallback_urls		95
+core/thumbnail_cropper.py	func	_fetch_image		106
+core/thumbnail_cropper.py	func	_to_jpeg		143
+core/thumbnail_cropper.py	func	_embed_cover		186
+core/thumbnail_cropper.py	func	crop_to_square		200
+core/thumbnail_cropper.py	func	_retry_access		205
+core/thumbnail_cropper.py	func	_inject_mp3_cover		224
+core/thumbnail_cropper.py	func	_inject_flac_cover		241
+core/thumbnail_cropper.py	func	_inject_m4a_cover		258
+core/thumbnail_cropper.py	func	_crop_mp3		271
+core/thumbnail_cropper.py	func	_crop_flac		289
+core/thumbnail_cropper.py	func	_crop_m4a		303
+core/universal_extractor.py	from	__future__.annotations		12
+core/universal_extractor.py	import	asyncio		14
+core/universal_extractor.py	import	logging		15
+core/universal_extractor.py	import	re		16
+core/universal_extractor.py	from	dataclasses.dataclass		17
+core/universal_extractor.py	from	dataclasses.field		17
+core/universal_extractor.py	from	typing.Literal		18
+core/universal_extractor.py	from	urllib.parse.urlparse		19
+core/universal_extractor.py	const	logger		21
+core/universal_extractor.py	const	_HLS_RE		24
+core/universal_extractor.py	const	_DASH_RE		25
+core/universal_extractor.py	const	_MEDIA_RE		26
+core/universal_extractor.py	const	_MEDIA_CONTENT_TYPES		29
+core/universal_extractor.py	class	InterceptedStream		42
+core/universal_extractor.py	func	_classify_url		50
+core/universal_extractor.py	func	_classify_content_type		64
+core/universal_extractor.py	func	_url_base		77
+core/universal_extractor.py	func	intercept_page		83
+core/universal_extractor.py	func	find_streams		182
+core/universal_extractor.py	func	find_best_stream_with_title		198
+core/universal_extractor.py	func	scrape_generic_video_listing		230
+core/update_checker.py	from	__future__.annotations		38
+core/update_checker.py	import	re		40
+core/update_checker.py	from	dataclasses.dataclass		41
+core/update_checker.py	from	typing.Optional		42
+core/update_checker.py	import	httpx		44
+core/update_checker.py	const	CURRENT_VERSION		51
+core/update_checker.py	class	ReleaseInfo		59
+core/update_checker.py	method	short_notes	ReleaseInfo	78
+core/update_checker.py	method	display_version	ReleaseInfo	92
+core/update_checker.py	func	_parse_semver		101
+core/update_checker.py	func	_is_newer		124
+core/update_checker.py	class	UpdateChecker		143
+core/update_checker.py	classvar	_API_BASE	UpdateChecker	164
+core/update_checker.py	classvar	_USER_AGENT	UpdateChecker	165
+core/update_checker.py	method	__init__	UpdateChecker	167
+core/update_checker.py	method	check	UpdateChecker	179
+core/update_checker.py	method	current_version	UpdateChecker	202
+core/update_checker.py	method	_check_internal	UpdateChecker	208
+core/update_checker.py	method	_fetch_latest_release	UpdateChecker	260
+core/update_checker.py	method	_fetch_all_releases	UpdateChecker	274
+core/update_checker.py	method	_get_json	UpdateChecker	290
+error_handler.py	from	__future__.annotations		23
+error_handler.py	import	re		25
+error_handler.py	import	socket		26
+error_handler.py	from	typing.Optional		27
+error_handler.py	from	enum.Enum		29
+error_handler.py	from	enum.auto		29
+error_handler.py	from	dataclasses.dataclass		30
+error_handler.py	from	core.retry_policy.is_retriable		31
+error_handler.py	class	ErrorSeverity		38
+error_handler.py	classvar	WARNING	ErrorSeverity	39
+error_handler.py	classvar	ERROR	ErrorSeverity	40
+error_handler.py	classvar	CRITICAL	ErrorSeverity	41
+error_handler.py	class	ErrorInfo		45
+error_handler.py	method	is_fatal	ErrorInfo	53
+error_handler.py	method	status_line	ErrorInfo	56
+error_handler.py	const	_PROBE_TARGETS		70
+error_handler.py	func	probe_connectivity		77
+error_handler.py	func	check_ffmpeg		97
+error_handler.py	const	_YTDLP_PATTERNS		112
+error_handler.py	func	classify_error		213
+error_handler.py	func	_match_patterns		282
+error_handler.py	class	PreflightResult		313
+error_handler.py	method	all_ok	PreflightResult	318
+error_handler.py	method	warning_text	PreflightResult	321
+error_handler.py	func	run_preflight		325
+main.py	from	__future__.annotations		15
+main.py	import	sys		17
+main.py	import	os		18
+main.py	import	logging		19
+main.py	from	utils.logging_config.setup_logging		22
+main.py	const	_debug_mode		24
+main.py	const	logger		27
+main.py	func	main		30
+tests/test_core.py	from	__future__.annotations		13
+tests/test_core.py	import	json		15
+tests/test_core.py	import	os		16
+tests/test_core.py	import	tempfile		17
+tests/test_core.py	from	pathlib.Path		18
+tests/test_core.py	import	pytest		20
+tests/test_core.py	class	TestAppConfig		27
+tests/test_core.py	method	_make_config	TestAppConfig	30
+tests/test_core.py	method	test_defaults_applied	TestAppConfig	39
+tests/test_core.py	method	test_save_and_reload	TestAppConfig	45
+tests/test_core.py	method	test_unknown_keys_preserved	TestAppConfig	57
+tests/test_core.py	method	test_corrupt_json_falls_back_to_defaults	TestAppConfig	69
+tests/test_core.py	method	test_atomic_write_no_partial	TestAppConfig	76
+tests/test_core.py	method	test_context_manager_saves	TestAppConfig	83
+tests/test_core.py	class	TestHistoryDB		95
+tests/test_core.py	method	db	TestHistoryDB	99
+tests/test_core.py	method	sample_record	TestHistoryDB	104
+tests/test_core.py	method	test_insert_and_fetch	TestHistoryDB	115
+tests/test_core.py	method	test_count	TestHistoryDB	123
+tests/test_core.py	method	test_delete	TestHistoryDB	128
+tests/test_core.py	method	test_delete_nonexistent_silent	TestHistoryDB	133
+tests/test_core.py	method	test_clear_all	TestHistoryDB	136
+tests/test_core.py	method	test_fts_search	TestHistoryDB	143
+tests/test_core.py	method	test_fts_search_no_match	TestHistoryDB	149
+tests/test_core.py	method	test_export_csv	TestHistoryDB	154
+tests/test_core.py	method	test_downloaded_at_auto_filled	TestHistoryDB	163
+tests/test_core.py	class	TestClassifyUrl		174
+tests/test_core.py	method	_import	TestClassifyUrl	178
+tests/test_core.py	method	test_classify	TestClassifyUrl	203
+tests/test_core.py	class	TestErrorHandler		213
+tests/test_core.py	method	_import	TestErrorHandler	216
+tests/test_core.py	method	test_permission_error	TestErrorHandler	221
+tests/test_core.py	method	test_os_error	TestErrorHandler	226
+tests/test_core.py	method	test_generic_exception_fallback	TestErrorHandler	230
+tests/test_core.py	method	test_sign_in_pattern	TestErrorHandler	235
+tests/test_core.py	method	test_private_video_pattern	TestErrorHandler	239
+tests/test_core.py	method	test_rate_limit_pattern	TestErrorHandler	243
+tests/test_core.py	method	test_geo_block_pattern	TestErrorHandler	247
+tests/test_core.py	method	test_error_info_status_line	TestErrorHandler	251
+tests/test_core.py	method	test_error_info_is_fatal	TestErrorHandler	256
+tests/test_core.py	class	TestBatchImporter		266
+tests/test_core.py	method	_import	TestBatchImporter	269
+tests/test_core.py	method	test_from_raw_text_extracts_urls	TestBatchImporter	273
+tests/test_core.py	method	test_from_raw_text_empty	TestBatchImporter	282
+tests/test_core.py	method	test_from_raw_text_deduplicates	TestBatchImporter	286
+tests/test_core.py	method	test_from_clipboard_text	TestBatchImporter	294
+tests/test_core.py	method	test_from_clipboard_text_empty	TestBatchImporter	300
+tests/test_core.py	method	test_from_text_file_not_found	TestBatchImporter	303
+tests/test_core.py	method	test_from_text_file_with_comments	TestBatchImporter	307
+tests/test_core.py	class	TestMetadataProcessor		320
+tests/test_core.py	method	test_scan_folders_includes_empty_nested_dirs	TestMetadataProcessor	322
+tests/test_core.py	method	test_build_scan_result_keeps_empty_folders	TestMetadataProcessor	334
+tests/test_core.py	class	TestDuplicateChecker		351
+tests/test_core.py	method	test_expected_stem_basic	TestDuplicateChecker	353
+tests/test_core.py	method	test_expected_stem_with_index	TestDuplicateChecker	357
+tests/test_core.py	method	test_expected_stem_no_index	TestDuplicateChecker	361
+tests/test_core.py	method	test_find_duplicate_no_dir	TestDuplicateChecker	365
+tests/test_core.py	method	test_find_duplicate_match	TestDuplicateChecker	373
+tests/test_core.py	method	test_find_duplicate_no_match	TestDuplicateChecker	381
+tests/test_core.py	class	TestPlaylistSync		392
+tests/test_core.py	method	test_extract_video_id_watch	TestPlaylistSync	394
+tests/test_core.py	method	test_extract_video_id_short	TestPlaylistSync	398
+tests/test_core.py	method	test_extract_video_id_none	TestPlaylistSync	402
+tests/test_core.py	method	test_extract_video_id_embed	TestPlaylistSync	406
+tests/test_core.py	class	TestProbeConnectivity		415
+tests/test_core.py	method	test_probe_returns_bool	TestProbeConnectivity	417
+tests/test_core.py	method	test_check_ffmpeg_returns_bool	TestProbeConnectivity	422
+tests/test_history_db_resilience.py	from	__future__.annotations		8
+tests/test_history_db_resilience.py	from	pathlib.Path		10
+tests/test_history_db_resilience.py	import	pytest		12
+tests/test_history_db_resilience.py	class	TestHistoryDBResilience		15
+tests/test_history_db_resilience.py	method	test_healthy_db_passes_check	TestHistoryDBResilience	18
+tests/test_history_db_resilience.py	method	test_corrupt_db_detected_and_recovered	TestHistoryDBResilience	26
+tests/test_history_db_resilience.py	method	test_memory_db_skips_integrity_check	TestHistoryDBResilience	61
+tests/test_orchestrator.py	from	__future__.annotations		11
+tests/test_orchestrator.py	import	threading		13
+tests/test_orchestrator.py	from	unittest.mock.MagicMock		14
+tests/test_orchestrator.py	import	pytest		16
+tests/test_orchestrator.py	from	core.downloader.DownloadEngine		18
+tests/test_orchestrator.py	from	core.downloader.DownloadProgress		18
+tests/test_orchestrator.py	from	core.downloader.DownloadRequest		18
+tests/test_orchestrator.py	from	core.downloader.DownloadStatus		18
+tests/test_orchestrator.py	from	core.downloader.MediaType		18
+tests/test_orchestrator.py	from	error_handler.ErrorInfo		25
+tests/test_orchestrator.py	class	FakeEngine		28
+tests/test_orchestrator.py	method	__init__	FakeEngine	31
+tests/test_orchestrator.py	method	cancel_all	FakeEngine	36
+tests/test_orchestrator.py	method	download	FakeEngine	39
+tests/test_orchestrator.py	class	FakeCallbacks		61
+tests/test_orchestrator.py	method	__init__	FakeCallbacks	64
+tests/test_orchestrator.py	method	on_track_progress	FakeCallbacks	72
+tests/test_orchestrator.py	method	on_track_status	FakeCallbacks	73
+tests/test_orchestrator.py	method	on_track_finished	FakeCallbacks	75
+tests/test_orchestrator.py	method	on_track_error	FakeCallbacks	77
+tests/test_orchestrator.py	method	on_overall_progress	FakeCallbacks	79
+tests/test_orchestrator.py	method	on_metrics	FakeCallbacks	81
+tests/test_orchestrator.py	method	on_status_message	FakeCallbacks	82
+tests/test_orchestrator.py	method	on_batch_finished	FakeCallbacks	84
+tests/test_orchestrator.py	func	_make_job		88
+tests/test_orchestrator.py	class	TestDownloadOrchestrator		97
+tests/test_orchestrator.py	method	test_successful_batch	TestDownloadOrchestrator	99
+tests/test_orchestrator.py	method	test_partial_failure	TestDownloadOrchestrator	116
+tests/test_orchestrator.py	method	test_cancel_before_start	TestDownloadOrchestrator	130
+tests/test_orchestrator.py	method	test_cancel_track_individually	TestDownloadOrchestrator	147
+tests/test_orchestrator.py	method	test_empty_batch	TestDownloadOrchestrator	169
+tests/test_p0_gates.py	from	__future__.annotations		23
+tests/test_p0_gates.py	import	dataclasses		25
+tests/test_p0_gates.py	import	threading		26
+tests/test_p0_gates.py	from	typing.Optional		27
+tests/test_p0_gates.py	from	unittest.mock.MagicMock		28
+tests/test_p0_gates.py	from	unittest.mock.patch		28
+tests/test_p0_gates.py	import	pytest		30
+tests/test_p0_gates.py	class	TestTrackMetaFields		37
+tests/test_p0_gates.py	method	test_no_duplicate_fields	TestTrackMetaFields	40
+tests/test_p0_gates.py	method	test_release_type_exists_once	TestTrackMetaFields	48
+tests/test_p0_gates.py	method	test_album_index_exists_once	TestTrackMetaFields	53
+tests/test_p0_gates.py	method	test_selected_field_present	TestTrackMetaFields	58
+tests/test_p0_gates.py	method	test_default_selected_is_true	TestTrackMetaFields	64
+tests/test_p0_gates.py	method	test_duration_str_auto_filled	TestTrackMetaFields	69
+tests/test_p0_gates.py	class	TestPlaylistParserErrorPropagation		79
+tests/test_p0_gates.py	method	_make_parser	TestPlaylistParserErrorPropagation	88
+tests/test_p0_gates.py	method	test_download_error_stored_not_raised	TestPlaylistParserErrorPropagation	92
+tests/test_p0_gates.py	method	test_none_info_stored_not_raised	TestPlaylistParserErrorPropagation	112
+tests/test_p0_gates.py	method	test_generic_exception_stored_not_raised	TestPlaylistParserErrorPropagation	127
+tests/test_p0_gates.py	method	test_parse_result_success_method_reflects_error	TestPlaylistParserErrorPropagation	142
+tests/test_p0_gates.py	method	test_cookies_file_forwarded_to_build_opts	TestPlaylistParserErrorPropagation	154
+tests/test_p0_gates.py	class	TestSpotifyResolverNoProxy		190
+tests/test_p0_gates.py	method	test_raises_runtime_error_without_proxy	TestSpotifyResolverNoProxy	194
+tests/test_p0_gates.py	method	test_error_message_is_actionable	TestSpotifyResolverNoProxy	205
+tests/test_p0_gates.py	class	TestDownloadProgressWarningField		221
+tests/test_p0_gates.py	method	test_warning_message_field_exists	TestDownloadProgressWarningField	224
+tests/test_p0_gates.py	method	test_warning_message_default_empty	TestDownloadProgressWarningField	229
+tests/test_p0_gates.py	method	test_warning_message_can_be_set	TestDownloadProgressWarningField	234
+tests/test_p0_gates.py	class	TestDownloadRequestFinalOutputPath		244
+tests/test_p0_gates.py	method	test_field_is_declared	TestDownloadRequestFinalOutputPath	247
+tests/test_p0_gates.py	method	test_field_default_empty_string	TestDownloadRequestFinalOutputPath	254
+tests/test_p0_gates.py	class	TestSanitizeFolderName		264
+tests/test_p0_gates.py	method	_sanitize	TestSanitizeFolderName	267
+tests/test_p0_gates.py	method	test_no_double_dots	TestSanitizeFolderName	271
+tests/test_p0_gates.py	method	test_no_backslash	TestSanitizeFolderName	275
+tests/test_p0_gates.py	method	test_no_reserved_chars	TestSanitizeFolderName	279
+tests/test_p0_gates.py	method	test_normal_name_preserved	TestSanitizeFolderName	284
+tests/test_p0_gates.py	class	TestSpotifyResolverTokenLock		293
+tests/test_p0_gates.py	method	test_token_lock_exists	TestSpotifyResolverTokenLock	296
+tests/test_p0_gates.py	method	test_token_lock_is_lock	TestSpotifyResolverTokenLock	302
+tests/test_p0_gates.py	class	TestClassifyUrlGeneric		313
+tests/test_p0_gates.py	method	_classify	TestClassifyUrlGeneric	316
+tests/test_p0_gates.py	method	test_example_com_is_generic	TestClassifyUrlGeneric	320
+tests/test_p0_gates.py	method	test_non_http_is_unknown	TestClassifyUrlGeneric	325
+tests/test_p0_gates.py	method	test_plain_text_is_unknown	TestClassifyUrlGeneric	330
+tests/test_p0_gates.py	class	TestOrchestratorRetryIntegration		340
+tests/test_p0_gates.py	method	test_retriable_error_is_retried	TestOrchestratorRetryIntegration	350
+tests/test_p0_gates.py	method	test_non_retriable_error_not_retried	TestOrchestratorRetryIntegration	413
+tests/test_parallel_enricher.py	from	__future__.annotations		6
+tests/test_parallel_enricher.py	import	threading		8
+tests/test_parallel_enricher.py	import	time		9
+tests/test_parallel_enricher.py	import	pytest		11
+tests/test_parallel_enricher.py	from	core.parallel_enricher.EnrichResult		13
+tests/test_parallel_enricher.py	from	core.parallel_enricher.enrich_parallel		13
+tests/test_parallel_enricher.py	class	TestEnrichParallel		16
+tests/test_parallel_enricher.py	method	test_all_succeed	TestEnrichParallel	18
+tests/test_parallel_enricher.py	method	test_partial_failure	TestEnrichParallel	29
+tests/test_parallel_enricher.py	method	test_on_item_called	TestEnrichParallel	49
+tests/test_parallel_enricher.py	method	test_on_progress_called	TestEnrichParallel	60
+tests/test_parallel_enricher.py	method	test_cancel_stops_early	TestEnrichParallel	71
+tests/test_parallel_enricher.py	method	test_empty_input	TestEnrichParallel	93
+tests/test_parallel_enricher.py	method	test_preserves_order	TestEnrichParallel	102
+tests/test_progress_estimator.py	from	__future__.annotations		6
+tests/test_progress_estimator.py	import	time		8
+tests/test_progress_estimator.py	from	unittest.mock.patch		9
+tests/test_progress_estimator.py	import	pytest		11
+tests/test_progress_estimator.py	from	core.progress_estimator.BatchEstimator		13
+tests/test_progress_estimator.py	from	core.progress_estimator.ProgressEstimator		13
+tests/test_progress_estimator.py	from	core.progress_estimator.format_eta		13
+tests/test_progress_estimator.py	from	core.progress_estimator.format_speed		13
+tests/test_progress_estimator.py	class	TestFormatSpeed		21
+tests/test_progress_estimator.py	method	test_zero	TestFormatSpeed	22
+tests/test_progress_estimator.py	method	test_kilobytes	TestFormatSpeed	25
+tests/test_progress_estimator.py	method	test_megabytes	TestFormatSpeed	28
+tests/test_progress_estimator.py	class	TestFormatEta		32
+tests/test_progress_estimator.py	method	test_none	TestFormatEta	33
+tests/test_progress_estimator.py	method	test_seconds	TestFormatEta	36
+tests/test_progress_estimator.py	method	test_minutes	TestFormatEta	39
+tests/test_progress_estimator.py	method	test_hours	TestFormatEta	42
+tests/test_progress_estimator.py	class	TestProgressEstimator		46
+tests/test_progress_estimator.py	method	test_initial_state	TestProgressEstimator	48
+tests/test_progress_estimator.py	method	test_speed_after_updates	TestProgressEstimator	54
+tests/test_progress_estimator.py	method	test_window_eviction	TestProgressEstimator	66
+tests/test_progress_estimator.py	method	test_reset	TestProgressEstimator	82
+tests/test_progress_estimator.py	method	test_eta_zero_when_done	TestProgressEstimator	89
+tests/test_progress_estimator.py	class	TestBatchEstimator		99
+tests/test_progress_estimator.py	method	test_aggregate_speed	TestBatchEstimator	101
+tests/test_progress_estimator.py	method	test_completed_excluded_from_speed	TestBatchEstimator	114
+tests/test_progress_estimator.py	method	test_fraction	TestBatchEstimator	128
+tests/test_progress_estimator.py	method	test_reset	TestBatchEstimator	134
+tests/test_queue_persistence.py	from	__future__.annotations		6
+tests/test_queue_persistence.py	import	json		8
+tests/test_queue_persistence.py	from	pathlib.Path		9
+tests/test_queue_persistence.py	from	unittest.mock.MagicMock		10
+tests/test_queue_persistence.py	import	pytest		12
+tests/test_queue_persistence.py	from	core.queue_persistence.QueueItem		14
+tests/test_queue_persistence.py	from	core.queue_persistence.QueueStateManager		14
+tests/test_queue_persistence.py	class	FakeConfig		17
+tests/test_queue_persistence.py	method	__init__	FakeConfig	20
+tests/test_queue_persistence.py	method	save	FakeConfig	24
+tests/test_queue_persistence.py	class	TestQueueItem		28
+tests/test_queue_persistence.py	method	test_round_trip	TestQueueItem	30
+tests/test_queue_persistence.py	method	test_from_dict_ignores_unknown_keys	TestQueueItem	37
+tests/test_queue_persistence.py	class	TestQueueStateManager		43
+tests/test_queue_persistence.py	method	mgr	TestQueueStateManager	46
+tests/test_queue_persistence.py	method	test_set_batch_and_save	TestQueueStateManager	50
+tests/test_queue_persistence.py	method	test_mark_completed_reduces_pending	TestQueueStateManager	62
+tests/test_queue_persistence.py	method	test_save_excludes_completed	TestQueueStateManager	73
+tests/test_queue_persistence.py	method	test_clear_empties_everything	TestQueueStateManager	88
+tests/test_queue_persistence.py	method	test_load_pending	TestQueueStateManager	97
+tests/test_queue_persistence.py	method	test_load_pending_empty	TestQueueStateManager	107
+tests/test_queue_persistence.py	method	test_load_pending_skips_corrupt	TestQueueStateManager	112
+tests/test_queue_persistence.py	method	test_mark_failed_keeps_in_pending	TestQueueStateManager	121
+tests/test_retry_policy.py	from	__future__.annotations		6
+tests/test_retry_policy.py	import	threading		8
+tests/test_retry_policy.py	import	pytest		10
+tests/test_retry_policy.py	from	core.retry_policy.RetryPolicy		12
+tests/test_retry_policy.py	from	core.retry_policy.is_retriable		12
+tests/test_retry_policy.py	from	core.retry_policy.retry_download		12
+tests/test_retry_policy.py	class	TestIsRetriable		19
+tests/test_retry_policy.py	method	test_rate_limit	TestIsRetriable	21
+tests/test_retry_policy.py	method	test_timeout	TestIsRetriable	24
+tests/test_retry_policy.py	method	test_503	TestIsRetriable	27
+tests/test_retry_policy.py	method	test_connection_reset	TestIsRetriable	30
+tests/test_retry_policy.py	method	test_private_video_not_retriable	TestIsRetriable	33
+tests/test_retry_policy.py	method	test_geo_block_not_retriable	TestIsRetriable	36
+tests/test_retry_policy.py	method	test_sign_in_not_retriable	TestIsRetriable	39
+tests/test_retry_policy.py	method	test_generic_error_not_retriable	TestIsRetriable	42
+tests/test_retry_policy.py	method	test_permanent_takes_priority	TestIsRetriable	45
+tests/test_retry_policy.py	class	TestRetryPolicy		50
+tests/test_retry_policy.py	method	test_delay_exponential	TestRetryPolicy	52
+tests/test_retry_policy.py	method	test_delay_capped	TestRetryPolicy	59
+tests/test_retry_policy.py	class	TestRetryDownload		64
+tests/test_retry_policy.py	method	test_success_no_retry	TestRetryDownload	66
+tests/test_retry_policy.py	method	test_permanent_error_no_retry	TestRetryDownload	74
+tests/test_retry_policy.py	method	test_retriable_error_retries	TestRetryDownload	81
+tests/test_retry_policy.py	method	test_retriable_exhausted	TestRetryDownload	92
+tests/test_retry_policy.py	method	test_cancel_during_backoff	TestRetryDownload	100
+tests/test_spotify_match_scorer.py	from	__future__.annotations		7
+tests/test_spotify_match_scorer.py	import	pytest		9
+tests/test_spotify_match_scorer.py	from	core.spotify_match_scorer.MatchResult		11
+tests/test_spotify_match_scorer.py	from	core.spotify_match_scorer._artist_score		11
+tests/test_spotify_match_scorer.py	from	core.spotify_match_scorer._channel_score		11
+tests/test_spotify_match_scorer.py	from	core.spotify_match_scorer._duration_score		11
+tests/test_spotify_match_scorer.py	from	core.spotify_match_scorer._normalize		11
+tests/test_spotify_match_scorer.py	from	core.spotify_match_scorer._title_score		11
+tests/test_spotify_match_scorer.py	from	core.spotify_match_scorer.score_candidate		11
+tests/test_spotify_match_scorer.py	class	TestNormalize		22
+tests/test_spotify_match_scorer.py	method	test_strips_official_audio	TestNormalize	23
+tests/test_spotify_match_scorer.py	method	test_strips_lyrics	TestNormalize	26
+tests/test_spotify_match_scorer.py	method	test_strips_feat	TestNormalize	29
+tests/test_spotify_match_scorer.py	method	test_collapses_whitespace	TestNormalize	32
+tests/test_spotify_match_scorer.py	class	TestTitleScore		36
+tests/test_spotify_match_scorer.py	method	test_exact_match	TestTitleScore	37
+tests/test_spotify_match_scorer.py	method	test_with_noise	TestTitleScore	41
+tests/test_spotify_match_scorer.py	method	test_totally_different	TestTitleScore	45
+tests/test_spotify_match_scorer.py	class	TestDurationScore		50
+tests/test_spotify_match_scorer.py	method	test_exact_match	TestDurationScore	51
+tests/test_spotify_match_scorer.py	method	test_within_tolerance	TestDurationScore	54
+tests/test_spotify_match_scorer.py	method	test_moderate_diff	TestDurationScore	57
+tests/test_spotify_match_scorer.py	method	test_large_diff	TestDurationScore	61
+tests/test_spotify_match_scorer.py	method	test_unknown_duration	TestDurationScore	64
+tests/test_spotify_match_scorer.py	method	test_both_unknown	TestDurationScore	68
+tests/test_spotify_match_scorer.py	class	TestArtistScore		73
+tests/test_spotify_match_scorer.py	method	test_in_both	TestArtistScore	74
+tests/test_spotify_match_scorer.py	method	test_in_title_only	TestArtistScore	78
+tests/test_spotify_match_scorer.py	method	test_not_present	TestArtistScore	82
+tests/test_spotify_match_scorer.py	method	test_empty_artist	TestArtistScore	86
+tests/test_spotify_match_scorer.py	class	TestChannelScore		90
+tests/test_spotify_match_scorer.py	method	test_branded_channel	TestChannelScore	91
+tests/test_spotify_match_scorer.py	method	test_topic	TestChannelScore	95
+tests/test_spotify_match_scorer.py	method	test_official	TestChannelScore	99
+tests/test_spotify_match_scorer.py	method	test_generic_channel	TestChannelScore	103
+tests/test_spotify_match_scorer.py	class	TestScoreCandidate		108
+tests/test_spotify_match_scorer.py	method	test_perfect_match	TestScoreCandidate	109
+tests/test_spotify_match_scorer.py	method	test_wrong_track	TestScoreCandidate	118
+tests/test_spotify_match_scorer.py	method	test_right_track_wrong_duration	TestScoreCandidate	125
+ui/app_window.py	from	__future__.annotations		17
+ui/app_window.py	import	json		19
+ui/app_window.py	import	logging		20
+ui/app_window.py	from	pathlib.Path		21
+ui/app_window.py	from	typing.Optional		22
+ui/app_window.py	from	PySide6.QtCore.QByteArray		24
+ui/app_window.py	from	PySide6.QtCore.Qt		24
+ui/app_window.py	from	PySide6.QtCore.QTimer		24
+ui/app_window.py	from	PySide6.QtCore.QUrl		24
+ui/app_window.py	from	PySide6.QtGui.QDesktopServices		25
+ui/app_window.py	from	PySide6.QtGui.QIcon		25
+ui/app_window.py	from	PySide6.QtWidgets.QApplication		26
+ui/app_window.py	from	PySide6.QtWidgets.QFrame		26
+ui/app_window.py	from	PySide6.QtWidgets.QSystemTrayIcon		26
+ui/app_window.py	from	PySide6.QtWidgets.QMenu		26
+ui/app_window.py	from	PySide6.QtWidgets.QVBoxLayout		26
+ui/app_window.py	from	PySide6.QtWidgets.QWidget		26
+ui/app_window.py	from	qfluentwidgets.FluentIcon		29
+ui/app_window.py	from	qfluentwidgets.FluentWindow		29
+ui/app_window.py	from	qfluentwidgets.MessageBox		29
+ui/app_window.py	from	qfluentwidgets.NavigationItemPosition		29
+ui/app_window.py	from	qfluentwidgets.setTheme		29
+ui/app_window.py	from	qfluentwidgets.setThemeColor		29
+ui/app_window.py	from	qfluentwidgets.Theme		29
+ui/app_window.py	from	qfluentwidgets.InfoBar		29
+ui/app_window.py	from	qfluentwidgets.InfoBarPosition		29
+ui/app_window.py	from	config.AppConfig		36
+ui/app_window.py	from	core.history_db.DownloadRecord		37
+ui/app_window.py	from	core.history_db.HistoryDB		37
+ui/app_window.py	from	core.services.ServiceContainer		38
+ui/app_window.py	from	core.search_engine.SearchResult		39
+ui/app_window.py	from	core.search_engine.ResultKind		39
+ui/app_window.py	from	core.update_checker.ReleaseInfo		40
+ui/app_window.py	from	ui.workers.offline_monitor.OfflineMonitor		41
+ui/app_window.py	from	core.downloader.AudioQuality		42
+ui/app_window.py	from	core.downloader.DownloadEngine		42
+ui/app_window.py	from	core.downloader.DownloadRequest		42
+ui/app_window.py	from	core.downloader.MediaType		42
+ui/app_window.py	from	core.downloader.VideoQuality		42
+ui/app_window.py	from	core.playlist_parser.ParseResult		43
+ui/app_window.py	from	core.playlist_parser.SourcePlatform		43
+ui/app_window.py	from	core.playlist_parser.UrlKind		43
+ui/app_window.py	from	core.playlist_parser.classify_url		43
+ui/app_window.py	from	error_handler.classify_error		44
+ui/app_window.py	from	error_handler.ErrorInfo		44
+ui/app_window.py	from	error_handler.ErrorSeverity		44
+ui/app_window.py	from	error_handler.probe_connectivity		44
+ui/app_window.py	from	ui.controllers.fetch_controller.FetchController		47
+ui/app_window.py	from	ui.controllers.search_controller.SearchController		48
+ui/app_window.py	from	ui.controllers.download_controller.DownloadController		49
+ui/app_window.py	from	ui.workers.thumbnail_worker.ThumbnailWorker		52
+ui/app_window.py	from	ui.workers.clipboard_worker.ClipboardWorker		53
+ui/app_window.py	from	ui.workers.update_worker.UpdateWorker		54
+ui/app_window.py	from	ui.panels.url_bar.UrlBar		57
+ui/app_window.py	from	ui.panels.search_panel.SearchPanel		58
+ui/app_window.py	from	ui.panels.queue_panel.QueuePanel		59
+ui/app_window.py	from	ui.panels.history_panel.HistoryPanel		60
+ui/app_window.py	from	ui.panels.options_bar.OptionsBar		61
+ui/app_window.py	from	ui.panels.status_bar.StatusBar		62
+ui/app_window.py	from	ui.panels.settings_panel.SettingsPanel		63
+ui/app_window.py	from	ui.panels.converter_panel.ConverterPanel		64
+ui/app_window.py	from	ui.panels.metadata_editor_panel.MetadataEditorPanel		65
+ui/app_window.py	from	ui.controllers.metadata_controller.MetadataController		68
+ui/app_window.py	from	ui.components.track_card.TrackCard		71
+ui/app_window.py	from	ui.components.update_banner.UpdateBanner		72
+ui/app_window.py	from	ui.components.offline_banner.OfflineBanner		73
+ui/app_window.py	from	ui.i18n.t		76
+ui/app_window.py	from	ui.i18n.set_language		76
+ui/app_window.py	from	ui.theme_manager.ThemeManager		77
+ui/app_window.py	from	ui.theme_manager.ACCENT_COLOR		77
+ui/app_window.py	const	logger		79
+ui/app_window.py	const	_A11Y_QSS		83
+ui/app_window.py	class	_DownloadBar		101
+ui/app_window.py	classvar	download_clicked	_DownloadBar	103
+ui/app_window.py	method	__init__	_DownloadBar	105
+ui/app_window.py	method	set_count	_DownloadBar	138
+ui/app_window.py	method	set_downloading	_DownloadBar	149
+ui/app_window.py	class	AppWindow		160
+ui/app_window.py	method	__init__	AppWindow	172
+ui/app_window.py	method	_build_panels	AppWindow	217
+ui/app_window.py	method	_build_controllers	AppWindow	258
+ui/app_window.py	method	_configure_window	AppWindow	273
+ui/app_window.py	method	_register_navigation	AppWindow	282
+ui/app_window.py	method	_connect_signals	AppWindow	328
+ui/app_window.py	method	_connect_metadata_signals	AppWindow	390
+ui/app_window.py	method	_start_background_workers	AppWindow	435
+ui/app_window.py	method	_on_went_offline	AppWindow	459
+ui/app_window.py	method	_on_came_online	AppWindow	463
+ui/app_window.py	method	_setup_tray	AppWindow	471
+ui/app_window.py	method	_tray_open	AppWindow	493
+ui/app_window.py	method	_tray_quit	AppWindow	498
+ui/app_window.py	method	_on_tray_activated	AppWindow	502
+ui/app_window.py	method	_setup_drag_drop	AppWindow	510
+ui/app_window.py	method	_apply_accessibility	AppWindow	547
+ui/app_window.py	method	_register_hotkeys	AppWindow	564
+ui/app_window.py	method	_check_auto_resume	AppWindow	579
+ui/app_window.py	method	_restore_queue_state	AppWindow	594
+ui/app_window.py	method	_save_queue_state	AppWindow	611
+ui/app_window.py	method	_on_download	AppWindow	631
+ui/app_window.py	method	_on_global_pause_resume	AppWindow	641
+ui/app_window.py	method	_on_pause_track	AppWindow	656
+ui/app_window.py	method	_on_resume_track	AppWindow	661
+ui/app_window.py	method	_on_track_finished_ui	AppWindow	668
+ui/app_window.py	method	_on_track_error_ui	AppWindow	678
+ui/app_window.py	method	_run_cookie_wizard_ui	AppWindow	718
+ui/app_window.py	method	_on_browser_lock_warning	AppWindow	793
+ui/app_window.py	method	_on_job_count_changed	AppWindow	808
+ui/app_window.py	method	_on_all_downloads_finished	AppWindow	814
+ui/app_window.py	method	_start_fetch	AppWindow	830
+ui/app_window.py	method	_on_channel_flow_finished	AppWindow	852
+ui/app_window.py	method	_on_fetch_finished	AppWindow	858
+ui/app_window.py	method	_on_fetch_error	AppWindow	875
+ui/app_window.py	method	_on_scrape	AppWindow	880
+ui/app_window.py	method	_on_scrape_done	AppWindow	884
+ui/app_window.py	method	_on_redownload	AppWindow	891
+ui/app_window.py	method	_on_open_folder	AppWindow	896
+ui/app_window.py	method	_on_search	AppWindow	904
+ui/app_window.py	method	_on_search_result_ready	AppWindow	907
+ui/app_window.py	method	_on_add_search_result_to_queue	AppWindow	914
+ui/app_window.py	method	_on_result_to_queue	AppWindow	917
+ui/app_window.py	method	_on_search_drill_down	AppWindow	921
+ui/app_window.py	method	_on_search_error	AppWindow	937
+ui/app_window.py	method	_add_track_to_queue	AppWindow	946
+ui/app_window.py	method	_set_card_thumb	AppWindow	986
+ui/app_window.py	method	_on_track_thumbnail_update	AppWindow	993
+ui/app_window.py	method	_on_selection_changed	AppWindow	1004
+ui/app_window.py	method	_on_card_removed	AppWindow	1008
+ui/app_window.py	method	_on_options_changed	AppWindow	1012
+ui/app_window.py	method	_update_dl_bar	AppWindow	1015
+ui/app_window.py	method	_on_clipboard_url	AppWindow	1024
+ui/app_window.py	method	_on_clipboard_setting_change	AppWindow	1035
+ui/app_window.py	method	_on_update_found	AppWindow	1048
+ui/app_window.py	method	_on_cancel	AppWindow	1056
+ui/app_window.py	method	_on_settings_saved	AppWindow	1067
+ui/app_window.py	method	_restore_state	AppWindow	1089
+ui/app_window.py	method	_save_state	AppWindow	1097
+ui/app_window.py	method	closeEvent	AppWindow	1105
+ui/components/__init__.py	from	ui.components.track_card.TrackCard		18
+ui/components/__init__.py	from	ui.components.search_result_card.SearchResultCard		19
+ui/components/__init__.py	from	ui.components.history_row.HistoryRow		20
+ui/components/__init__.py	from	ui.components.update_banner.UpdateBanner		21
+ui/components/__init__.py	const	__all__		23
+ui/components/browser_window.py	from	__future__.annotations		1
+ui/components/browser_window.py	import	os		3
+ui/components/browser_window.py	from	pathlib.Path		4
+ui/components/browser_window.py	from	tempfile.gettempdir		5
+ui/components/browser_window.py	from	PySide6.QtCore.QUrl		7
+ui/components/browser_window.py	from	PySide6.QtCore.QObject		7
+ui/components/browser_window.py	from	PySide6.QtCore.Signal		7
+ui/components/browser_window.py	from	PySide6.QtCore.Qt		7
+ui/components/browser_window.py	from	PySide6.QtNetwork.QNetworkCookie		8
+ui/components/browser_window.py	from	PySide6.QtWidgets.QVBoxLayout		9
+ui/components/browser_window.py	from	PySide6.QtWidgets.QHBoxLayout		9
+ui/components/browser_window.py	from	PySide6.QtWidgets.QLabel		9
+ui/components/browser_window.py	from	PySide6.QtWebEngineWidgets.QWebEngineView		10
+ui/components/browser_window.py	from	PySide6.QtWebEngineCore.QWebEngineProfile		11
+ui/components/browser_window.py	from	PySide6.QtWebEngineCore.QWebEnginePage		11
+ui/components/browser_window.py	from	qfluentwidgets.MessageBoxBase		13
+ui/components/browser_window.py	from	qfluentwidgets.SubtitleLabel		13
+ui/components/browser_window.py	from	qfluentwidgets.BodyLabel		13
+ui/components/browser_window.py	from	qfluentwidgets.PrimaryPushButton		13
+ui/components/browser_window.py	from	qfluentwidgets.PushButton		13
+ui/components/browser_window.py	from	ui.i18n.t		15
+ui/components/browser_window.py	class	CookieCollector		18
+ui/components/browser_window.py	method	__init__	CookieCollector	21
+ui/components/browser_window.py	method	_on_cookie_added	CookieCollector	33
+ui/components/browser_window.py	method	write_netscape_format	CookieCollector	39
+ui/components/browser_window.py	class	BotBypassWindow		70
+ui/components/browser_window.py	classvar	cookies_extracted	BotBypassWindow	78
+ui/components/browser_window.py	method	__init__	BotBypassWindow	80
+ui/components/browser_window.py	method	_on_save_clicked	BotBypassWindow	131
+ui/components/browser_window.py	method	closeEvent	BotBypassWindow	176
+ui/components/history_row.py	from	__future__.annotations		24
+ui/components/history_row.py	from	PySide6.QtCore.Qt		26
+ui/components/history_row.py	from	PySide6.QtCore.Signal		26
+ui/components/history_row.py	from	PySide6.QtGui.QFont		27
+ui/components/history_row.py	from	PySide6.QtWidgets.QFrame		28
+ui/components/history_row.py	from	PySide6.QtWidgets.QHBoxLayout		28
+ui/components/history_row.py	from	PySide6.QtWidgets.QLabel		28
+ui/components/history_row.py	from	PySide6.QtWidgets.QSizePolicy		28
+ui/components/history_row.py	from	PySide6.QtWidgets.QWidget		28
+ui/components/history_row.py	from	qfluentwidgets.CaptionLabel		32
+ui/components/history_row.py	from	qfluentwidgets.ToolButton		32
+ui/components/history_row.py	from	core.history_db.DownloadRecord		34
+ui/components/history_row.py	from	ui.theme_manager.ACCENT_COLOR		35
+ui/components/history_row.py	const	_BG_NORMAL		42
+ui/components/history_row.py	const	_BG_HOVER		43
+ui/components/history_row.py	const	_BORDER		44
+ui/components/history_row.py	const	_TEXT		45
+ui/components/history_row.py	const	_TEXT_2		46
+ui/components/history_row.py	const	_TEXT_3		47
+ui/components/history_row.py	const	_ERROR		48
+ui/components/history_row.py	const	_RADIUS		49
+ui/components/history_row.py	const	_PLATFORM_COLORS		51
+ui/components/history_row.py	const	_TYPE_COLORS		58
+ui/components/history_row.py	class	HistoryRow		68
+ui/components/history_row.py	classvar	open_folder_requested	HistoryRow	78
+ui/components/history_row.py	classvar	redownload_requested	HistoryRow	79
+ui/components/history_row.py	classvar	delete_requested	HistoryRow	80
+ui/components/history_row.py	method	__init__	HistoryRow	82
+ui/components/history_row.py	method	record	HistoryRow	95
+ui/components/history_row.py	method	record_id	HistoryRow	98
+ui/components/history_row.py	method	_build	HistoryRow	103
+ui/components/history_row.py	method	_action_btn	HistoryRow	200
+ui/components/history_row.py	method	_apply_base_style	HistoryRow	220
+ui/components/history_row.py	method	enterEvent	HistoryRow	229
+ui/components/history_row.py	method	leaveEvent	HistoryRow	239
+ui/components/history_row.py	func	_truncate		248
+ui/components/history_row.py	func	_badge		255
+ui/components/offline_banner.py	from	__future__.annotations		15
+ui/components/offline_banner.py	from	PySide6.QtCore.Qt		17
+ui/components/offline_banner.py	from	PySide6.QtWidgets.QFrame		18
+ui/components/offline_banner.py	from	PySide6.QtWidgets.QHBoxLayout		18
+ui/components/offline_banner.py	from	PySide6.QtWidgets.QLabel		18
+ui/components/offline_banner.py	from	PySide6.QtWidgets.QSizePolicy		18
+ui/components/offline_banner.py	from	PySide6.QtWidgets.QWidget		18
+ui/components/offline_banner.py	from	qfluentwidgets.ToolButton		19
+ui/components/offline_banner.py	class	OfflineBanner		22
+ui/components/offline_banner.py	method	__init__	OfflineBanner	30
+ui/components/offline_banner.py	method	_build	OfflineBanner	35
+ui/components/search_result_card.py	from	__future__.annotations		22
+ui/components/search_result_card.py	from	PySide6.QtCore.Qt		24
+ui/components/search_result_card.py	from	PySide6.QtCore.Signal		24
+ui/components/search_result_card.py	from	PySide6.QtGui.QColor		25
+ui/components/search_result_card.py	from	PySide6.QtGui.QFont		25
+ui/components/search_result_card.py	from	PySide6.QtGui.QPixmap		25
+ui/components/search_result_card.py	from	PySide6.QtWidgets.QFrame		26
+ui/components/search_result_card.py	from	PySide6.QtWidgets.QGraphicsDropShadowEffect		26
+ui/components/search_result_card.py	from	PySide6.QtWidgets.QHBoxLayout		26
+ui/components/search_result_card.py	from	PySide6.QtWidgets.QLabel		26
+ui/components/search_result_card.py	from	PySide6.QtWidgets.QSizePolicy		26
+ui/components/search_result_card.py	from	PySide6.QtWidgets.QVBoxLayout		26
+ui/components/search_result_card.py	from	PySide6.QtWidgets.QWidget		26
+ui/components/search_result_card.py	from	qfluentwidgets.BodyLabel		30
+ui/components/search_result_card.py	from	qfluentwidgets.CaptionLabel		30
+ui/components/search_result_card.py	from	qfluentwidgets.PrimaryPushButton		30
+ui/components/search_result_card.py	from	qfluentwidgets.PushButton		30
+ui/components/search_result_card.py	from	core.search_engine.ResultKind		32
+ui/components/search_result_card.py	from	core.search_engine.SearchResult		32
+ui/components/search_result_card.py	from	ui.i18n.t		33
+ui/components/search_result_card.py	from	ui.theme_manager.ACCENT_COLOR		34
+ui/components/search_result_card.py	from	ui.theme_manager.BG_DARK		34
+ui/components/search_result_card.py	from	ui.theme_manager.SURFACE_DARK		34
+ui/components/search_result_card.py	from	ui.theme_manager.SURFACE2_DARK		34
+ui/components/search_result_card.py	from	ui.theme_manager.BORDER_DARK		34
+ui/components/search_result_card.py	from	ui.theme_manager.TEXT_DARK		34
+ui/components/search_result_card.py	from	ui.theme_manager.TEXT2_DARK		34
+ui/components/search_result_card.py	from	ui.theme_manager.TEXT3_DARK		34
+ui/components/search_result_card.py	const	_BG_NORMAL		45
+ui/components/search_result_card.py	const	_BG_HOVER		46
+ui/components/search_result_card.py	const	_BORDER		47
+ui/components/search_result_card.py	const	_TEXT		48
+ui/components/search_result_card.py	const	_TEXT_2		49
+ui/components/search_result_card.py	const	_TEXT_3		50
+ui/components/search_result_card.py	const	_RADIUS		51
+ui/components/search_result_card.py	const	_THUMB_W		52
+ui/components/search_result_card.py	const	_THUMB_H		53
+ui/components/search_result_card.py	const	_PLATFORM_COLORS		55
+ui/components/search_result_card.py	const	_KIND_ICONS		63
+ui/components/search_result_card.py	func	_placeholder_pixmap		71
+ui/components/search_result_card.py	class	SearchResultCard		82
+ui/components/search_result_card.py	classvar	add_to_queue	SearchResultCard	92
+ui/components/search_result_card.py	classvar	browse_requested	SearchResultCard	93
+ui/components/search_result_card.py	method	__init__	SearchResultCard	95
+ui/components/search_result_card.py	method	result	SearchResultCard	114
+ui/components/search_result_card.py	method	set_thumbnail	SearchResultCard	117
+ui/components/search_result_card.py	method	_build	SearchResultCard	147
+ui/components/search_result_card.py	method	_build_thumb	SearchResultCard	229
+ui/components/search_result_card.py	method	_build_sub_text	SearchResultCard	247
+ui/components/search_result_card.py	method	_apply_base_style	SearchResultCard	296
+ui/components/search_result_card.py	method	enterEvent	SearchResultCard	305
+ui/components/search_result_card.py	method	leaveEvent	SearchResultCard	315
+ui/components/track_card.py	from	__future__.annotations		16
+ui/components/track_card.py	from	typing.Optional		18
+ui/components/track_card.py	from	PySide6.QtCore.QByteArray		20
+ui/components/track_card.py	from	PySide6.QtCore.QMimeData		20
+ui/components/track_card.py	from	PySide6.QtCore.QPoint		20
+ui/components/track_card.py	from	PySide6.QtCore.QSize		20
+ui/components/track_card.py	from	PySide6.QtCore.Qt		20
+ui/components/track_card.py	from	PySide6.QtCore.Signal		20
+ui/components/track_card.py	from	PySide6.QtGui.QColor		21
+ui/components/track_card.py	from	PySide6.QtGui.QDrag		21
+ui/components/track_card.py	from	PySide6.QtGui.QFont		21
+ui/components/track_card.py	from	PySide6.QtGui.QImage		21
+ui/components/track_card.py	from	PySide6.QtGui.QPixmap		21
+ui/components/track_card.py	from	PySide6.QtWidgets.QApplication		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QCheckBox		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QFrame		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QGraphicsDropShadowEffect		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QHBoxLayout		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QLabel		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QProgressBar		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QSizePolicy		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QVBoxLayout		22
+ui/components/track_card.py	from	PySide6.QtWidgets.QWidget		22
+ui/components/track_card.py	from	qfluentwidgets.BodyLabel		26
+ui/components/track_card.py	from	qfluentwidgets.CaptionLabel		26
+ui/components/track_card.py	from	qfluentwidgets.ToolButton		26
+ui/components/track_card.py	from	ui.theme_manager.ACCENT_COLOR		28
+ui/components/track_card.py	from	ui.theme_manager.get_colors		28
+ui/components/track_card.py	from	ui.theme_manager.SUCCESS_COLOR		28
+ui/components/track_card.py	from	ui.theme_manager.ERROR_COLOR		28
+ui/components/track_card.py	from	ui.theme_manager.WARNING_COLOR		28
+ui/components/track_card.py	from	ui.theme_manager.PROCESSING_COLOR		28
+ui/components/track_card.py	const	_SUCCESS		36
+ui/components/track_card.py	const	_ERROR		37
+ui/components/track_card.py	const	_WARNING		38
+ui/components/track_card.py	const	_RADIUS		39
+ui/components/track_card.py	const	_THUMB_W		40
+ui/components/track_card.py	const	_THUMB_H		41
+ui/components/track_card.py	const	_STATUS_COLORS		43
+ui/components/track_card.py	const	_PLATFORM_BADGE_LABELS		53
+ui/components/track_card.py	const	_PLATFORM_COLORS		63
+ui/components/track_card.py	func	_make_placeholder_pixmap		74
+ui/components/track_card.py	class	TrackCard		93
+ui/components/track_card.py	classvar	remove_requested	TrackCard	104
+ui/components/track_card.py	classvar	selection_changed	TrackCard	105
+ui/components/track_card.py	classvar	pause_requested	TrackCard	106
+ui/components/track_card.py	classvar	resume_requested	TrackCard	107
+ui/components/track_card.py	classvar	reorder_requested	TrackCard	108
+ui/components/track_card.py	classvar	status_changed	TrackCard	109
+ui/components/track_card.py	method	__init__	TrackCard	113
+ui/components/track_card.py	method	_build	TrackCard	165
+ui/components/track_card.py	method	_action_btn_style	TrackCard	303
+ui/components/track_card.py	method	_make_badge	TrackCard	317
+ui/components/track_card.py	method	_apply_shadow	TrackCard	338
+ui/components/track_card.py	method	_refresh_style	TrackCard	346
+ui/components/track_card.py	method	_apply_theme	TrackCard	360
+ui/components/track_card.py	method	is_selected	TrackCard	399
+ui/components/track_card.py	method	set_selected	TrackCard	402
+ui/components/track_card.py	method	platform	TrackCard	406
+ui/components/track_card.py	method	get_status	TrackCard	410
+ui/components/track_card.py	method	set_thumbnail	TrackCard	413
+ui/components/track_card.py	method	set_progress	TrackCard	439
+ui/components/track_card.py	method	update_speed	TrackCard	443
+ui/components/track_card.py	method	set_status	TrackCard	460
+ui/components/track_card.py	method	set_artist	TrackCard	486
+ui/components/track_card.py	method	set_title	TrackCard	489
+ui/components/track_card.py	method	update_queue_index	TrackCard	492
+ui/components/track_card.py	method	enterEvent	TrackCard	497
+ui/components/track_card.py	method	leaveEvent	TrackCard	503
+ui/components/track_card.py	method	mousePressEvent	TrackCard	510
+ui/components/track_card.py	method	mouseMoveEvent	TrackCard	515
+ui/components/update_banner.py	from	__future__.annotations		23
+ui/components/update_banner.py	from	PySide6.QtCore.QEasingCurve		25
+ui/components/update_banner.py	from	PySide6.QtCore.QPropertyAnimation		25
+ui/components/update_banner.py	from	PySide6.QtCore.Qt		25
+ui/components/update_banner.py	from	PySide6.QtCore.Signal		25
+ui/components/update_banner.py	from	PySide6.QtCore.QUrl		25
+ui/components/update_banner.py	from	PySide6.QtGui.QDesktopServices		28
+ui/components/update_banner.py	from	PySide6.QtGui.QFont		28
+ui/components/update_banner.py	from	PySide6.QtWidgets.QFrame		29
+ui/components/update_banner.py	from	PySide6.QtWidgets.QHBoxLayout		29
+ui/components/update_banner.py	from	PySide6.QtWidgets.QLabel		29
+ui/components/update_banner.py	from	PySide6.QtWidgets.QSizePolicy		29
+ui/components/update_banner.py	from	PySide6.QtWidgets.QWidget		29
+ui/components/update_banner.py	from	qfluentwidgets.PrimaryPushButton		33
+ui/components/update_banner.py	from	qfluentwidgets.ToolButton		33
+ui/components/update_banner.py	from	core.update_checker.ReleaseInfo		35
+ui/components/update_banner.py	from	ui.i18n.t		36
+ui/components/update_banner.py	from	ui.theme_manager.ACCENT_COLOR		37
+ui/components/update_banner.py	from	ui.theme_manager.ACCENT_COLOR_DIM		37
+ui/components/update_banner.py	const	_BANNER_BG		44
+ui/components/update_banner.py	const	_BANNER_BORDER		45
+ui/components/update_banner.py	const	_TEXT		46
+ui/components/update_banner.py	const	_TEXT_DIM		47
+ui/components/update_banner.py	const	_FULL_HEIGHT		48
+ui/components/update_banner.py	const	_ANIM_MS		49
+ui/components/update_banner.py	class	UpdateBanner		56
+ui/components/update_banner.py	classvar	dismissed	UpdateBanner	72
+ui/components/update_banner.py	method	__init__	UpdateBanner	74
+ui/components/update_banner.py	method	show_release	UpdateBanner	86
+ui/components/update_banner.py	method	dismiss	UpdateBanner	113
+ui/components/update_banner.py	method	_build	UpdateBanner	121
+ui/components/update_banner.py	method	_setup_animation	UpdateBanner	199
+ui/components/update_banner.py	method	_on_collapse_finished	UpdateBanner	211
+ui/components/update_banner.py	method	_open_release_page	UpdateBanner	217
+ui/components/update_banner.py	method	_open_download_link	UpdateBanner	221
+ui/controllers/channel_flow_controller.py	from	__future__.annotations		31
+ui/controllers/channel_flow_controller.py	import	logging		33
+ui/controllers/channel_flow_controller.py	from	typing.Optional		34
+ui/controllers/channel_flow_controller.py	from	PySide6.QtCore.QObject		36
+ui/controllers/channel_flow_controller.py	from	PySide6.QtCore.Signal		36
+ui/controllers/channel_flow_controller.py	from	PySide6.QtWidgets.QWidget		37
+ui/controllers/channel_flow_controller.py	from	config.AppConfig		39
+ui/controllers/channel_flow_controller.py	from	core.duplicate_detector.DuplicateGroup		40
+ui/controllers/channel_flow_controller.py	from	core.duplicate_detector.DuplicateDecision		40
+ui/controllers/channel_flow_controller.py	from	core.duplicate_detector.VideoInfo		40
+ui/controllers/channel_flow_controller.py	from	core.duplicate_detector.detect_duplicates		40
+ui/controllers/channel_flow_controller.py	from	core.duplicate_detector.apply_decisions		40
+ui/controllers/channel_flow_controller.py	const	logger		45
+ui/controllers/channel_flow_controller.py	class	ChannelFlowController		48
+ui/controllers/channel_flow_controller.py	classvar	tracks_ready	ChannelFlowController	58
+ui/controllers/channel_flow_controller.py	classvar	status_update	ChannelFlowController	59
+ui/controllers/channel_flow_controller.py	classvar	finished	ChannelFlowController	60
+ui/controllers/channel_flow_controller.py	classvar	cancelled	ChannelFlowController	61
+ui/controllers/channel_flow_controller.py	method	__init__	ChannelFlowController	63
+ui/controllers/channel_flow_controller.py	method	run	ChannelFlowController	79
+ui/controllers/channel_flow_controller.py	method	_run_conflict_dialog	ChannelFlowController	138
+ui/controllers/channel_flow_controller.py	method	_build_tracks	ChannelFlowController	151
+ui/controllers/channel_flow_controller.py	func	_fmt_duration		219
+ui/controllers/download_controller.py	from	__future__.annotations		18
+ui/controllers/download_controller.py	import	logging		20
+ui/controllers/download_controller.py	import	threading		21
+ui/controllers/download_controller.py	from	pathlib.Path		22
+ui/controllers/download_controller.py	from	typing.Optional		23
+ui/controllers/download_controller.py	from	PySide6.QtCore.QObject		25
+ui/controllers/download_controller.py	from	PySide6.QtCore.Signal		25
+ui/controllers/download_controller.py	from	config.AppConfig		27
+ui/controllers/download_controller.py	from	core.downloader.AudioQuality		28
+ui/controllers/download_controller.py	from	core.downloader.DownloadEngine		28
+ui/controllers/download_controller.py	from	core.downloader.DownloadRequest		28
+ui/controllers/download_controller.py	from	core.downloader.MediaType		28
+ui/controllers/download_controller.py	from	core.downloader.VideoQuality		28
+ui/controllers/download_controller.py	from	core.history_db.HistoryDB		35
+ui/controllers/download_controller.py	from	core.playlist_parser.SourcePlatform		36
+ui/controllers/download_controller.py	from	core.playlist_parser.UrlKind		36
+ui/controllers/download_controller.py	const	logger		38
+ui/controllers/download_controller.py	const	_AUDIO_QUALITY_MAP		43
+ui/controllers/download_controller.py	const	_VIDEO_QUALITY_MAP		49
+ui/controllers/download_controller.py	const	_MULTI_KINDS		58
+ui/controllers/download_controller.py	func	_parse_stream_type		61
+ui/controllers/download_controller.py	class	DownloadController		68
+ui/controllers/download_controller.py	classvar	status_update	DownloadController	86
+ui/controllers/download_controller.py	classvar	metrics_update	DownloadController	87
+ui/controllers/download_controller.py	classvar	overall_progress	DownloadController	88
+ui/controllers/download_controller.py	classvar	cancel_visible	DownloadController	89
+ui/controllers/download_controller.py	classvar	downloading_changed	DownloadController	90
+ui/controllers/download_controller.py	classvar	job_count_changed	DownloadController	91
+ui/controllers/download_controller.py	classvar	show_success_bar	DownloadController	92
+ui/controllers/download_controller.py	classvar	show_error_dialog	DownloadController	93
+ui/controllers/download_controller.py	classvar	batch_finished	DownloadController	94
+ui/controllers/download_controller.py	classvar	batch_started	DownloadController	95
+ui/controllers/download_controller.py	classvar	browser_lock_warning	DownloadController	96
+ui/controllers/download_controller.py	classvar	track_thumbnail	DownloadController	97
+ui/controllers/download_controller.py	method	__init__	DownloadController	99
+ui/controllers/download_controller.py	method	start_batch	DownloadController	126
+ui/controllers/download_controller.py	method	global_pause	DownloadController	361
+ui/controllers/download_controller.py	method	cancel_all	DownloadController	366
+ui/controllers/download_controller.py	method	pause_track	DownloadController	372
+ui/controllers/download_controller.py	method	resume_track	DownloadController	423
+ui/controllers/download_controller.py	method	_on_track_progress	DownloadController	469
+ui/controllers/download_controller.py	method	_on_track_speed	DownloadController	480
+ui/controllers/download_controller.py	method	_on_track_status	DownloadController	485
+ui/controllers/download_controller.py	method	_on_track_finished	DownloadController	490
+ui/controllers/download_controller.py	method	_on_track_error	DownloadController	497
+ui/controllers/download_controller.py	method	_on_track_thumbnail	DownloadController	539
+ui/controllers/download_controller.py	method	_on_batch_done	DownloadController	544
+ui/controllers/download_controller.py	method	_is_process_running	DownloadController	553
+ui/controllers/download_controller.py	method	_active_request_for_key	DownloadController	563
+ui/controllers/download_controller.py	method	_get_dynamic_folder	DownloadController	572
+ui/controllers/fetch_controller.py	from	__future__.annotations		11
+ui/controllers/fetch_controller.py	import	logging		13
+ui/controllers/fetch_controller.py	from	pathlib.Path		14
+ui/controllers/fetch_controller.py	from	typing.Optional		15
+ui/controllers/fetch_controller.py	from	PySide6.QtCore.QObject		17
+ui/controllers/fetch_controller.py	from	PySide6.QtCore.Signal		17
+ui/controllers/fetch_controller.py	from	config.AppConfig		19
+ui/controllers/fetch_controller.py	const	logger		21
+ui/controllers/fetch_controller.py	class	FetchController		24
+ui/controllers/fetch_controller.py	classvar	track_fetched	FetchController	39
+ui/controllers/fetch_controller.py	classvar	fetch_finished	FetchController	40
+ui/controllers/fetch_controller.py	classvar	fetch_error	FetchController	41
+ui/controllers/fetch_controller.py	classvar	scrape_finished	FetchController	42
+ui/controllers/fetch_controller.py	classvar	status_update	FetchController	43
+ui/controllers/fetch_controller.py	classvar	fetching_changed	FetchController	44
+ui/controllers/fetch_controller.py	classvar	cancel_visible	FetchController	45
+ui/controllers/fetch_controller.py	method	__init__	FetchController	47
+ui/controllers/fetch_controller.py	method	fetch	FetchController	55
+ui/controllers/fetch_controller.py	method	cancel	FetchController	83
+ui/controllers/fetch_controller.py	method	scrape	FetchController	92
+ui/controllers/fetch_controller.py	method	batch_import	FetchController	108
+ui/controllers/fetch_controller.py	method	_on_track_meta	FetchController	129
+ui/controllers/fetch_controller.py	method	_on_fetch_finished	FetchController	141
+ui/controllers/fetch_controller.py	method	_on_fetch_error	FetchController	146
+ui/controllers/metadata_controller.py	from	__future__.annotations		10
+ui/controllers/metadata_controller.py	import	logging		12
+ui/controllers/metadata_controller.py	from	datetime.datetime		13
+ui/controllers/metadata_controller.py	from	pathlib.Path		14
+ui/controllers/metadata_controller.py	from	typing.Optional		15
+ui/controllers/metadata_controller.py	from	PySide6.QtCore.QObject		17
+ui/controllers/metadata_controller.py	from	PySide6.QtCore.Signal		17
+ui/controllers/metadata_controller.py	from	core.metadata_models.AudioTrackItem		19
+ui/controllers/metadata_controller.py	from	core.metadata_models.TagEditSession		19
+ui/controllers/metadata_controller.py	from	core.metadata_models.TrackStatus		19
+ui/controllers/metadata_controller.py	from	core.metadata_processor.clean_filename_to_title		20
+ui/controllers/metadata_controller.py	from	core.metadata_processor.extract_track_number		20
+ui/controllers/metadata_controller.py	const	logger		25
+ui/controllers/metadata_controller.py	const	_BACKUP_DIR		28
+ui/controllers/metadata_controller.py	class	MetadataController		31
+ui/controllers/metadata_controller.py	classvar	scan_started	MetadataController	49
+ui/controllers/metadata_controller.py	classvar	track_discovered	MetadataController	50
+ui/controllers/metadata_controller.py	classvar	scan_complete	MetadataController	51
+ui/controllers/metadata_controller.py	classvar	auto_rules_applied	MetadataController	52
+ui/controllers/metadata_controller.py	classvar	tags_modified	MetadataController	53
+ui/controllers/metadata_controller.py	classvar	apply_started	MetadataController	54
+ui/controllers/metadata_controller.py	classvar	apply_progress	MetadataController	55
+ui/controllers/metadata_controller.py	classvar	apply_file_done	MetadataController	56
+ui/controllers/metadata_controller.py	classvar	apply_complete	MetadataController	57
+ui/controllers/metadata_controller.py	classvar	apply_error	MetadataController	58
+ui/controllers/metadata_controller.py	classvar	status_update	MetadataController	59
+ui/controllers/metadata_controller.py	classvar	duplicate_scan_progress	MetadataController	62
+ui/controllers/metadata_controller.py	classvar	duplicate_scan_complete	MetadataController	63
+ui/controllers/metadata_controller.py	classvar	duplicate_scan_error	MetadataController	64
+ui/controllers/metadata_controller.py	classvar	duplicate_delete_complete	MetadataController	65
+ui/controllers/metadata_controller.py	method	__init__	MetadataController	67
+ui/controllers/metadata_controller.py	method	scan	MetadataController	77
+ui/controllers/metadata_controller.py	method	cancel_scan	MetadataController	93
+ui/controllers/metadata_controller.py	method	apply_auto_rules	MetadataController	96
+ui/controllers/metadata_controller.py	method	apply_artist_to_scope	MetadataController	138
+ui/controllers/metadata_controller.py	method	apply_album_to_folder	MetadataController	149
+ui/controllers/metadata_controller.py	method	apply_album_to_scope	MetadataController	161
+ui/controllers/metadata_controller.py	method	apply_title_from_filename	MetadataController	172
+ui/controllers/metadata_controller.py	method	apply_track_from_filename	MetadataController	184
+ui/controllers/metadata_controller.py	method	clear_comments	MetadataController	193
+ui/controllers/metadata_controller.py	method	apply_changes	MetadataController	200
+ui/controllers/metadata_controller.py	method	apply_album_artist_from_artist	MetadataController	239
+ui/controllers/metadata_controller.py	method	split_artist_title_from_filename	MetadataController	250
+ui/controllers/metadata_controller.py	method	clear_year	MetadataController	266
+ui/controllers/metadata_controller.py	method	clear_genre	MetadataController	274
+ui/controllers/metadata_controller.py	method	clear_track_num	MetadataController	282
+ui/controllers/metadata_controller.py	method	normalize_title_spaces	MetadataController	290
+ui/controllers/metadata_controller.py	method	strip_web_junk_from_title	MetadataController	306
+ui/controllers/metadata_controller.py	method	clean_filename	MetadataController	371
+ui/controllers/metadata_controller.py	method	strip_filename_numbering	MetadataController	430
+ui/controllers/metadata_controller.py	method	find_duplicates	MetadataController	451
+ui/controllers/metadata_controller.py	method	delete_duplicate_files	MetadataController	466
+ui/controllers/metadata_controller.py	method	cancel_apply	MetadataController	490
+ui/controllers/metadata_controller.py	method	revert_all	MetadataController	494
+ui/controllers/metadata_controller.py	method	_on_track_found	MetadataController	503
+ui/controllers/metadata_controller.py	method	_on_scan_complete	MetadataController	509
+ui/controllers/metadata_controller.py	method	_on_scan_error	MetadataController	517
+ui/controllers/metadata_controller.py	method	_on_apply_progress	MetadataController	521
+ui/controllers/metadata_controller.py	method	_on_apply_finished	MetadataController	525
+ui/controllers/metadata_controller.py	method	_on_dup_finished	MetadataController	536
+ui/controllers/metadata_controller.py	method	_cancel_scan	MetadataController	545
+ui/controllers/search_controller.py	from	__future__.annotations		10
+ui/controllers/search_controller.py	import	logging		12
+ui/controllers/search_controller.py	from	typing.Optional		13
+ui/controllers/search_controller.py	from	PySide6.QtCore.QObject		15
+ui/controllers/search_controller.py	from	PySide6.QtCore.Signal		15
+ui/controllers/search_controller.py	from	config.AppConfig		17
+ui/controllers/search_controller.py	from	core.search_engine.SearchResult		18
+ui/controllers/search_controller.py	const	logger		20
+ui/controllers/search_controller.py	class	SearchController		23
+ui/controllers/search_controller.py	classvar	result_ready	SearchController	35
+ui/controllers/search_controller.py	classvar	result_to_queue	SearchController	36
+ui/controllers/search_controller.py	classvar	search_error	SearchController	37
+ui/controllers/search_controller.py	classvar	searching_changed	SearchController	38
+ui/controllers/search_controller.py	method	__init__	SearchController	40
+ui/controllers/search_controller.py	method	search	SearchController	47
+ui/controllers/search_controller.py	method	cancel	SearchController	72
+ui/controllers/search_controller.py	method	add_to_queue	SearchController	77
+ui/dialogs/conflict_resolution_dialog.py	from	__future__.annotations		22
+ui/dialogs/conflict_resolution_dialog.py	from	typing.Optional		24
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtCore.Qt		26
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QDialog		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QVBoxLayout		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QHBoxLayout		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QLabel		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QScrollArea		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QWidget		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QFrame		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QCheckBox		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QSizePolicy		27
+ui/dialogs/conflict_resolution_dialog.py	from	PySide6.QtWidgets.QSplitter		27
+ui/dialogs/conflict_resolution_dialog.py	from	qfluentwidgets.BodyLabel		32
+ui/dialogs/conflict_resolution_dialog.py	from	qfluentwidgets.CaptionLabel		32
+ui/dialogs/conflict_resolution_dialog.py	from	qfluentwidgets.PrimaryPushButton		32
+ui/dialogs/conflict_resolution_dialog.py	from	qfluentwidgets.PushButton		32
+ui/dialogs/conflict_resolution_dialog.py	from	qfluentwidgets.SubtitleLabel		32
+ui/dialogs/conflict_resolution_dialog.py	from	qfluentwidgets.TitleLabel		32
+ui/dialogs/conflict_resolution_dialog.py	from	core.duplicate_detector.DuplicateGroup		37
+ui/dialogs/conflict_resolution_dialog.py	from	core.duplicate_detector.DuplicateDecision		37
+ui/dialogs/conflict_resolution_dialog.py	from	core.duplicate_detector.VideoInfo		37
+ui/dialogs/conflict_resolution_dialog.py	from	core.duplicate_detector._appearance_key		37
+ui/dialogs/conflict_resolution_dialog.py	from	ui.theme_manager.get_colors		40
+ui/dialogs/conflict_resolution_dialog.py	from	ui.theme_manager.ACCENT_COLOR		40
+ui/dialogs/conflict_resolution_dialog.py	from	ui.theme_manager.WARNING_COLOR		40
+ui/dialogs/conflict_resolution_dialog.py	from	ui.theme_manager.SUCCESS_COLOR		40
+ui/dialogs/conflict_resolution_dialog.py	class	_AppearanceRow		45
+ui/dialogs/conflict_resolution_dialog.py	method	__init__	_AppearanceRow	48
+ui/dialogs/conflict_resolution_dialog.py	method	video	_AppearanceRow	54
+ui/dialogs/conflict_resolution_dialog.py	method	is_checked	_AppearanceRow	58
+ui/dialogs/conflict_resolution_dialog.py	method	set_checked	_AppearanceRow	61
+ui/dialogs/conflict_resolution_dialog.py	method	_build	_AppearanceRow	64
+ui/dialogs/conflict_resolution_dialog.py	class	_DuplicateCard		100
+ui/dialogs/conflict_resolution_dialog.py	method	__init__	_DuplicateCard	103
+ui/dialogs/conflict_resolution_dialog.py	method	group	_DuplicateCard	110
+ui/dialogs/conflict_resolution_dialog.py	method	build_decision	_DuplicateCard	113
+ui/dialogs/conflict_resolution_dialog.py	method	check_all	_DuplicateCard	121
+ui/dialogs/conflict_resolution_dialog.py	method	_build	_DuplicateCard	131
+ui/dialogs/conflict_resolution_dialog.py	method	_make_column	_DuplicateCard	177
+ui/dialogs/conflict_resolution_dialog.py	class	ConflictResolutionDialog		208
+ui/dialogs/conflict_resolution_dialog.py	method	__init__	ConflictResolutionDialog	215
+ui/dialogs/conflict_resolution_dialog.py	method	_build	ConflictResolutionDialog	231
+ui/dialogs/conflict_resolution_dialog.py	method	_build_toolbar	ConflictResolutionDialog	295
+ui/dialogs/conflict_resolution_dialog.py	method	_apply_all	ConflictResolutionDialog	314
+ui/dialogs/conflict_resolution_dialog.py	method	_on_ok	ConflictResolutionDialog	318
+ui/dialogs/duplicate_files_dialog.py	from	__future__.annotations		35
+ui/dialogs/duplicate_files_dialog.py	import	datetime		37
+ui/dialogs/duplicate_files_dialog.py	from	pathlib.Path		38
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtCore.Qt		40
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtGui.QFont		41
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QCheckBox		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QDialog		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QFrame		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QGridLayout		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QHBoxLayout		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QLabel		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QMessageBox		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QPushButton		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QScrollArea		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QSizePolicy		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QVBoxLayout		42
+ui/dialogs/duplicate_files_dialog.py	from	PySide6.QtWidgets.QWidget		42
+ui/dialogs/duplicate_files_dialog.py	from	ui.theme_manager.ACCENT_COLOR		57
+ui/dialogs/duplicate_files_dialog.py	from	ui.theme_manager.get_colors		57
+ui/dialogs/duplicate_files_dialog.py	func	_fmt_size		62
+ui/dialogs/duplicate_files_dialog.py	func	_fmt_date		70
+ui/dialogs/duplicate_files_dialog.py	func	_rel_path		74
+ui/dialogs/duplicate_files_dialog.py	class	DuplicateFilesDialog		85
+ui/dialogs/duplicate_files_dialog.py	method	__init__	DuplicateFilesDialog	97
+ui/dialogs/duplicate_files_dialog.py	method	files_to_delete	DuplicateFilesDialog	127
+ui/dialogs/duplicate_files_dialog.py	method	_build	DuplicateFilesDialog	133
+ui/dialogs/duplicate_files_dialog.py	method	_make_header	DuplicateFilesDialog	147
+ui/dialogs/duplicate_files_dialog.py	method	_make_hint	DuplicateFilesDialog	160
+ui/dialogs/duplicate_files_dialog.py	method	_make_bulk_toolbar	DuplicateFilesDialog	167
+ui/dialogs/duplicate_files_dialog.py	method	_make_scroll_area	DuplicateFilesDialog	180
+ui/dialogs/duplicate_files_dialog.py	method	_make_file_card	DuplicateFilesDialog	231
+ui/dialogs/duplicate_files_dialog.py	method	_make_footer	DuplicateFilesDialog	283
+ui/dialogs/duplicate_files_dialog.py	method	_on_keep_both	DuplicateFilesDialog	305
+ui/dialogs/duplicate_files_dialog.py	method	_on_apply	DuplicateFilesDialog	313
+ui/dialogs/duplicate_files_dialog.py	method	_collect_unchecked	DuplicateFilesDialog	341
+ui/dialogs/duplicate_files_dialog.py	method	_apply_theme	DuplicateFilesDialog	352
+ui/dialogs/tab_select_dialog.py	from	__future__.annotations		14
+ui/dialogs/tab_select_dialog.py	from	typing.Optional		16
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtCore.Qt		18
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtCore.QThread		18
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtCore.Signal		18
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtCore.QTimer		18
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QDialog		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QVBoxLayout		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QHBoxLayout		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QGridLayout		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QLabel		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QFrame		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QSizePolicy		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QScrollArea		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QWidget		19
+ui/dialogs/tab_select_dialog.py	from	PySide6.QtWidgets.QProgressBar		19
+ui/dialogs/tab_select_dialog.py	from	qfluentwidgets.BodyLabel		24
+ui/dialogs/tab_select_dialog.py	from	qfluentwidgets.CaptionLabel		24
+ui/dialogs/tab_select_dialog.py	from	qfluentwidgets.PrimaryPushButton		24
+ui/dialogs/tab_select_dialog.py	from	qfluentwidgets.PushButton		24
+ui/dialogs/tab_select_dialog.py	from	qfluentwidgets.SubtitleLabel		24
+ui/dialogs/tab_select_dialog.py	from	core.channel_tab_discoverer.TabInfo		28
+ui/dialogs/tab_select_dialog.py	from	core.channel_tab_discoverer.DiscoveryResult		28
+ui/dialogs/tab_select_dialog.py	from	core.duplicate_detector.VideoInfo		29
+ui/dialogs/tab_select_dialog.py	from	ui.theme_manager.get_colors		30
+ui/dialogs/tab_select_dialog.py	from	ui.theme_manager.ACCENT_COLOR		30
+ui/dialogs/tab_select_dialog.py	from	ui.theme_manager.SUCCESS_COLOR		30
+ui/dialogs/tab_select_dialog.py	class	_DiscoveryWorker		35
+ui/dialogs/tab_select_dialog.py	classvar	finished	_DiscoveryWorker	36
+ui/dialogs/tab_select_dialog.py	method	__init__	_DiscoveryWorker	38
+ui/dialogs/tab_select_dialog.py	method	run	_DiscoveryWorker	42
+ui/dialogs/tab_select_dialog.py	class	_TabCard		50
+ui/dialogs/tab_select_dialog.py	classvar	toggled	_TabCard	51
+ui/dialogs/tab_select_dialog.py	method	__init__	_TabCard	53
+ui/dialogs/tab_select_dialog.py	method	tab	_TabCard	60
+ui/dialogs/tab_select_dialog.py	method	is_checked	_TabCard	64
+ui/dialogs/tab_select_dialog.py	method	_build	_TabCard	67
+ui/dialogs/tab_select_dialog.py	method	_refresh_style	_TabCard	103
+ui/dialogs/tab_select_dialog.py	method	set_count	_TabCard	119
+ui/dialogs/tab_select_dialog.py	method	mousePressEvent	_TabCard	124
+ui/dialogs/tab_select_dialog.py	class	TabSelectDialog		134
+ui/dialogs/tab_select_dialog.py	method	__init__	TabSelectDialog	144
+ui/dialogs/tab_select_dialog.py	method	_build	TabSelectDialog	169
+ui/dialogs/tab_select_dialog.py	method	_start_discovery	TabSelectDialog	249
+ui/dialogs/tab_select_dialog.py	method	_on_discovery_done	TabSelectDialog	254
+ui/dialogs/tab_select_dialog.py	method	_populate_grid	TabSelectDialog	277
+ui/dialogs/tab_select_dialog.py	method	_on_card_toggled	TabSelectDialog	285
+ui/dialogs/tab_select_dialog.py	method	_tick_spinner	TabSelectDialog	289
+ui/dialogs/tab_select_dialog.py	method	_on_scan_clicked	TabSelectDialog	296
+ui/dialogs/tab_select_dialog.py	method	_on_tab_started	TabSelectDialog	327
+ui/dialogs/tab_select_dialog.py	method	_on_tab_progress	TabSelectDialog	330
+ui/dialogs/tab_select_dialog.py	method	_on_tab_done	TabSelectDialog	337
+ui/dialogs/tab_select_dialog.py	method	_on_all_done	TabSelectDialog	347
+ui/dialogs/tab_select_dialog.py	method	_on_scrape_error	TabSelectDialog	354
+ui/dialogs/tab_select_dialog.py	method	closeEvent	TabSelectDialog	363
+ui/i18n.py	from	__future__.annotations		9
+ui/i18n.py	from	typing.Dict		11
+ui/i18n.py	const	_current		13
+ui/i18n.py	const	TRANSLATIONS		15
+ui/i18n.py	func	set_language		474
+ui/i18n.py	func	current_language		482
+ui/i18n.py	func	t		486
+ui/models/metadata_table_model.py	from	__future__.annotations		8
+ui/models/metadata_table_model.py	import	bisect		10
+ui/models/metadata_table_model.py	from	pathlib.Path		11
+ui/models/metadata_table_model.py	from	PySide6.QtCore.QAbstractTableModel		13
+ui/models/metadata_table_model.py	from	PySide6.QtCore.QModelIndex		13
+ui/models/metadata_table_model.py	from	PySide6.QtCore.Qt		13
+ui/models/metadata_table_model.py	from	PySide6.QtGui.QBrush		18
+ui/models/metadata_table_model.py	from	PySide6.QtGui.QColor		18
+ui/models/metadata_table_model.py	from	PySide6.QtGui.QFont		18
+ui/models/metadata_table_model.py	from	core.metadata_models.AudioTrackItem		20
+ui/models/metadata_table_model.py	from	core.metadata_models.TrackStatus		20
+ui/models/metadata_table_model.py	from	ui.theme_manager.ACCENT_COLOR		21
+ui/models/metadata_table_model.py	from	ui.theme_manager.ERROR_COLOR		21
+ui/models/metadata_table_model.py	from	ui.theme_manager.WARNING_COLOR		21
+ui/models/metadata_table_model.py	const	COL_CHECK		25
+ui/models/metadata_table_model.py	const	COL_FILENAME		26
+ui/models/metadata_table_model.py	const	COL_TITLE_CUR		27
+ui/models/metadata_table_model.py	const	COL_TITLE_NEW		28
+ui/models/metadata_table_model.py	const	COL_ARTIST_CUR		29
+ui/models/metadata_table_model.py	const	COL_ARTIST_NEW		30
+ui/models/metadata_table_model.py	const	COL_ALBUM_CUR		31
+ui/models/metadata_table_model.py	const	COL_ALBUM_NEW		32
+ui/models/metadata_table_model.py	const	COL_TRACK_CUR		33
+ui/models/metadata_table_model.py	const	COL_TRACK_NEW		34
+ui/models/metadata_table_model.py	const	COL_STATUS		35
+ui/models/metadata_table_model.py	const	COL_FILENAME_NEW		37
+ui/models/metadata_table_model.py	const	COL_GENRE_CUR		38
+ui/models/metadata_table_model.py	const	COL_GENRE_NEW		39
+ui/models/metadata_table_model.py	const	COL_COMMENT_CUR		40
+ui/models/metadata_table_model.py	const	COL_COMMENT_NEW		41
+ui/models/metadata_table_model.py	const	COLUMN_COUNT		42
+ui/models/metadata_table_model.py	const	_HEADERS		44
+ui/models/metadata_table_model.py	const	_ACCENT_BG		57
+ui/models/metadata_table_model.py	const	_ERROR_BG		59
+ui/models/metadata_table_model.py	const	_WARN_BG		61
+ui/models/metadata_table_model.py	const	_ACCENT_BRUSH		64
+ui/models/metadata_table_model.py	const	_ERROR_BRUSH		65
+ui/models/metadata_table_model.py	const	_WARN_BRUSH		66
+ui/models/metadata_table_model.py	class	MetadataTableModel		69
+ui/models/metadata_table_model.py	method	__init__	MetadataTableModel	78
+ui/models/metadata_table_model.py	method	rowCount	MetadataTableModel	89
+ui/models/metadata_table_model.py	method	columnCount	MetadataTableModel	92
+ui/models/metadata_table_model.py	method	headerData	MetadataTableModel	95
+ui/models/metadata_table_model.py	method	data	MetadataTableModel	100
+ui/models/metadata_table_model.py	method	setData	MetadataTableModel	206
+ui/models/metadata_table_model.py	method	flags	MetadataTableModel	252
+ui/models/metadata_table_model.py	method	load_tracks	MetadataTableModel	268
+ui/models/metadata_table_model.py	method	add_track	MetadataTableModel	277
+ui/models/metadata_table_model.py	method	set_folder_filter	MetadataTableModel	289
+ui/models/metadata_table_model.py	method	get_visible_tracks	MetadataTableModel	292
+ui/models/metadata_table_model.py	method	get_checked_tracks	MetadataTableModel	295
+ui/models/metadata_table_model.py	method	get_all_tracks	MetadataTableModel	298
+ui/models/metadata_table_model.py	method	refresh_track	MetadataTableModel	301
+ui/models/metadata_table_model.py	method	set_all_checked	MetadataTableModel	313
+ui/models/metadata_table_model.py	method	get_changed_count	MetadataTableModel	322
+ui/models/metadata_table_model.py	method	get_warning_count	MetadataTableModel	325
+ui/models/metadata_table_model.py	method	refresh_all	MetadataTableModel	331
+ui/models/metadata_table_model.py	method	set_path_checked	MetadataTableModel	339
+ui/models/metadata_table_model.py	method	get_visible_row_for_path	MetadataTableModel	362
+ui/models/metadata_table_model.py	method	_rebuild_visible	MetadataTableModel	374
+ui/models/metadata_table_model.py	func	_status_label		378
+ui/panels/__init__.py	from	ui.panels.url_bar.UrlBar		20
+ui/panels/__init__.py	from	ui.panels.search_panel.SearchPanel		21
+ui/panels/__init__.py	from	ui.panels.queue_panel.QueuePanel		22
+ui/panels/__init__.py	from	ui.panels.history_panel.HistoryPanel		23
+ui/panels/__init__.py	from	ui.panels.options_bar.OptionsBar		24
+ui/panels/__init__.py	from	ui.panels.status_bar.StatusBar		25
+ui/panels/__init__.py	const	__all__		27
+ui/panels/converter_panel.py	from	__future__.annotations		24
+ui/panels/converter_panel.py	import	os		26
+ui/panels/converter_panel.py	import	subprocess		27
+ui/panels/converter_panel.py	import	threading		28
+ui/panels/converter_panel.py	from	pathlib.Path		29
+ui/panels/converter_panel.py	from	typing.Optional		30
+ui/panels/converter_panel.py	from	PySide6.QtCore.Qt		32
+ui/panels/converter_panel.py	from	PySide6.QtCore.QThread		32
+ui/panels/converter_panel.py	from	PySide6.QtCore.Signal		32
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QFileDialog		33
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QFrame		33
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QHBoxLayout		33
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QLabel		33
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QProgressBar		33
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QScrollArea		33
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QSizePolicy		33
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QVBoxLayout		33
+ui/panels/converter_panel.py	from	PySide6.QtWidgets.QWidget		33
+ui/panels/converter_panel.py	from	qfluentwidgets.BodyLabel		38
+ui/panels/converter_panel.py	from	qfluentwidgets.CaptionLabel		38
+ui/panels/converter_panel.py	from	qfluentwidgets.ComboBox		38
+ui/panels/converter_panel.py	from	qfluentwidgets.FluentIcon		38
+ui/panels/converter_panel.py	from	qfluentwidgets.PushButton		38
+ui/panels/converter_panel.py	from	qfluentwidgets.SegmentedWidget		38
+ui/panels/converter_panel.py	from	qfluentwidgets.SwitchButton		38
+ui/panels/converter_panel.py	from	qfluentwidgets.ToolButton		38
+ui/panels/converter_panel.py	from	ui.theme_manager.ACCENT_COLOR		43
+ui/panels/converter_panel.py	from	ui.theme_manager.get_colors		43
+ui/panels/converter_panel.py	from	ui.theme_manager.SUCCESS_COLOR		43
+ui/panels/converter_panel.py	from	ui.theme_manager.ERROR_COLOR		43
+ui/panels/converter_panel.py	const	_OUTPUT_FORMATS		48
+ui/panels/converter_panel.py	const	_BITRATES		49
+ui/panels/converter_panel.py	const	_INPUT_EXTS		50
+ui/panels/converter_panel.py	class	ConvertWorker		58
+ui/panels/converter_panel.py	classvar	file_started	ConvertWorker	70
+ui/panels/converter_panel.py	classvar	file_done	ConvertWorker	71
+ui/panels/converter_panel.py	classvar	file_error	ConvertWorker	72
+ui/panels/converter_panel.py	classvar	all_done	ConvertWorker	73
+ui/panels/converter_panel.py	method	__init__	ConvertWorker	75
+ui/panels/converter_panel.py	method	cancel	ConvertWorker	90
+ui/panels/converter_panel.py	method	run	ConvertWorker	93
+ui/panels/converter_panel.py	method	_convert_one	ConvertWorker	105
+ui/panels/converter_panel.py	class	_FileRow		152
+ui/panels/converter_panel.py	classvar	remove_requested	_FileRow	153
+ui/panels/converter_panel.py	method	__init__	_FileRow	155
+ui/panels/converter_panel.py	method	_build	_FileRow	160
+ui/panels/converter_panel.py	method	set_converting	_FileRow	233
+ui/panels/converter_panel.py	method	set_done	_FileRow	238
+ui/panels/converter_panel.py	method	set_error	_FileRow	243
+ui/panels/converter_panel.py	class	ConverterPanel		254
+ui/panels/converter_panel.py	method	__init__	ConverterPanel	262
+ui/panels/converter_panel.py	method	_build	ConverterPanel	276
+ui/panels/converter_panel.py	method	_apply_theme	ConverterPanel	385
+ui/panels/converter_panel.py	method	dragEnterEvent	ConverterPanel	424
+ui/panels/converter_panel.py	method	dropEvent	ConverterPanel	430
+ui/panels/converter_panel.py	method	_on_add_files	ConverterPanel	439
+ui/panels/converter_panel.py	method	_on_clear	ConverterPanel	447
+ui/panels/converter_panel.py	method	_on_same_dir_toggle	ConverterPanel	456
+ui/panels/converter_panel.py	method	_on_browse_out	ConverterPanel	461
+ui/panels/converter_panel.py	method	_on_convert	ConverterPanel	467
+ui/panels/converter_panel.py	method	_on_file_started	ConverterPanel	488
+ui/panels/converter_panel.py	method	_on_file_done	ConverterPanel	492
+ui/panels/converter_panel.py	method	_on_file_error	ConverterPanel	496
+ui/panels/converter_panel.py	method	_on_all_done	ConverterPanel	500
+ui/panels/converter_panel.py	method	_add_file	ConverterPanel	505
+ui/panels/converter_panel.py	method	_remove_file	ConverterPanel	514
+ui/panels/history_panel.py	from	__future__.annotations		22
+ui/panels/history_panel.py	from	pathlib.Path		24
+ui/panels/history_panel.py	from	PySide6.QtCore.Qt		26
+ui/panels/history_panel.py	from	PySide6.QtCore.QTimer		26
+ui/panels/history_panel.py	from	PySide6.QtCore.Signal		26
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QFileDialog		27
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QFrame		27
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QHBoxLayout		27
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QLabel		27
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QMessageBox		27
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QScrollArea		27
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QSizePolicy		27
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QVBoxLayout		27
+ui/panels/history_panel.py	from	PySide6.QtWidgets.QWidget		27
+ui/panels/history_panel.py	from	qfluentwidgets.BodyLabel		32
+ui/panels/history_panel.py	from	qfluentwidgets.CaptionLabel		32
+ui/panels/history_panel.py	from	qfluentwidgets.PushButton		32
+ui/panels/history_panel.py	from	qfluentwidgets.SearchLineEdit		32
+ui/panels/history_panel.py	from	config.AppConfig		34
+ui/panels/history_panel.py	from	core.history_db.DownloadRecord		35
+ui/panels/history_panel.py	from	core.history_db.HistoryDB		35
+ui/panels/history_panel.py	from	ui.components.history_row.HistoryRow		36
+ui/panels/history_panel.py	from	ui.i18n.t		37
+ui/panels/history_panel.py	from	ui.theme_manager.ACCENT_COLOR		38
+ui/panels/history_panel.py	const	_BG		42
+ui/panels/history_panel.py	const	_SURFACE		43
+ui/panels/history_panel.py	const	_BORDER		44
+ui/panels/history_panel.py	const	_TEXT		45
+ui/panels/history_panel.py	const	_TEXT_2		46
+ui/panels/history_panel.py	const	_TEXT_3		47
+ui/panels/history_panel.py	const	_ERROR		48
+ui/panels/history_panel.py	class	HistoryPanel		55
+ui/panels/history_panel.py	classvar	redownload_requested	HistoryPanel	66
+ui/panels/history_panel.py	classvar	open_folder_requested	HistoryPanel	67
+ui/panels/history_panel.py	method	__init__	HistoryPanel	69
+ui/panels/history_panel.py	method	reload	HistoryPanel	92
+ui/panels/history_panel.py	method	add_record	HistoryPanel	97
+ui/panels/history_panel.py	method	_build	HistoryPanel	111
+ui/panels/history_panel.py	method	_build_empty_state	HistoryPanel	235
+ui/panels/history_panel.py	method	_populate	HistoryPanel	253
+ui/panels/history_panel.py	method	_create_row	HistoryPanel	272
+ui/panels/history_panel.py	method	_apply_filter	HistoryPanel	279
+ui/panels/history_panel.py	method	_on_search_changed	HistoryPanel	289
+ui/panels/history_panel.py	method	_on_delete_row	HistoryPanel	292
+ui/panels/history_panel.py	method	_on_export_csv	HistoryPanel	307
+ui/panels/history_panel.py	method	_on_clear_history	HistoryPanel	331
+ui/panels/history_panel.py	method	_update_count	HistoryPanel	345
+ui/panels/history_panel.py	method	_btn_style	HistoryPanel	350
+ui/panels/metadata_editor_panel.py	from	__future__.annotations		15
+ui/panels/metadata_editor_panel.py	import	logging		17
+ui/panels/metadata_editor_panel.py	from	pathlib.Path		18
+ui/panels/metadata_editor_panel.py	from	typing.Optional		19
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.QFileInfo		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.QModelIndex		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.QPoint		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.QRect		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.QSize		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.Qt		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.Signal		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.QItemSelection		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtCore.QItemSelectionModel		21
+ui/panels/metadata_editor_panel.py	from	PySide6.QtGui.QBrush		22
+ui/panels/metadata_editor_panel.py	from	PySide6.QtGui.QColor		22
+ui/panels/metadata_editor_panel.py	from	PySide6.QtGui.QFont		22
+ui/panels/metadata_editor_panel.py	from	PySide6.QtGui.QIcon		22
+ui/panels/metadata_editor_panel.py	from	PySide6.QtGui.QPainter		22
+ui/panels/metadata_editor_panel.py	from	PySide6.QtGui.QPalette		22
+ui/panels/metadata_editor_panel.py	from	PySide6.QtGui.QPixmap		22
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QAbstractItemView		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QApplication		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QCheckBox		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QDialog		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QFileDialog		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QFileIconProvider		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QFrame		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QGroupBox		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QHBoxLayout		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QHeaderView		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QLabel		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QLineEdit		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QPushButton		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QRubberBand		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QInputDialog		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QScrollArea		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QSplitter		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QStackedWidget		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QStyledItemDelegate		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QStyle		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QStyleOptionViewItem		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QTableView		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QTreeWidget		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QTreeWidgetItem		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QVBoxLayout		23
+ui/panels/metadata_editor_panel.py	from	PySide6.QtWidgets.QWidget		23
+ui/panels/metadata_editor_panel.py	from	core.metadata_models.AudioTrackItem		52
+ui/panels/metadata_editor_panel.py	from	core.metadata_models.ScanResult		52
+ui/panels/metadata_editor_panel.py	from	core.metadata_models.TrackStatus		52
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_CHECK		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_FILENAME		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_TITLE_CUR		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_TITLE_NEW		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_ARTIST_CUR		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_ARTIST_NEW		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_ALBUM_CUR		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_ALBUM_NEW		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_TRACK_CUR		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_TRACK_NEW		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_STATUS		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_FILENAME_NEW		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_GENRE_CUR		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_GENRE_NEW		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_COMMENT_CUR		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COL_COMMENT_NEW		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.COLUMN_COUNT		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model._HEADERS		53
+ui/panels/metadata_editor_panel.py	from	ui.models.metadata_table_model.MetadataTableModel		53
+ui/panels/metadata_editor_panel.py	from	ui.theme_manager.ACCENT_COLOR		61
+ui/panels/metadata_editor_panel.py	from	ui.theme_manager.get_colors		61
+ui/panels/metadata_editor_panel.py	const	logger		66
+ui/panels/metadata_editor_panel.py	const	_PAGE_EMPTY		69
+ui/panels/metadata_editor_panel.py	const	_PAGE_FOLDER		70
+ui/panels/metadata_editor_panel.py	const	_PAGE_TRACKS		71
+ui/panels/metadata_editor_panel.py	const	_MAGIC_OP_DEFS		74
+ui/panels/metadata_editor_panel.py	const	_DEFAULT_AUTO_OPS		91
+ui/panels/metadata_editor_panel.py	class	_ExplorerFileListDelegate		96
+ui/panels/metadata_editor_panel.py	classvar	_PADDING_X	_ExplorerFileListDelegate	101
+ui/panels/metadata_editor_panel.py	method	paint	_ExplorerFileListDelegate	103
+ui/panels/metadata_editor_panel.py	class	_ExplorerFileListView		145
+ui/panels/metadata_editor_panel.py	classvar	_SIDE_EMPTY_GUTTER	_ExplorerFileListView	148
+ui/panels/metadata_editor_panel.py	classvar	_RUBBER_STYLE	_ExplorerFileListView	149
+ui/panels/metadata_editor_panel.py	method	__init__	_ExplorerFileListView	156
+ui/panels/metadata_editor_panel.py	method	paintEvent	_ExplorerFileListView	169
+ui/panels/metadata_editor_panel.py	method	drawRow	_ExplorerFileListView	172
+ui/panels/metadata_editor_panel.py	method	mousePressEvent	_ExplorerFileListView	177
+ui/panels/metadata_editor_panel.py	method	mouseMoveEvent	_ExplorerFileListView	186
+ui/panels/metadata_editor_panel.py	method	mouseReleaseEvent	_ExplorerFileListView	195
+ui/panels/metadata_editor_panel.py	method	leaveEvent	_ExplorerFileListView	203
+ui/panels/metadata_editor_panel.py	method	_event_pos	_ExplorerFileListView	208
+ui/panels/metadata_editor_panel.py	method	_cancel_rubber_band	_ExplorerFileListView	213
+ui/panels/metadata_editor_panel.py	method	_begin_empty_area_interaction	_ExplorerFileListView	218
+ui/panels/metadata_editor_panel.py	method	_update_empty_area_drag	_ExplorerFileListView	234
+ui/panels/metadata_editor_panel.py	method	_finish_empty_area_interaction	_ExplorerFileListView	245
+ui/panels/metadata_editor_panel.py	method	_explorer_palette	_ExplorerFileListView	251
+ui/panels/metadata_editor_panel.py	method	_content_row_rect	_ExplorerFileListView	278
+ui/panels/metadata_editor_panel.py	method	_empty_side_rect	_ExplorerFileListView	290
+ui/panels/metadata_editor_panel.py	method	_should_paint_row_background	_ExplorerFileListView	293
+ui/panels/metadata_editor_panel.py	method	_paint_explorer_row_background	_ExplorerFileListView	304
+ui/panels/metadata_editor_panel.py	method	_paint_explorer_row_separator	_ExplorerFileListView	324
+ui/panels/metadata_editor_panel.py	method	_is_empty_viewport_area	_ExplorerFileListView	330
+ui/panels/metadata_editor_panel.py	method	_update_hover_row	_ExplorerFileListView	346
+ui/panels/metadata_editor_panel.py	method	_scroll_for_rubber	_ExplorerFileListView	358
+ui/panels/metadata_editor_panel.py	method	_select_rows_in_rubber_band	_ExplorerFileListView	366
+ui/panels/metadata_editor_panel.py	class	_AutoArrangeSettingsDialog		404
+ui/panels/metadata_editor_panel.py	method	__init__	_AutoArrangeSettingsDialog	407
+ui/panels/metadata_editor_panel.py	method	_accept	_AutoArrangeSettingsDialog	467
+ui/panels/metadata_editor_panel.py	method	_show_info	_AutoArrangeSettingsDialog	471
+ui/panels/metadata_editor_panel.py	method	result_ops	_AutoArrangeSettingsDialog	478
+ui/panels/metadata_editor_panel.py	class	_CleanSettingsDialog		482
+ui/panels/metadata_editor_panel.py	method	__init__	_CleanSettingsDialog	485
+ui/panels/metadata_editor_panel.py	method	_accept	_CleanSettingsDialog	554
+ui/panels/metadata_editor_panel.py	const	_BTN_STYLE		569
+ui/panels/metadata_editor_panel.py	class	_ExplorerTreeWidget		577
+ui/panels/metadata_editor_panel.py	classvar	item_moved	_ExplorerTreeWidget	579
+ui/panels/metadata_editor_panel.py	method	__init__	_ExplorerTreeWidget	581
+ui/panels/metadata_editor_panel.py	method	dragEnterEvent	_ExplorerTreeWidget	589
+ui/panels/metadata_editor_panel.py	method	dragMoveEvent	_ExplorerTreeWidget	594
+ui/panels/metadata_editor_panel.py	method	dropEvent	_ExplorerTreeWidget	599
+ui/panels/metadata_editor_panel.py	class	MetadataEditorPanel		651
+ui/panels/metadata_editor_panel.py	classvar	scan_requested	MetadataEditorPanel	676
+ui/panels/metadata_editor_panel.py	classvar	auto_requested	MetadataEditorPanel	677
+ui/panels/metadata_editor_panel.py	classvar	apply_requested	MetadataEditorPanel	678
+ui/panels/metadata_editor_panel.py	classvar	revert_requested	MetadataEditorPanel	679
+ui/panels/metadata_editor_panel.py	classvar	artist_to_scope	MetadataEditorPanel	680
+ui/panels/metadata_editor_panel.py	classvar	album_to_scope	MetadataEditorPanel	681
+ui/panels/metadata_editor_panel.py	classvar	title_from_filename	MetadataEditorPanel	682
+ui/panels/metadata_editor_panel.py	classvar	track_from_filename	MetadataEditorPanel	683
+ui/panels/metadata_editor_panel.py	classvar	clear_comments	MetadataEditorPanel	684
+ui/panels/metadata_editor_panel.py	classvar	album_artist_from_artist	MetadataEditorPanel	685
+ui/panels/metadata_editor_panel.py	classvar	split_artist_title	MetadataEditorPanel	686
+ui/panels/metadata_editor_panel.py	classvar	clear_track_num	MetadataEditorPanel	687
+ui/panels/metadata_editor_panel.py	classvar	clear_year	MetadataEditorPanel	688
+ui/panels/metadata_editor_panel.py	classvar	clear_genre	MetadataEditorPanel	689
+ui/panels/metadata_editor_panel.py	classvar	normalize_title_spaces	MetadataEditorPanel	690
+ui/panels/metadata_editor_panel.py	classvar	strip_web_junk	MetadataEditorPanel	691
+ui/panels/metadata_editor_panel.py	classvar	clean_filename	MetadataEditorPanel	692
+ui/panels/metadata_editor_panel.py	classvar	strip_filename_numbering	MetadataEditorPanel	693
+ui/panels/metadata_editor_panel.py	classvar	find_duplicates_requested	MetadataEditorPanel	696
+ui/panels/metadata_editor_panel.py	classvar	delete_duplicates_requested	MetadataEditorPanel	697
+ui/panels/metadata_editor_panel.py	method	__init__	MetadataEditorPanel	699
+ui/panels/metadata_editor_panel.py	method	_build	MetadataEditorPanel	726
+ui/panels/metadata_editor_panel.py	method	_build_toolbar	MetadataEditorPanel	741
+ui/panels/metadata_editor_panel.py	method	_build_body	MetadataEditorPanel	824
+ui/panels/metadata_editor_panel.py	method	_save_splitter_sizes	MetadataEditorPanel	1019
+ui/panels/metadata_editor_panel.py	method	_build_inspector_empty	MetadataEditorPanel	1026
+ui/panels/metadata_editor_panel.py	method	_build_inspector_folder	MetadataEditorPanel	1037
+ui/panels/metadata_editor_panel.py	method	_build_inspector_tracks	MetadataEditorPanel	1089
+ui/panels/metadata_editor_panel.py	method	_build_magic_ops_widget	MetadataEditorPanel	1156
+ui/panels/metadata_editor_panel.py	method	_on_clean_settings	MetadataEditorPanel	1208
+ui/panels/metadata_editor_panel.py	method	_show_info	MetadataEditorPanel	1212
+ui/panels/metadata_editor_panel.py	method	_on_browse	MetadataEditorPanel	1220
+ui/panels/metadata_editor_panel.py	method	_on_scan	MetadataEditorPanel	1232
+ui/panels/metadata_editor_panel.py	method	_on_auto_arrange	MetadataEditorPanel	1246
+ui/panels/metadata_editor_panel.py	method	_on_apply	MetadataEditorPanel	1269
+ui/panels/metadata_editor_panel.py	method	_on_revert	MetadataEditorPanel	1274
+ui/panels/metadata_editor_panel.py	method	_on_find_duplicates	MetadataEditorPanel	1277
+ui/panels/metadata_editor_panel.py	classvar	_ROLE_IS_FILE	MetadataEditorPanel	1286
+ui/panels/metadata_editor_panel.py	method	_on_tree_item_changed	MetadataEditorPanel	1288
+ui/panels/metadata_editor_panel.py	method	_on_table_selection_changed	MetadataEditorPanel	1309
+ui/panels/metadata_editor_panel.py	method	_on_model_data_changed	MetadataEditorPanel	1327
+ui/panels/metadata_editor_panel.py	method	_on_insp_folder_artist	MetadataEditorPanel	1332
+ui/panels/metadata_editor_panel.py	method	_on_insp_folder_album	MetadataEditorPanel	1338
+ui/panels/metadata_editor_panel.py	method	_on_insp_apply_fields	MetadataEditorPanel	1344
+ui/panels/metadata_editor_panel.py	method	_on_auto_arrange_settings	MetadataEditorPanel	1375
+ui/panels/metadata_editor_panel.py	method	_on_section_moved	MetadataEditorPanel	1383
+ui/panels/metadata_editor_panel.py	method	_on_header_context_menu	MetadataEditorPanel	1396
+ui/panels/metadata_editor_panel.py	method	on_track_discovered	MetadataEditorPanel	1422
+ui/panels/metadata_editor_panel.py	method	on_scan_complete	MetadataEditorPanel	1426
+ui/panels/metadata_editor_panel.py	method	on_auto_rules_applied	MetadataEditorPanel	1448
+ui/panels/metadata_editor_panel.py	method	on_apply_progress	MetadataEditorPanel	1453
+ui/panels/metadata_editor_panel.py	method	on_apply_file_done	MetadataEditorPanel	1456
+ui/panels/metadata_editor_panel.py	method	on_apply_complete	MetadataEditorPanel	1463
+ui/panels/metadata_editor_panel.py	method	on_status_update	MetadataEditorPanel	1489
+ui/panels/metadata_editor_panel.py	method	on_duplicate_scan_progress	MetadataEditorPanel	1492
+ui/panels/metadata_editor_panel.py	method	on_duplicate_scan_complete	MetadataEditorPanel	1495
+ui/panels/metadata_editor_panel.py	method	on_duplicate_scan_error	MetadataEditorPanel	1507
+ui/panels/metadata_editor_panel.py	method	on_duplicate_delete_complete	MetadataEditorPanel	1512
+ui/panels/metadata_editor_panel.py	method	_make_audio_icon	MetadataEditorPanel	1519
+ui/panels/metadata_editor_panel.py	method	_folder_icon	MetadataEditorPanel	1539
+ui/panels/metadata_editor_panel.py	method	_track_icon	MetadataEditorPanel	1545
+ui/panels/metadata_editor_panel.py	method	_ensure_root_item	MetadataEditorPanel	1554
+ui/panels/metadata_editor_panel.py	method	_get_or_create_folder_item	MetadataEditorPanel	1578
+ui/panels/metadata_editor_panel.py	method	_propagate_check_state	MetadataEditorPanel	1607
+ui/panels/metadata_editor_panel.py	method	_add_to_tree	MetadataEditorPanel	1619
+ui/panels/metadata_editor_panel.py	method	_update_summary	MetadataEditorPanel	1651
+ui/panels/metadata_editor_panel.py	method	_update_table_info	MetadataEditorPanel	1663
+ui/panels/metadata_editor_panel.py	method	_get_selected_tracks	MetadataEditorPanel	1673
+ui/panels/metadata_editor_panel.py	method	_get_folder_tracks	MetadataEditorPanel	1683
+ui/panels/metadata_editor_panel.py	method	_populate_track_inspector	MetadataEditorPanel	1686
+ui/panels/metadata_editor_panel.py	method	_on_zoom_minus	MetadataEditorPanel	1711
+ui/panels/metadata_editor_panel.py	method	_on_zoom_plus	MetadataEditorPanel	1714
+ui/panels/metadata_editor_panel.py	method	_on_zoom_custom	MetadataEditorPanel	1717
+ui/panels/metadata_editor_panel.py	method	_change_zoom	MetadataEditorPanel	1726
+ui/panels/metadata_editor_panel.py	method	_set_zoom	MetadataEditorPanel	1730
+ui/panels/metadata_editor_panel.py	method	_on_tree_item_moved	MetadataEditorPanel	1781
+ui/panels/metadata_editor_panel.py	method	_on_tree_context_menu	MetadataEditorPanel	1797
+ui/panels/metadata_editor_panel.py	method	_on_tree_add_folder	MetadataEditorPanel	1826
+ui/panels/metadata_editor_panel.py	method	_on_tree_rename	MetadataEditorPanel	1862
+ui/panels/metadata_editor_panel.py	method	_on_tree_delete	MetadataEditorPanel	1890
+ui/panels/metadata_editor_panel.py	func	_bold_font		1914
+ui/panels/options_bar.py	from	__future__.annotations		17
+ui/panels/options_bar.py	from	pathlib.Path		19
+ui/panels/options_bar.py	from	PySide6.QtCore.Qt		21
+ui/panels/options_bar.py	from	PySide6.QtCore.Signal		21
+ui/panels/options_bar.py	from	PySide6.QtWidgets.QFileDialog		22
+ui/panels/options_bar.py	from	PySide6.QtWidgets.QFrame		22
+ui/panels/options_bar.py	from	PySide6.QtWidgets.QHBoxLayout		22
+ui/panels/options_bar.py	from	PySide6.QtWidgets.QLabel		22
+ui/panels/options_bar.py	from	PySide6.QtWidgets.QSizePolicy		22
+ui/panels/options_bar.py	from	PySide6.QtWidgets.QWidget		22
+ui/panels/options_bar.py	from	qfluentwidgets.ComboBox		26
+ui/panels/options_bar.py	from	qfluentwidgets.LineEdit		26
+ui/panels/options_bar.py	from	qfluentwidgets.SwitchButton		26
+ui/panels/options_bar.py	from	qfluentwidgets.ToolButton		26
+ui/panels/options_bar.py	from	config.AppConfig		30
+ui/panels/options_bar.py	from	ui.theme_manager.ACCENT_COLOR		31
+ui/panels/options_bar.py	const	AUDIO_QUALITY_OPTIONS		38
+ui/panels/options_bar.py	const	VIDEO_QUALITY_OPTIONS		41
+ui/panels/options_bar.py	const	AUDIO_FORMAT_OPTIONS		44
+ui/panels/options_bar.py	const	_BG		50
+ui/panels/options_bar.py	const	_BORDER		51
+ui/panels/options_bar.py	const	_TEXT		52
+ui/panels/options_bar.py	const	_TEXT_2		53
+ui/panels/options_bar.py	const	_TEXT_3		54
+ui/panels/options_bar.py	class	OptionsBar		61
+ui/panels/options_bar.py	classvar	options_changed	OptionsBar	71
+ui/panels/options_bar.py	method	__init__	OptionsBar	73
+ui/panels/options_bar.py	method	get_options	OptionsBar	81
+ui/panels/options_bar.py	method	apply_config	OptionsBar	103
+ui/panels/options_bar.py	method	set_directory	OptionsBar	126
+ui/panels/options_bar.py	method	_build	OptionsBar	132
+ui/panels/options_bar.py	method	_lbl	OptionsBar	245
+ui/panels/options_bar.py	method	_sep	OptionsBar	251
+ui/panels/options_bar.py	method	_update_quality_options	OptionsBar	258
+ui/panels/options_bar.py	method	_on_format_change	OptionsBar	269
+ui/panels/options_bar.py	method	_on_browse	OptionsBar	273
+ui/panels/options_bar.py	method	_on_clip_toggle	OptionsBar	284
+ui/panels/queue_panel.py	from	__future__.annotations		18
+ui/panels/queue_panel.py	from	typing.Optional		20
+ui/panels/queue_panel.py	from	PySide6.QtCore.Qt		22
+ui/panels/queue_panel.py	from	PySide6.QtCore.QPoint		22
+ui/panels/queue_panel.py	from	PySide6.QtCore.Signal		22
+ui/panels/queue_panel.py	from	PySide6.QtGui.QColor		25
+ui/panels/queue_panel.py	from	PySide6.QtGui.QPainter		25
+ui/panels/queue_panel.py	from	PySide6.QtGui.QPen		25
+ui/panels/queue_panel.py	from	PySide6.QtGui.QPixmap		25
+ui/panels/queue_panel.py	from	PySide6.QtWidgets.QCheckBox		26
+ui/panels/queue_panel.py	from	PySide6.QtWidgets.QFrame		26
+ui/panels/queue_panel.py	from	PySide6.QtWidgets.QHBoxLayout		26
+ui/panels/queue_panel.py	from	PySide6.QtWidgets.QLabel		26
+ui/panels/queue_panel.py	from	PySide6.QtWidgets.QScrollArea		26
+ui/panels/queue_panel.py	from	PySide6.QtWidgets.QSizePolicy		26
+ui/panels/queue_panel.py	from	PySide6.QtWidgets.QVBoxLayout		26
+ui/panels/queue_panel.py	from	PySide6.QtWidgets.QWidget		26
+ui/panels/queue_panel.py	from	qfluentwidgets.BodyLabel		30
+ui/panels/queue_panel.py	from	qfluentwidgets.CaptionLabel		30
+ui/panels/queue_panel.py	from	qfluentwidgets.PushButton		30
+ui/panels/queue_panel.py	from	qfluentwidgets.DropDownPushButton		30
+ui/panels/queue_panel.py	from	qfluentwidgets.RoundMenu		30
+ui/panels/queue_panel.py	from	qfluentwidgets.Action		30
+ui/panels/queue_panel.py	from	qfluentwidgets.ToolButton		30
+ui/panels/queue_panel.py	from	qfluentwidgets.FluentIcon		30
+ui/panels/queue_panel.py	from	ui.components.track_card.TrackCard		35
+ui/panels/queue_panel.py	from	ui.i18n.t		36
+ui/panels/queue_panel.py	from	ui.theme_manager.ACCENT_COLOR		37
+ui/panels/queue_panel.py	from	ui.theme_manager.get_colors		37
+ui/panels/queue_panel.py	class	_DropIndicator		44
+ui/panels/queue_panel.py	method	__init__	_DropIndicator	50
+ui/panels/queue_panel.py	method	paintEvent	_DropIndicator	56
+ui/panels/queue_panel.py	method	show_at_y	_DropIndicator	61
+ui/panels/queue_panel.py	class	_DropArea		71
+ui/panels/queue_panel.py	classvar	reorder_requested	_DropArea	77
+ui/panels/queue_panel.py	method	__init__	_DropArea	79
+ui/panels/queue_panel.py	method	cards_layout	_DropArea	90
+ui/panels/queue_panel.py	method	dragEnterEvent	_DropArea	95
+ui/panels/queue_panel.py	method	dragMoveEvent	_DropArea	99
+ui/panels/queue_panel.py	method	dragLeaveEvent	_DropArea	105
+ui/panels/queue_panel.py	method	dropEvent	_DropArea	108
+ui/panels/queue_panel.py	method	_insertion_y	_DropArea	128
+ui/panels/queue_panel.py	method	_card_index_at	_DropArea	144
+ui/panels/queue_panel.py	class	QueuePanel		164
+ui/panels/queue_panel.py	classvar	selection_changed	QueuePanel	173
+ui/panels/queue_panel.py	classvar	card_removed	QueuePanel	174
+ui/panels/queue_panel.py	classvar	pause_resume_triggered	QueuePanel	175
+ui/panels/queue_panel.py	method	__init__	QueuePanel	177
+ui/panels/queue_panel.py	method	add_card	QueuePanel	188
+ui/panels/queue_panel.py	method	clear	QueuePanel	236
+ui/panels/queue_panel.py	method	get_all_cards	QueuePanel	244
+ui/panels/queue_panel.py	method	get_selected_cards	QueuePanel	247
+ui/panels/queue_panel.py	method	card_by_index	QueuePanel	250
+ui/panels/queue_panel.py	method	set_all_selected	QueuePanel	256
+ui/panels/queue_panel.py	method	_build	QueuePanel	263
+ui/panels/queue_panel.py	method	_apply_theme	QueuePanel	332
+ui/panels/queue_panel.py	method	_build_empty_state	QueuePanel	402
+ui/panels/queue_panel.py	method	_on_card_remove	QueuePanel	426
+ui/panels/queue_panel.py	method	_on_selection_change	QueuePanel	437
+ui/panels/queue_panel.py	method	_on_reorder	QueuePanel	441
+ui/panels/queue_panel.py	method	_clear_completed	QueuePanel	466
+ui/panels/queue_panel.py	method	clear_selected	QueuePanel	477
+ui/panels/queue_panel.py	method	set_pause_resume_state	QueuePanel	488
+ui/panels/queue_panel.py	method	_on_global_pause_resume_click	QueuePanel	498
+ui/panels/queue_panel.py	method	_update_header	QueuePanel	505
+ui/panels/queue_panel.py	method	_update_stats	QueuePanel	515
+ui/panels/search_panel.py	from	__future__.annotations		23
+ui/panels/search_panel.py	import	logging		25
+ui/panels/search_panel.py	from	PySide6.QtCore.Qt		27
+ui/panels/search_panel.py	from	PySide6.QtCore.Signal		27
+ui/panels/search_panel.py	from	PySide6.QtWidgets.QFrame		28
+ui/panels/search_panel.py	from	PySide6.QtWidgets.QHBoxLayout		28
+ui/panels/search_panel.py	from	PySide6.QtWidgets.QLabel		28
+ui/panels/search_panel.py	from	PySide6.QtWidgets.QMenu		28
+ui/panels/search_panel.py	from	PySide6.QtWidgets.QScrollArea		28
+ui/panels/search_panel.py	from	PySide6.QtWidgets.QSizePolicy		28
+ui/panels/search_panel.py	from	PySide6.QtWidgets.QVBoxLayout		28
+ui/panels/search_panel.py	from	PySide6.QtWidgets.QWidget		28
+ui/panels/search_panel.py	from	qfluentwidgets.BodyLabel		32
+ui/panels/search_panel.py	from	qfluentwidgets.CaptionLabel		32
+ui/panels/search_panel.py	from	qfluentwidgets.IndeterminateProgressRing		32
+ui/panels/search_panel.py	from	qfluentwidgets.PushButton		32
+ui/panels/search_panel.py	from	qfluentwidgets.SearchLineEdit		32
+ui/panels/search_panel.py	from	qfluentwidgets.SegmentedWidget		32
+ui/panels/search_panel.py	from	config.AppConfig		37
+ui/panels/search_panel.py	from	core.search_engine.ResultKind		38
+ui/panels/search_panel.py	from	core.search_engine.SearchResult		38
+ui/panels/search_panel.py	from	ui.components.search_result_card.SearchResultCard		39
+ui/panels/search_panel.py	from	ui.i18n.t		40
+ui/panels/search_panel.py	from	ui.theme_manager.ACCENT_COLOR		41
+ui/panels/search_panel.py	from	ui.theme_manager.get_colors		41
+ui/panels/search_panel.py	const	logger		43
+ui/panels/search_panel.py	const	_SECTION_ORDER		46
+ui/panels/search_panel.py	const	_SECTION_LABELS		54
+ui/panels/search_panel.py	class	SearchPanel		66
+ui/panels/search_panel.py	classvar	add_to_queue_requested	SearchPanel	76
+ui/panels/search_panel.py	classvar	drill_down_requested	SearchPanel	77
+ui/panels/search_panel.py	classvar	search_requested	SearchPanel	78
+ui/panels/search_panel.py	method	__init__	SearchPanel	80
+ui/panels/search_panel.py	method	get_query	SearchPanel	104
+ui/panels/search_panel.py	method	get_platform	SearchPanel	107
+ui/panels/search_panel.py	method	set_searching	SearchPanel	110
+ui/panels/search_panel.py	method	add_result	SearchPanel	122
+ui/panels/search_panel.py	method	clear_results	SearchPanel	155
+ui/panels/search_panel.py	method	set_result_count	SearchPanel	168
+ui/panels/search_panel.py	method	save_state	SearchPanel	176
+ui/panels/search_panel.py	method	_build	SearchPanel	183
+ui/panels/search_panel.py	method	_apply_theme	SearchPanel	295
+ui/panels/search_panel.py	method	_build_section	SearchPanel	337
+ui/panels/search_panel.py	method	_build_empty_state	SearchPanel	370
+ui/panels/search_panel.py	method	_restore_state	SearchPanel	392
+ui/panels/search_panel.py	method	_update_count	SearchPanel	399
+ui/panels/search_panel.py	method	_on_search	SearchPanel	405
+ui/panels/search_panel.py	method	_set_platform	SearchPanel	413
+ui/panels/search_panel.py	method	_on_search_return	SearchPanel	424
+ui/panels/search_panel.py	method	_add_filter_item	SearchPanel	432
+ui/panels/search_panel.py	method	_apply_filter	SearchPanel	438
+ui/panels/settings_panel.py	from	__future__.annotations		24
+ui/panels/settings_panel.py	from	pathlib.Path		26
+ui/panels/settings_panel.py	from	PySide6.QtCore.Qt		28
+ui/panels/settings_panel.py	from	PySide6.QtCore.Signal		28
+ui/panels/settings_panel.py	from	PySide6.QtWidgets.QFileDialog		29
+ui/panels/settings_panel.py	from	PySide6.QtWidgets.QFrame		29
+ui/panels/settings_panel.py	from	PySide6.QtWidgets.QHBoxLayout		29
+ui/panels/settings_panel.py	from	PySide6.QtWidgets.QLabel		29
+ui/panels/settings_panel.py	from	PySide6.QtWidgets.QScrollArea		29
+ui/panels/settings_panel.py	from	PySide6.QtWidgets.QSizePolicy		29
+ui/panels/settings_panel.py	from	PySide6.QtWidgets.QVBoxLayout		29
+ui/panels/settings_panel.py	from	PySide6.QtWidgets.QWidget		29
+ui/panels/settings_panel.py	from	qfluentwidgets.ComboBoxSettingCard		33
+ui/panels/settings_panel.py	from	qfluentwidgets.ExpandLayout		33
+ui/panels/settings_panel.py	from	qfluentwidgets.FluentIcon		33
+ui/panels/settings_panel.py	from	qfluentwidgets.HyperlinkCard		33
+ui/panels/settings_panel.py	from	qfluentwidgets.OptionsConfigItem		33
+ui/panels/settings_panel.py	from	qfluentwidgets.OptionsValidator		33
+ui/panels/settings_panel.py	from	qfluentwidgets.PushButton		33
+ui/panels/settings_panel.py	from	qfluentwidgets.PushSettingCard		33
+ui/panels/settings_panel.py	from	qfluentwidgets.SettingCardGroup		33
+ui/panels/settings_panel.py	from	qfluentwidgets.SwitchSettingCard		33
+ui/panels/settings_panel.py	from	config.AppConfig		41
+ui/panels/settings_panel.py	from	core.update_checker.CURRENT_VERSION		42
+ui/panels/settings_panel.py	from	ui.i18n.t		43
+ui/panels/settings_panel.py	from	ui.theme_manager.ACCENT_COLOR		44
+ui/panels/settings_panel.py	from	ui.theme_manager.ACCENT_PALETTE		44
+ui/panels/settings_panel.py	from	ui.theme_manager.ThemeManager		44
+ui/panels/settings_panel.py	const	_BG		48
+ui/panels/settings_panel.py	const	_SURFACE		49
+ui/panels/settings_panel.py	const	_BORDER		50
+ui/panels/settings_panel.py	const	_TEXT		51
+ui/panels/settings_panel.py	const	_TEXT_2		52
+ui/panels/settings_panel.py	class	SettingsPanel		59
+ui/panels/settings_panel.py	classvar	theme_changed	SettingsPanel	72
+ui/panels/settings_panel.py	classvar	accent_changed	SettingsPanel	73
+ui/panels/settings_panel.py	classvar	clipboard_monitor_changed	SettingsPanel	74
+ui/panels/settings_panel.py	classvar	accessibility_changed	SettingsPanel	75
+ui/panels/settings_panel.py	classvar	login_fix_requested	SettingsPanel	76
+ui/panels/settings_panel.py	classvar	settings_saved	SettingsPanel	77
+ui/panels/settings_panel.py	method	__init__	SettingsPanel	79
+ui/panels/settings_panel.py	method	refresh	SettingsPanel	92
+ui/panels/settings_panel.py	method	_build	SettingsPanel	118
+ui/panels/settings_panel.py	method	_on_theme_click	SettingsPanel	583
+ui/panels/settings_panel.py	method	_on_accent_change	SettingsPanel	590
+ui/panels/settings_panel.py	method	_on_clipboard_toggle	SettingsPanel	595
+ui/panels/settings_panel.py	method	_on_accessibility_toggle	SettingsPanel	599
+ui/panels/settings_panel.py	method	_on_browse_cookies	SettingsPanel	603
+ui/panels/settings_panel.py	method	_on_clear_cookies	SettingsPanel	611
+ui/panels/settings_panel.py	method	_on_language_change	SettingsPanel	615
+ui/panels/settings_panel.py	method	_persist	SettingsPanel	620
+ui/panels/settings_panel.py	class	_AccentPickerCard		630
+ui/panels/settings_panel.py	classvar	accent_changed	_AccentPickerCard	634
+ui/panels/settings_panel.py	method	__init__	_AccentPickerCard	636
+ui/panels/settings_panel.py	method	_build	_AccentPickerCard	641
+ui/panels/settings_panel.py	method	_on_swatch	_AccentPickerCard	664
+ui/panels/settings_panel.py	class	_SwatchButton		672
+ui/panels/settings_panel.py	method	__init__	_SwatchButton	675
+ui/panels/settings_panel.py	method	set_selected	_SwatchButton	682
+ui/panels/settings_panel.py	class	_SpinnerSettingCard		700
+ui/panels/settings_panel.py	classvar	value_changed	_SpinnerSettingCard	702
+ui/panels/settings_panel.py	method	__init__	_SpinnerSettingCard	704
+ui/panels/settings_panel.py	method	_build	_SpinnerSettingCard	715
+ui/panels/settings_panel.py	method	_on_spin_changed	_SpinnerSettingCard	753
+ui/panels/settings_panel.py	method	setValue	_SpinnerSettingCard	758
+ui/panels/settings_panel.py	class	_TextSettingCard		767
+ui/panels/settings_panel.py	classvar	value_changed	_TextSettingCard	769
+ui/panels/settings_panel.py	method	__init__	_TextSettingCard	771
+ui/panels/settings_panel.py	method	_build	_TextSettingCard	779
+ui/panels/settings_panel.py	method	_on_editing_finished	_TextSettingCard	815
+ui/panels/settings_panel.py	method	setText	_TextSettingCard	821
+ui/panels/settings_panel.py	class	_LanguageSettingCard		830
+ui/panels/settings_panel.py	classvar	value_changed	_LanguageSettingCard	832
+ui/panels/settings_panel.py	method	__init__	_LanguageSettingCard	834
+ui/panels/settings_panel.py	method	_build	_LanguageSettingCard	844
+ui/panels/settings_panel.py	method	_on_index_changed	_LanguageSettingCard	881
+ui/panels/settings_panel.py	method	setValue	_LanguageSettingCard	888
+ui/panels/status_bar.py	from	__future__.annotations		16
+ui/panels/status_bar.py	from	PySide6.QtCore.Qt		18
+ui/panels/status_bar.py	from	PySide6.QtCore.Signal		18
+ui/panels/status_bar.py	from	PySide6.QtWidgets.QFrame		19
+ui/panels/status_bar.py	from	PySide6.QtWidgets.QHBoxLayout		19
+ui/panels/status_bar.py	from	PySide6.QtWidgets.QLabel		19
+ui/panels/status_bar.py	from	PySide6.QtWidgets.QSizePolicy		19
+ui/panels/status_bar.py	from	PySide6.QtWidgets.QVBoxLayout		19
+ui/panels/status_bar.py	from	PySide6.QtWidgets.QWidget		19
+ui/panels/status_bar.py	from	qfluentwidgets.IndeterminateProgressBar		23
+ui/panels/status_bar.py	from	qfluentwidgets.ProgressBar		23
+ui/panels/status_bar.py	from	qfluentwidgets.ToolButton		23
+ui/panels/status_bar.py	from	ui.i18n.t		25
+ui/panels/status_bar.py	from	ui.theme_manager.ACCENT_COLOR		26
+ui/panels/status_bar.py	const	_BG		30
+ui/panels/status_bar.py	const	_SURFACE		31
+ui/panels/status_bar.py	const	_BORDER		32
+ui/panels/status_bar.py	const	_TEXT		33
+ui/panels/status_bar.py	const	_TEXT_2		34
+ui/panels/status_bar.py	const	_TEXT_3		35
+ui/panels/status_bar.py	const	_ERROR		36
+ui/panels/status_bar.py	class	StatusBar		43
+ui/panels/status_bar.py	classvar	cancel_requested	StatusBar	52
+ui/panels/status_bar.py	method	__init__	StatusBar	54
+ui/panels/status_bar.py	method	set_status	StatusBar	61
+ui/panels/status_bar.py	method	set_progress	StatusBar	65
+ui/panels/status_bar.py	method	start_indeterminate	StatusBar	75
+ui/panels/status_bar.py	method	stop_indeterminate	StatusBar	84
+ui/panels/status_bar.py	method	set_metrics	StatusBar	88
+ui/panels/status_bar.py	method	set_cancel_visible	StatusBar	93
+ui/panels/status_bar.py	method	reset	StatusBar	97
+ui/panels/status_bar.py	method	_build	StatusBar	108
+ui/panels/status_bar.py	method	_stop_indeterminate	StatusBar	199
+ui/panels/url_bar.py	from	__future__.annotations		17
+ui/panels/url_bar.py	from	pathlib.Path		19
+ui/panels/url_bar.py	from	PySide6.QtCore.Qt		21
+ui/panels/url_bar.py	from	PySide6.QtCore.Signal		21
+ui/panels/url_bar.py	from	PySide6.QtGui.QColor		22
+ui/panels/url_bar.py	from	PySide6.QtWidgets.QFileDialog		23
+ui/panels/url_bar.py	from	PySide6.QtWidgets.QFrame		23
+ui/panels/url_bar.py	from	PySide6.QtWidgets.QHBoxLayout		23
+ui/panels/url_bar.py	from	PySide6.QtWidgets.QLabel		23
+ui/panels/url_bar.py	from	PySide6.QtWidgets.QSizePolicy		23
+ui/panels/url_bar.py	from	PySide6.QtWidgets.QWidget		23
+ui/panels/url_bar.py	from	qfluentwidgets.LineEdit		27
+ui/panels/url_bar.py	from	qfluentwidgets.PrimaryPushButton		27
+ui/panels/url_bar.py	from	qfluentwidgets.ToolButton		27
+ui/panels/url_bar.py	from	config.AppConfig		31
+ui/panels/url_bar.py	from	ui.theme_manager.ACCENT_COLOR		32
+ui/panels/url_bar.py	from	ui.i18n.t		33
+ui/panels/url_bar.py	const	_BG		40
+ui/panels/url_bar.py	const	_SURFACE		41
+ui/panels/url_bar.py	const	_BORDER		42
+ui/panels/url_bar.py	const	_TEXT		43
+ui/panels/url_bar.py	const	_TEXT_3		44
+ui/panels/url_bar.py	const	_SUCCESS		45
+ui/panels/url_bar.py	class	UrlBar		52
+ui/panels/url_bar.py	classvar	fetch_requested	UrlBar	62
+ui/panels/url_bar.py	classvar	batch_import_requested	UrlBar	63
+ui/panels/url_bar.py	classvar	scrape_requested	UrlBar	64
+ui/panels/url_bar.py	method	__init__	UrlBar	66
+ui/panels/url_bar.py	method	get_url	UrlBar	74
+ui/panels/url_bar.py	method	set_url	UrlBar	78
+ui/panels/url_bar.py	method	set_fetching	UrlBar	83
+ui/panels/url_bar.py	method	clear_url	UrlBar	92
+ui/panels/url_bar.py	method	set_clipboard_monitor_active	UrlBar	97
+ui/panels/url_bar.py	method	_build	UrlBar	113
+ui/panels/url_bar.py	method	_tool_btn	UrlBar	189
+ui/panels/url_bar.py	method	_on_fetch	UrlBar	211
+ui/panels/url_bar.py	method	_on_paste	UrlBar	216
+ui/panels/url_bar.py	method	_on_batch_import	UrlBar	225
+ui/panels/url_bar.py	method	_on_scrape	UrlBar	238
+ui/theme_manager.py	from	__future__.annotations		36
+ui/theme_manager.py	from	dataclasses.dataclass		38
+ui/theme_manager.py	from	typing.Final		39
+ui/theme_manager.py	from	typing.Optional		39
+ui/theme_manager.py	from	PySide6.QtCore.QObject		41
+ui/theme_manager.py	from	PySide6.QtCore.Signal		41
+ui/theme_manager.py	from	PySide6.QtWidgets.QApplication		42
+ui/theme_manager.py	from	qfluentwidgets.setTheme		43
+ui/theme_manager.py	from	qfluentwidgets.setThemeColor		43
+ui/theme_manager.py	from	qfluentwidgets.Theme		43
+ui/theme_manager.py	from	config.AppConfig		45
+ui/theme_manager.py	const	ACCENT_PALETTE		52
+ui/theme_manager.py	const	ACCENT_COLOR		64
+ui/theme_manager.py	const	ACCENT_COLOR_DIM		65
+ui/theme_manager.py	const	SUCCESS_COLOR		68
+ui/theme_manager.py	const	ERROR_COLOR		69
+ui/theme_manager.py	const	WARNING_COLOR		70
+ui/theme_manager.py	const	PROCESSING_COLOR		71
+ui/theme_manager.py	const	BG_DARK		74
+ui/theme_manager.py	const	SURFACE_DARK		75
+ui/theme_manager.py	const	SURFACE2_DARK		76
+ui/theme_manager.py	const	BORDER_DARK		77
+ui/theme_manager.py	const	TEXT_DARK		78
+ui/theme_manager.py	const	TEXT2_DARK		79
+ui/theme_manager.py	const	TEXT3_DARK		80
+ui/theme_manager.py	const	BG_LIGHT		83
+ui/theme_manager.py	const	SURFACE_LIGHT		84
+ui/theme_manager.py	const	SURFACE2_LIGHT		85
+ui/theme_manager.py	const	BORDER_LIGHT		86
+ui/theme_manager.py	const	TEXT_LIGHT		87
+ui/theme_manager.py	const	TEXT2_LIGHT		88
+ui/theme_manager.py	const	TEXT3_LIGHT		89
+ui/theme_manager.py	const	_CYCLE_ORDER		91
+ui/theme_manager.py	class	ThemeColors		99
+ui/theme_manager.py	func	get_colors		110
+ui/theme_manager.py	func	_dim_hex		130
+ui/theme_manager.py	func	_lighten_hex		142
+ui/theme_manager.py	func	_build_dark_qss		151
+ui/theme_manager.py	func	_build_light_qss		304
+ui/theme_manager.py	func	_build_oled_qss		638
+ui/theme_manager.py	class	ThemeManager		705
+ui/theme_manager.py	classvar	theme_changed	ThemeManager	723
+ui/theme_manager.py	method	instance	ThemeManager	727
+ui/theme_manager.py	method	__init__	ThemeManager	730
+ui/theme_manager.py	method	current	ThemeManager	742
+ui/theme_manager.py	method	accent	ThemeManager	746
+ui/theme_manager.py	method	apply	ThemeManager	749
+ui/theme_manager.py	method	cycle	ThemeManager	760
+ui/theme_manager.py	method	set_accent	ThemeManager	770
+ui/theme_manager.py	method	theme_display_label	ThemeManager	799
+ui/theme_manager.py	method	next_theme_label	ThemeManager	804
+ui/theme_manager.py	method	is_dark_variant	ThemeManager	814
+ui/theme_manager.py	method	_apply_fluent	ThemeManager	819
+ui/theme_manager.py	method	_apply_qss	ThemeManager	825
+ui/workers/__init__.py	from	ui.workers.fetch_worker.FetchWorker		21
+ui/workers/__init__.py	from	ui.workers.download_worker.DownloadWorker		22
+ui/workers/__init__.py	from	ui.workers.thumbnail_worker.ThumbnailWorker		23
+ui/workers/__init__.py	from	ui.workers.clipboard_worker.ClipboardWorker		24
+ui/workers/__init__.py	from	ui.workers.search_worker.SearchWorker		25
+ui/workers/__init__.py	from	ui.workers.scraper_worker.ScraperWorker		26
+ui/workers/__init__.py	from	ui.workers.update_worker.UpdateWorker		27
+ui/workers/__init__.py	const	__all__		29
+ui/workers/channel_scrape_worker.py	from	__future__.annotations		17
+ui/workers/channel_scrape_worker.py	import	logging		19
+ui/workers/channel_scrape_worker.py	from	typing.Optional		20
+ui/workers/channel_scrape_worker.py	from	PySide6.QtCore.QThread		22
+ui/workers/channel_scrape_worker.py	from	PySide6.QtCore.Signal		22
+ui/workers/channel_scrape_worker.py	from	core.channel_tab_discoverer.TabInfo		24
+ui/workers/channel_scrape_worker.py	from	core.duplicate_detector.VideoInfo		25
+ui/workers/channel_scrape_worker.py	const	logger		27
+ui/workers/channel_scrape_worker.py	class	ChannelScrapeWorker		30
+ui/workers/channel_scrape_worker.py	classvar	tab_started	ChannelScrapeWorker	47
+ui/workers/channel_scrape_worker.py	classvar	tab_progress	ChannelScrapeWorker	48
+ui/workers/channel_scrape_worker.py	classvar	tab_done	ChannelScrapeWorker	49
+ui/workers/channel_scrape_worker.py	classvar	all_done	ChannelScrapeWorker	50
+ui/workers/channel_scrape_worker.py	classvar	error	ChannelScrapeWorker	51
+ui/workers/channel_scrape_worker.py	method	__init__	ChannelScrapeWorker	53
+ui/workers/channel_scrape_worker.py	method	cancel	ChannelScrapeWorker	68
+ui/workers/channel_scrape_worker.py	method	run	ChannelScrapeWorker	73
+ui/workers/channel_scrape_worker.py	method	_scrape_flat_tab	ChannelScrapeWorker	100
+ui/workers/channel_scrape_worker.py	method	_scrape_playlists_tab	ChannelScrapeWorker	135
+ui/workers/channel_scrape_worker.py	method	_entry_to_video	ChannelScrapeWorker	213
+ui/workers/clipboard_worker.py	from	__future__.annotations		35
+ui/workers/clipboard_worker.py	from	PySide6.QtCore.QObject		37
+ui/workers/clipboard_worker.py	from	PySide6.QtCore.QTimer		37
+ui/workers/clipboard_worker.py	from	PySide6.QtCore.Signal		37
+ui/workers/clipboard_worker.py	from	PySide6.QtWidgets.QApplication		38
+ui/workers/clipboard_worker.py	from	core.batch_importer.BatchImporter		40
+ui/workers/clipboard_worker.py	class	ClipboardWorker		43
+ui/workers/clipboard_worker.py	classvar	url_detected	ClipboardWorker	57
+ui/workers/clipboard_worker.py	method	__init__	ClipboardWorker	67
+ui/workers/clipboard_worker.py	method	start	ClipboardWorker	82
+ui/workers/clipboard_worker.py	method	stop	ClipboardWorker	91
+ui/workers/clipboard_worker.py	method	is_active	ClipboardWorker	96
+ui/workers/clipboard_worker.py	method	set_interval	ClipboardWorker	100
+ui/workers/clipboard_worker.py	method	_check_clipboard	ClipboardWorker	106
+ui/workers/clipboard_worker.py	method	_read_clipboard	ClipboardWorker	127
+ui/workers/download_worker.py	from	__future__.annotations		25
+ui/workers/download_worker.py	import	logging		27
+ui/workers/download_worker.py	from	typing.Optional		28
+ui/workers/download_worker.py	from	PySide6.QtCore.QThread		30
+ui/workers/download_worker.py	from	PySide6.QtCore.Signal		30
+ui/workers/download_worker.py	from	config.AppConfig		32
+ui/workers/download_worker.py	from	core.download_orchestrator.BatchResult		33
+ui/workers/download_worker.py	from	core.download_orchestrator.DownloadOrchestrator		33
+ui/workers/download_worker.py	from	core.download_orchestrator.OrchestratorCallbacks		33
+ui/workers/download_worker.py	from	core.history_db.HistoryDB		38
+ui/workers/download_worker.py	from	core.downloader.DownloadEngine		39
+ui/workers/download_worker.py	from	core.downloader.DownloadRequest		39
+ui/workers/download_worker.py	from	error_handler.ErrorInfo		40
+ui/workers/download_worker.py	const	logger		42
+ui/workers/download_worker.py	class	_SignalAdapter		49
+ui/workers/download_worker.py	method	__init__	_SignalAdapter	57
+ui/workers/download_worker.py	method	on_track_progress	_SignalAdapter	60
+ui/workers/download_worker.py	method	on_track_speed	_SignalAdapter	63
+ui/workers/download_worker.py	method	on_track_status	_SignalAdapter	66
+ui/workers/download_worker.py	method	on_track_finished	_SignalAdapter	69
+ui/workers/download_worker.py	method	on_track_error	_SignalAdapter	72
+ui/workers/download_worker.py	method	on_overall_progress	_SignalAdapter	75
+ui/workers/download_worker.py	method	on_metrics	_SignalAdapter	78
+ui/workers/download_worker.py	method	on_status_message	_SignalAdapter	81
+ui/workers/download_worker.py	method	on_job_count_changed	_SignalAdapter	84
+ui/workers/download_worker.py	method	on_batch_finished	_SignalAdapter	87
+ui/workers/download_worker.py	method	on_track_thumbnail	_SignalAdapter	90
+ui/workers/download_worker.py	class	DownloadWorker		98
+ui/workers/download_worker.py	classvar	track_progress	DownloadWorker	113
+ui/workers/download_worker.py	classvar	track_speed	DownloadWorker	114
+ui/workers/download_worker.py	classvar	track_status	DownloadWorker	115
+ui/workers/download_worker.py	classvar	track_finished	DownloadWorker	116
+ui/workers/download_worker.py	classvar	overall_progress	DownloadWorker	117
+ui/workers/download_worker.py	classvar	metrics	DownloadWorker	118
+ui/workers/download_worker.py	classvar	status_msg	DownloadWorker	119
+ui/workers/download_worker.py	classvar	job_error	DownloadWorker	120
+ui/workers/download_worker.py	classvar	job_count_changed	DownloadWorker	121
+ui/workers/download_worker.py	classvar	all_finished	DownloadWorker	122
+ui/workers/download_worker.py	classvar	track_thumbnail	DownloadWorker	123
+ui/workers/download_worker.py	method	__init__	DownloadWorker	127
+ui/workers/download_worker.py	method	cancel	DownloadWorker	148
+ui/workers/download_worker.py	method	cancel_track	DownloadWorker	152
+ui/workers/download_worker.py	method	shutdown	DownloadWorker	156
+ui/workers/download_worker.py	method	run	DownloadWorker	172
+ui/workers/duplicate_detector_worker.py	from	__future__.annotations		36
+ui/workers/duplicate_detector_worker.py	import	hashlib		38
+ui/workers/duplicate_detector_worker.py	import	threading		39
+ui/workers/duplicate_detector_worker.py	import	time		40
+ui/workers/duplicate_detector_worker.py	from	pathlib.Path		41
+ui/workers/duplicate_detector_worker.py	from	PySide6.QtCore.QThread		43
+ui/workers/duplicate_detector_worker.py	from	PySide6.QtCore.Signal		43
+ui/workers/duplicate_detector_worker.py	const	_AUDIO_EXTS		45
+ui/workers/duplicate_detector_worker.py	class	DuplicateDetectorWorker		51
+ui/workers/duplicate_detector_worker.py	classvar	progress	DuplicateDetectorWorker	59
+ui/workers/duplicate_detector_worker.py	classvar	finished	DuplicateDetectorWorker	60
+ui/workers/duplicate_detector_worker.py	classvar	error	DuplicateDetectorWorker	61
+ui/workers/duplicate_detector_worker.py	method	__init__	DuplicateDetectorWorker	63
+ui/workers/duplicate_detector_worker.py	method	cancel	DuplicateDetectorWorker	69
+ui/workers/duplicate_detector_worker.py	method	run	DuplicateDetectorWorker	72
+ui/workers/duplicate_detector_worker.py	method	_find_by_size	DuplicateDetectorWorker	103
+ui/workers/duplicate_detector_worker.py	method	_find_by_md5	DuplicateDetectorWorker	119
+ui/workers/duplicate_detector_worker.py	method	_audio_hash	DuplicateDetectorWorker	138
+ui/workers/duplicate_detector_worker.py	method	_mp3_audio_start	DuplicateDetectorWorker	182
+ui/workers/duplicate_detector_worker.py	method	_mp3_audio_end	DuplicateDetectorWorker	204
+ui/workers/duplicate_detector_worker.py	method	_flac_audio_start	DuplicateDetectorWorker	222
+ui/workers/duplicate_detector_worker.py	method	_m4a_mdat_bounds	DuplicateDetectorWorker	250
+ui/workers/duplicate_detector_worker.py	method	_eta	DuplicateDetectorWorker	278
+ui/workers/fetch_worker.py	from	__future__.annotations		23
+ui/workers/fetch_worker.py	from	typing.Optional		25
+ui/workers/fetch_worker.py	from	PySide6.QtCore.QThread		27
+ui/workers/fetch_worker.py	from	PySide6.QtCore.Signal		27
+ui/workers/fetch_worker.py	from	error_handler.classify_error		29
+ui/workers/fetch_worker.py	from	error_handler.ErrorInfo		29
+ui/workers/fetch_worker.py	from	core.playlist_parser.ParseResult		30
+ui/workers/fetch_worker.py	from	core.playlist_parser.PlaylistParser		30
+ui/workers/fetch_worker.py	from	core.playlist_parser.SourcePlatform		30
+ui/workers/fetch_worker.py	from	core.playlist_parser.TrackMeta		30
+ui/workers/fetch_worker.py	class	FetchWorker		38
+ui/workers/fetch_worker.py	classvar	track_found	FetchWorker	53
+ui/workers/fetch_worker.py	classvar	progress_msg	FetchWorker	55
+ui/workers/fetch_worker.py	classvar	soft_error	FetchWorker	56
+ui/workers/fetch_worker.py	classvar	finished	FetchWorker	57
+ui/workers/fetch_worker.py	classvar	error	FetchWorker	58
+ui/workers/fetch_worker.py	method	__init__	FetchWorker	71
+ui/workers/fetch_worker.py	method	cancel	FetchWorker	88
+ui/workers/fetch_worker.py	method	run	FetchWorker	98
+ui/workers/metadata_worker.py	from	__future__.annotations		10
+ui/workers/metadata_worker.py	import	threading		12
+ui/workers/metadata_worker.py	from	datetime.datetime		13
+ui/workers/metadata_worker.py	from	pathlib.Path		14
+ui/workers/metadata_worker.py	from	typing.Optional		15
+ui/workers/metadata_worker.py	from	PySide6.QtCore.QThread		17
+ui/workers/metadata_worker.py	from	PySide6.QtCore.Signal		17
+ui/workers/metadata_worker.py	from	core.metadata_models.AudioTrackItem		19
+ui/workers/metadata_worker.py	from	core.metadata_models.ScanResult		19
+ui/workers/metadata_worker.py	from	core.metadata_models.TrackStatus		19
+ui/workers/metadata_worker.py	from	core.metadata_processor.backup_tags		20
+ui/workers/metadata_worker.py	from	core.metadata_processor.build_scan_result		20
+ui/workers/metadata_worker.py	from	core.metadata_processor.scan_folder		20
+ui/workers/metadata_worker.py	from	core.metadata_processor.scan_folders		20
+ui/workers/metadata_worker.py	from	core.metadata_processor.write_tags		20
+ui/workers/metadata_worker.py	class	MetadataScanWorker		29
+ui/workers/metadata_worker.py	classvar	track_found	MetadataScanWorker	41
+ui/workers/metadata_worker.py	classvar	scan_complete	MetadataScanWorker	42
+ui/workers/metadata_worker.py	classvar	scan_error	MetadataScanWorker	43
+ui/workers/metadata_worker.py	method	__init__	MetadataScanWorker	45
+ui/workers/metadata_worker.py	method	cancel	MetadataScanWorker	51
+ui/workers/metadata_worker.py	method	run	MetadataScanWorker	54
+ui/workers/metadata_worker.py	class	MetadataApplyWorker		75
+ui/workers/metadata_worker.py	classvar	progress	MetadataApplyWorker	87
+ui/workers/metadata_worker.py	classvar	file_done	MetadataApplyWorker	88
+ui/workers/metadata_worker.py	classvar	finished	MetadataApplyWorker	89
+ui/workers/metadata_worker.py	method	__init__	MetadataApplyWorker	91
+ui/workers/metadata_worker.py	method	cancel	MetadataApplyWorker	102
+ui/workers/metadata_worker.py	method	run	MetadataApplyWorker	105
+ui/workers/offline_monitor.py	from	__future__.annotations		20
+ui/workers/offline_monitor.py	from	typing.Optional		22
+ui/workers/offline_monitor.py	from	PySide6.QtCore.QObject		24
+ui/workers/offline_monitor.py	from	PySide6.QtCore.Signal		24
+ui/workers/offline_monitor.py	from	core.offline_monitor.NetworkMonitor		26
+ui/workers/offline_monitor.py	class	OfflineMonitor		29
+ui/workers/offline_monitor.py	classvar	went_offline	OfflineMonitor	39
+ui/workers/offline_monitor.py	classvar	came_online	OfflineMonitor	40
+ui/workers/offline_monitor.py	method	__init__	OfflineMonitor	42
+ui/workers/offline_monitor.py	method	start	OfflineMonitor	51
+ui/workers/offline_monitor.py	method	stop	OfflineMonitor	55
+ui/workers/offline_monitor.py	method	is_online	OfflineMonitor	60
+ui/workers/offline_monitor.py	method	_emit_offline	OfflineMonitor	66
+ui/workers/offline_monitor.py	method	_emit_online	OfflineMonitor	69
+ui/workers/scraper_worker.py	from	__future__.annotations		22
+ui/workers/scraper_worker.py	from	typing.Optional		24
+ui/workers/scraper_worker.py	from	PySide6.QtCore.QThread		26
+ui/workers/scraper_worker.py	from	PySide6.QtCore.Signal		26
+ui/workers/scraper_worker.py	from	core.search_engine.PageScraper		28
+ui/workers/scraper_worker.py	from	core.search_engine.ScraperError		28
+ui/workers/scraper_worker.py	class	ScraperWorker		31
+ui/workers/scraper_worker.py	classvar	url_found	ScraperWorker	45
+ui/workers/scraper_worker.py	classvar	status_msg	ScraperWorker	46
+ui/workers/scraper_worker.py	classvar	finished	ScraperWorker	47
+ui/workers/scraper_worker.py	classvar	error	ScraperWorker	48
+ui/workers/scraper_worker.py	method	__init__	ScraperWorker	52
+ui/workers/scraper_worker.py	method	cancel	ScraperWorker	65
+ui/workers/scraper_worker.py	method	run	ScraperWorker	75
+ui/workers/search_worker.py	from	__future__.annotations		33
+ui/workers/search_worker.py	import	logging		35
+ui/workers/search_worker.py	from	typing.Optional		36
+ui/workers/search_worker.py	from	PySide6.QtCore.QThread		38
+ui/workers/search_worker.py	from	PySide6.QtCore.Signal		38
+ui/workers/search_worker.py	from	core.search_engine.SearchEngine		40
+ui/workers/search_worker.py	from	core.search_engine.SearchError		40
+ui/workers/search_worker.py	from	core.search_engine.SearchResult		40
+ui/workers/search_worker.py	const	logger		42
+ui/workers/search_worker.py	class	SearchWorker		45
+ui/workers/search_worker.py	classvar	result_ready	SearchWorker	62
+ui/workers/search_worker.py	classvar	status_msg	SearchWorker	63
+ui/workers/search_worker.py	classvar	finished	SearchWorker	64
+ui/workers/search_worker.py	classvar	error	SearchWorker	65
+ui/workers/search_worker.py	method	__init__	SearchWorker	69
+ui/workers/search_worker.py	method	cancel	SearchWorker	97
+ui/workers/search_worker.py	method	run	SearchWorker	104
+ui/workers/search_worker.py	method	_run_youtube	SearchWorker	161
+ui/workers/search_worker.py	method	_run_ytmusic	SearchWorker	181
+ui/workers/search_worker.py	method	_run_spotify	SearchWorker	193
+ui/workers/thumbnail_worker.py	from	__future__.annotations		20
+ui/workers/thumbnail_worker.py	from	PySide6.QtCore.QThread		22
+ui/workers/thumbnail_worker.py	from	PySide6.QtCore.Signal		22
+ui/workers/thumbnail_worker.py	import	requests		23
+ui/workers/thumbnail_worker.py	class	ThumbnailWorker		26
+ui/workers/thumbnail_worker.py	classvar	thumbnail_ready	ThumbnailWorker	42
+ui/workers/thumbnail_worker.py	method	__init__	ThumbnailWorker	48
+ui/workers/thumbnail_worker.py	method	run	ThumbnailWorker	62
+ui/workers/update_worker.py	from	__future__.annotations		21
+ui/workers/update_worker.py	from	PySide6.QtCore.QThread		23
+ui/workers/update_worker.py	from	PySide6.QtCore.Signal		23
+ui/workers/update_worker.py	from	core.update_checker.ReleaseInfo		25
+ui/workers/update_worker.py	from	core.update_checker.UpdateChecker		25
+ui/workers/update_worker.py	class	UpdateWorker		28
+ui/workers/update_worker.py	classvar	update_available	UpdateWorker	45
+ui/workers/update_worker.py	method	__init__	UpdateWorker	51
+ui/workers/update_worker.py	method	run	UpdateWorker	67
+utils/artwork_cleaner.py	import	re		8
+utils/artwork_cleaner.py	func	clean_artwork_url		9
+utils/cookie_validator.py	from	__future__.annotations		10
+utils/cookie_validator.py	import	logging		12
+utils/cookie_validator.py	import	time		13
+utils/cookie_validator.py	from	pathlib.Path		14
+utils/cookie_validator.py	const	logger		16
+utils/cookie_validator.py	func	check_cookies_valid		19
+utils/impersonate.py	const	CURL_CFFI_AVAILABLE		5
+utils/impersonate.py	const	ImpersonateTarget		6
+utils/logger.py	from	__future__.annotations		21
+utils/logger.py	class	SilentLogger		24
+utils/logger.py	method	__init__	SilentLogger	39
+utils/logger.py	method	debug	SilentLogger	45
+utils/logger.py	method	info	SilentLogger	48
+utils/logger.py	method	warning	SilentLogger	51
+utils/logger.py	method	error	SilentLogger	55
+utils/logger.py	method	has_errors	SilentLogger	61
+utils/logger.py	method	has_warnings	SilentLogger	64
+utils/logger.py	method	clear	SilentLogger	67
+utils/logger.py	method	__repr__	SilentLogger	72
+utils/logging_config.py	from	__future__.annotations		23
+utils/logging_config.py	import	logging		25
+utils/logging_config.py	import	logging.handlers		26
+utils/logging_config.py	import	os		27
+utils/logging_config.py	import	sys		28
+utils/logging_config.py	from	pathlib.Path		29
+utils/logging_config.py	from	typing.Optional		30
+utils/logging_config.py	const	_LOG_DIR_NAME		37
+utils/logging_config.py	const	_LOG_FILE		38
+utils/logging_config.py	const	_MAX_BYTES		39
+utils/logging_config.py	const	_BACKUP_COUNT		40
+utils/logging_config.py	const	_FILE_FMT		42
+utils/logging_config.py	const	_CONSOLE_FMT		45
+utils/logging_config.py	const	_DATE_FMT		48
+utils/logging_config.py	class	_CardKeyFilter		55
+utils/logging_config.py	method	filter	_CardKeyFilter	58
+utils/logging_config.py	func	setup_logging		68
+utils/network_probe.py	from	__future__.annotations		8
+utils/network_probe.py	import	httpx		10
+utils/network_probe.py	const	_PROBE_URL		12
+utils/network_probe.py	const	_PROBE_TIMEOUT		13
+utils/network_probe.py	func	probe_network		16
+utils/paths.py	from	__future__.annotations		8
+utils/paths.py	import	os		10
+utils/paths.py	from	pathlib.Path		11
+utils/paths.py	func	get_app_data_dir		14
+utils/paths.py	func	get_app_cookies_path		28
+utils/paths.py	func	get_log_dir		33
+utils/paths.py	func	get_history_db_path		38
+utils/spotify_resolver.py	from	__future__.annotations		48
+utils/spotify_resolver.py	import	base64		50
+utils/spotify_resolver.py	import	json		51
+utils/spotify_resolver.py	import	re		52
+utils/spotify_resolver.py	import	threading		53
+utils/spotify_resolver.py	import	time		54
+utils/spotify_resolver.py	import	urllib.parse		55
+utils/spotify_resolver.py	import	urllib.request		56
+utils/spotify_resolver.py	import	logging		57
+utils/spotify_resolver.py	from	typing.Callable		58
+utils/spotify_resolver.py	from	typing.Optional		58
+utils/spotify_resolver.py	const	_TOKEN_URL		63
+utils/spotify_resolver.py	const	_API_BASE		64
+utils/spotify_resolver.py	const	_EMBED_BASE		65
+utils/spotify_resolver.py	const	_REQUEST_UA		66
+utils/spotify_resolver.py	const	logger		74
+utils/spotify_resolver.py	class	SpotifyResolver		80
+utils/spotify_resolver.py	method	resolve	SpotifyResolver	106
+utils/spotify_resolver.py	method	resolve_artist	SpotifyResolver	175
+utils/spotify_resolver.py	method	_resolve_track_api	SpotifyResolver	191
+utils/spotify_resolver.py	method	_resolve_album_api	SpotifyResolver	204
+utils/spotify_resolver.py	method	_resolve_playlist_api	SpotifyResolver	248
+utils/spotify_resolver.py	method	_resolve_artist_api	SpotifyResolver	289
+utils/spotify_resolver.py	method	_embed_fallback	SpotifyResolver	342
+utils/spotify_resolver.py	method	_resolve_proxy	SpotifyResolver	416
+utils/spotify_resolver.py	method	_resolve_artist_ytm_fallback	SpotifyResolver	514
+utils/spotify_resolver.py	method	_get_access_token	SpotifyResolver	617
+utils/spotify_resolver.py	method	_api_get	SpotifyResolver	671
+utils/spotify_resolver.py	method	_make_dict	SpotifyResolver	724
+utils/spotify_resolver.py	method	_track_dict_from_api	SpotifyResolver	746
+utils/spotify_resolver.py	method	_track_dict_from_album_track	SpotifyResolver	762
+utils/spotify_resolver.py	method	_primary_artist	SpotifyResolver	787
+utils/spotify_resolver.py	method	_best_image	SpotifyResolver	794
+utils/spotify_resolver.py	method	_get_credentials	SpotifyResolver	810
+utils/spotify_resolver.py	method	_get_proxy_config	SpotifyResolver	825
+utils/spotify_resolver.py	method	_extract_artist_name_from_html	SpotifyResolver	835
+utils/time_format.py	from	__future__.annotations		11
+utils/time_format.py	from	typing.Optional		13
+utils/time_format.py	func	seconds_to_str		16
+utils/yt_dlp_opts.py	from	__future__.annotations		19
+utils/yt_dlp_opts.py	import	shutil		21
+utils/yt_dlp_opts.py	from	typing.Any		22
+utils/yt_dlp_opts.py	from	typing.Optional		22
+utils/yt_dlp_opts.py	const	CHROME_USER_AGENT		24
+utils/yt_dlp_opts.py	const	_JS_RUNTIMES_PREFERENCE		26
+utils/yt_dlp_opts.py	func	_detect_js_runtimes		28
+utils/yt_dlp_opts.py	func	build_base_ydl_opts		42
+utils/yt_dlp_opts.py	func	build_search_ydl_opts		93
+utils/yt_dlp_opts.py	func	build_parse_ydl_opts		122
+utils/ytm_scraper.py	import	requests		1
+utils/ytm_scraper.py	import	re		2
+utils/ytm_scraper.py	from	typing.List		3
+utils/ytm_scraper.py	from	typing.Dict		3
+utils/ytm_scraper.py	from	typing.Optional		3
+utils/ytm_scraper.py	from	utils.yt_dlp_opts.CHROME_USER_AGENT		4
+utils/ytm_scraper.py	const	_API_URL		6
+utils/ytm_scraper.py	const	_CLIENT_CONTEXT		7
+utils/ytm_scraper.py	func	_clean_name		15
+utils/ytm_scraper.py	func	_call_api		21
+utils/ytm_scraper.py	func	_extract_items		44
+utils/ytm_scraper.py	func	_find_continuation		146
+utils/ytm_scraper.py	func	_extract_continuation_info		191
+utils/ytm_scraper.py	func	_drain_shelf		211
+utils/ytm_scraper.py	func	fetch_ytm_artist_releases		231
