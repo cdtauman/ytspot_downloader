@@ -512,3 +512,48 @@ class TestUpdateCheckerDefaults:
             f"{self.EXPECTED_OWNER!r}. Got {owner_default!r}."
         )
         assert repo_default == self.EXPECTED_REPO
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 11. SearchPanel restores "ytmusic" as last_search_platform (S1-4 guard)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestSearchPanelRestoresYTMusic:
+    """The restore allow-list used to omit "ytmusic", so users who last
+    selected YouTube Music silently reverted to YouTube on every
+    restart. AppConfig.last_search_platform already accepted "ytmusic"
+    on both the setter and getter — only the SearchPanel restore was
+    wrong."""
+
+    def test_ytmusic_round_trips_through_panel(self, tmp_path, monkeypatch):
+        import os
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+        # Skip if Qt or qfluentwidgets is not installed (headless CI).
+        try:
+            from PySide6.QtWidgets import QApplication
+            from ui.panels.search_panel import SearchPanel
+        except ImportError:
+            pytest.skip("PySide6 / qfluentwidgets not available")
+            return
+
+        # Use a tmp config dir so the test never reads/writes the user's
+        # real ~/.ytspot/config.json. AppConfig uses APPDATA on Windows
+        # and ~/.ytspot on POSIX; redirect both.
+        monkeypatch.setenv("APPDATA", str(tmp_path))
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        from config import AppConfig
+
+        cfg = AppConfig()
+        cfg.last_search_platform = "ytmusic"
+
+        app = QApplication.instance() or QApplication([])
+        panel = SearchPanel(config=cfg)
+        try:
+            assert panel.get_platform() == "ytmusic", (
+                "SearchPanel must restore last_search_platform=ytmusic "
+                "from config; allow-list in _restore_state regressed."
+            )
+        finally:
+            panel.deleteLater()

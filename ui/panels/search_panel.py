@@ -393,7 +393,10 @@ class SearchPanel(QWidget):
         if self._config.last_search_query:
             self._search_box.setText(self._config.last_search_query)
         platform = self._config.last_search_platform
-        if platform in ("youtube", "spotify", "both"):
+        # Must match the allow-list in AppConfig.last_search_platform —
+        # "ytmusic" was missing before, so users who last selected
+        # YouTube Music silently reverted to YouTube on restart.
+        if platform in ("youtube", "ytmusic", "spotify", "both"):
             self._set_platform(platform)
 
     def _update_count(self) -> None:
