@@ -34,7 +34,7 @@ except ImportError:
     pass
 
 from utils.cookie_validator import check_cookies_valid
-from utils.paths import get_app_cookies_path
+from utils.paths import get_app_cookies_path, get_bundled_ffmpeg_dir
 from utils.yt_dlp_opts import build_base_ydl_opts as _build_base_opts
 from core.playlist_parser import SourcePlatform
 
@@ -762,6 +762,12 @@ class DownloadEngine:
         opts["playliststart"]     = req.playlist_start
         if req.playlist_end:
             opts["playlistend"]   = req.playlist_end
+
+        # Point yt-dlp at the bundled LGPL FFmpeg when the app is
+        # installed as a frozen EXE; otherwise yt-dlp uses PATH.
+        ffmpeg_dir = get_bundled_ffmpeg_dir()
+        if ffmpeg_dir is not None:
+            opts["ffmpeg_location"] = str(ffmpeg_dir)
 
         opts["progress_hooks"]      = [self._make_progress_hook(req)]
         opts["postprocessor_hooks"] = [self._make_pp_hook(req)]

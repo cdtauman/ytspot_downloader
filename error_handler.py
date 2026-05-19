@@ -95,12 +95,15 @@ def probe_connectivity(timeout: float = 3.0) -> bool:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def check_ffmpeg() -> bool:
+    """Return True if FFmpeg is available — bundled with the EXE or on PATH.
+
+    Bundled binaries (next to ``ytspot.exe`` for a frozen build, or
+    under ``packaging/ffmpeg/`` during development) take priority over
+    a system PATH copy so the EXE always uses its known-good LGPL
+    build, never a random GPL build the user happens to have.
     """
-    Return True if FFmpeg is available on PATH.
-    Uses shutil.which (no subprocess) for safety.
-    """
-    import shutil
-    return shutil.which("ffmpeg") is not None
+    from utils.paths import get_ffmpeg_executable
+    return get_ffmpeg_executable() is not None
 
 
 # ──────────────────────────────────────────────────────────────────────────────

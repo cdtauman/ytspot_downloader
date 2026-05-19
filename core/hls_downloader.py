@@ -26,16 +26,28 @@ _VIDEO_FORMATS = {"mp4", "mkv", "webm", "mov", "ts"}
 
 
 def _find_ffmpeg() -> str:
-    """Return the ffmpeg executable path (or 'ffmpeg' and let PATH resolve it)."""
-    # Check common bundled locations first
-    candidates = [
-        Path(__file__).parent.parent / "bin" / "ffmpeg.exe",
-        Path(__file__).parent.parent / "bin" / "ffmpeg",
-    ]
-    for c in candidates:
-        if c.exists():
-            return str(c)
-    return "ffmpeg"
+    """Return the ffmpeg executable path or the literal ``ffmpeg`` token.
+
+    Single source of truth: ``utils.paths.get_ffmpeg_executable``
+    chooses the bundled binary next to ytspot.exe when present and
+    falls back to PATH. If even PATH lookup fails we return the
+    literal ``ffmpeg`` so the subsequent subprocess.run raises a
+    clear FileNotFoundError with a friendly message.
+    """
+    from utils.paths import get_ffmpeg_executable
+    return get_ffmpeg_executable() or "ffmpeg"
+
+
+def _find_ffprobe() -> str:
+    """Return ffprobe path next to the discovered ffmpeg."""
+    from utils.paths import get_bundled_ffmpeg_dir
+    bundled = get_bundled_ffmpeg_dir()
+    if bundled is not None:
+        suffix = ".exe" if Path(_find_ffmpeg()).suffix.lower() == ".exe" else ""
+        fp = bundled / f"ffprobe{suffix}"
+        if fp.exists():
+            return str(fp)
+    return "ffprobe"
 
 
 def download_hls(
@@ -173,7 +185,7 @@ def probe_stream(url: str, timeout_sec: int = 10) -> dict:
     Use ffprobe to get basic stream info (duration, codec, bitrate).
     Returns {} if ffprobe is unavailable or the URL fails.
     """
-    ffprobe = _find_ffmpeg().replace("ffmpeg", "ffprobe")
+    ffprobe = _find_ffprobe()
     cmd = [
         ffprobe, "-v", "quiet",
         "-print_format", "json",
