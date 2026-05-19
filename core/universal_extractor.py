@@ -90,11 +90,15 @@ async def intercept_page(
 
     Sorted largest-first (by size_hint) so callers can pick the best stream.
     """
-    try:
-        from playwright.async_api import async_playwright, TimeoutError as PWTimeout
-    except ImportError:
-        logger.warning("playwright not installed — universal extractor unavailable")
+    from utils.playwright_check import is_playwright_available
+    if not is_playwright_available():
+        logger.warning(
+            "[universal_extractor] Playwright Chromium not installed — "
+            "stream interception is disabled. Run "
+            "scripts/install_playwright.ps1 to enable it."
+        )
         return []
+    from playwright.async_api import async_playwright, TimeoutError as PWTimeout
 
     found: dict[str, InterceptedStream] = {}   # base_url → stream (dedup)
     page_title = ""
@@ -247,11 +251,14 @@ def scrape_generic_video_listing(
     - Page has no recognisable video links (likely a single video page)
     - Network/timeout error
     """
-    try:
-        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-    except ImportError:
-        logger.warning("[generic_listing] Playwright not installed")
+    from utils.playwright_check import is_playwright_available
+    if not is_playwright_available():
+        logger.warning(
+            "[generic_listing] Playwright Chromium not installed — "
+            "generic listing extraction is disabled."
+        )
         return []
+    from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
     _USER_AGENT = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

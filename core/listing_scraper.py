@@ -100,11 +100,14 @@ def scrape_listing_page(
         title, url, thumbnail_url, duration_str, duration_sec, artist,
         album, platform, category
     """
-    try:
-        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-    except ImportError:
-        logger.error("[ListingScraper] Playwright not installed")
+    from utils.playwright_check import is_playwright_available
+    if not is_playwright_available():
+        logger.error(
+            "[ListingScraper] Playwright Chromium not installed — "
+            "run scripts/install_playwright.ps1 to enable listing scraping."
+        )
         return "Listing", []
+    from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
     items: List[Dict] = []
     seen_urls: set = set()

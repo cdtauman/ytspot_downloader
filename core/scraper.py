@@ -3,15 +3,40 @@ core/scraper.py – Deeply Isolated & Hyper-Optimized Media Scraper
 ==================================================================
 Dedicated extraction functions for every platform and content type.
 Optimized for high-speed artist discography scraping using continuous accumulation.
+
+Playwright is imported lazily inside the scraping entry points so the
+``core.scraper`` module itself still imports on a Playwright-less
+install (e.g. headless CI or a user who skipped the post-install
+``scripts/install_playwright.ps1``). Each entry point calls
+``require_playwright_or_raise`` first and surfaces a clean error.
 """
-from playwright.sync_api import sync_playwright, Page
-from typing import Callable, Optional, Dict, List, Tuple
+from typing import Callable, Optional, Dict, List, Tuple, TYPE_CHECKING
 import logging
 import re
 import yt_dlp
 from utils.yt_dlp_opts import build_parse_ydl_opts as _build_parse_ydl_opts
 from utils.logger import SilentLogger as _SilentLogger
+from utils.playwright_check import require_playwright_or_raise
+
+if TYPE_CHECKING:
+    # Imports for type-checkers only; runtime defers the real import to
+    # the per-function call sites guarded by require_playwright_or_raise.
+    from playwright.sync_api import Page  # noqa: F401
+
 logger = logging.getLogger(__name__)
+
+
+def _sync_playwright_for(feature: str):
+    """Resolve playwright.sync_api.sync_playwright with a friendly precheck.
+
+    Raises :class:`utils.playwright_check.PlaywrightNotAvailable` with
+    a localised English/Hebrew message before the deep import fails,
+    so callers (workers, controllers) can show a clean MessageBox
+    instead of a stack trace.
+    """
+    require_playwright_or_raise(feature)
+    from playwright.sync_api import sync_playwright  # noqa: WPS433
+    return sync_playwright
 # ── Private Internal Helpers (Shared common logic) ────────────────────────────
 # Real Desktop User Agent to avoid bot-detection
 _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
@@ -183,6 +208,7 @@ def _scrape_spotify_grid_on_page(page: Page, url: str, content_type_label: str, 
 # ── Spotify Isolated Functions ────────────────────────────────────────────────
 def scrape_spotify_playlist(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
     """Dedicated entry for Spotify Playlists."""
+    sync_playwright = _sync_playwright_for("Spotify playlist scraping")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(user_agent=_USER_AGENT)
@@ -192,6 +218,7 @@ def scrape_spotify_playlist(url: str, on_item: Optional[Callable[[Dict], None]] 
         finally: browser.close()
 def scrape_spotify_album(url: str, on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
     """Dedicated entry for Spotify Albums."""
+    sync_playwright = _sync_playwright_for("Spotify album scraping")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(user_agent=_USER_AGENT)
@@ -203,6 +230,7 @@ def scrape_spotify_track(url: str, on_item: Optional[Callable[[Dict], None]] = N
     """Dedicated entry for single Spotify track."""
     title = "Unknown Track"
     items = []
+    sync_playwright = _sync_playwright_for("Spotify track scraping")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(user_agent=_USER_AGENT)
@@ -246,6 +274,7 @@ def scrape_spotify_artist(url: str, on_item: Optional[Callable[[Dict], None]] = 
     # Normalize URL: strip trailing slashes and common sub-paths to get the base artist URL
     artist_url = re.sub(r"/discography/.*$", "", url.rstrip("/"))
     artist_url = re.sub(r"/all/?$", "", artist_url)
+    sync_playwright = _sync_playwright_for("Spotify artist discography scraping")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
         context = browser.new_context(
@@ -565,6 +594,7 @@ def scrape_youtube_track(url: str, on_item: Optional[Callable[[Dict], None]] = N
 def scrape_youtube_channel(url: str, required_tabs: List[str], on_item: Optional[Callable[[Dict], None]] = None) -> Tuple[str, List[Dict]]:
     """Dedicated entry for YouTube channel browsing."""
     items = []
+    sync_playwright = _sync_playwright_for("YouTube channel scraping")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1280, "height": 800}, user_agent=_USER_AGENT)

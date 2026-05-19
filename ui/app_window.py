@@ -719,6 +719,22 @@ class AppWindow(FluentWindow):
         from qfluentwidgets import InfoBar
         from PySide6.QtWidgets import QInputDialog
         from PySide6.QtCore import QThread, Signal as QSignal
+        from PySide6.QtWidgets import QMessageBox
+
+        # Pre-check Playwright before spawning the subprocess so the
+        # user sees a clean message instead of a "wizard failed" toast.
+        from utils.playwright_check import (
+            is_playwright_available,
+            PlaywrightNotAvailable,
+        )
+        if not is_playwright_available():
+            exc = PlaywrightNotAvailable("Sign-in / Cookie wizard")
+            QMessageBox.warning(
+                self,
+                "נדרש Playwright Chromium",
+                exc.message_he,
+            )
+            return
 
         target_url = "https://www.youtube.com"
         if prompt_for_url:
@@ -729,9 +745,8 @@ class AppWindow(FluentWindow):
             if not ok or not url:
                 return
             target_url = url
-            
+
         # Instruct the user what to do before the browser opens
-        from PySide6.QtWidgets import QMessageBox
         info_msg = (
             "כעת ייפתח חלון דפדפן.\n\n"
             f"1. התחבר לחשבון שלך באתר: {target_url}\n"

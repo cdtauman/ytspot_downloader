@@ -14,9 +14,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
-
 from utils.paths import get_app_cookies_path
+from utils.playwright_check import (
+    PlaywrightNotAvailable,
+    require_playwright_or_raise,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,17 @@ def run_cookie_wizard(start_url: str = "https://www.youtube.com") -> bool:
     -------
     True  – cookies saved successfully.
     False – browser closed with no cookies, or an error occurred.
+
+    Raises
+    ------
+    PlaywrightNotAvailable
+        When Playwright Chromium is not installed. The caller should
+        show a clear MessageBox using ``exc.message_en`` / ``message_he``
+        instead of crashing.
     """
+    require_playwright_or_raise("Sign-in / Cookie wizard")
+    from playwright.sync_api import sync_playwright
+
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=False)

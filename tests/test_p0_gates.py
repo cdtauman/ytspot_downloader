@@ -622,6 +622,55 @@ class TestCLIReleaseFlags:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 11d. Playwright graceful degradation (commercial-release delta C-7)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class TestPlaywrightDegradation:
+    """Modules that drive a Chromium browser must import cleanly even
+    when Playwright is not installed, and must raise a friendly,
+    localised error (not a stack trace) when their entry point is
+    called without the dependency.
+
+    A module-level `from playwright.sync_api import ...` line is a
+    release blocker because it breaks `import core.scraper` on every
+    Playwright-less machine — including the headless CI image.
+    """
+
+    def test_scraper_imports_without_playwright(self):
+        # Even though Playwright is installed on this dev machine,
+        # the import path must not depend on it. We assert the module
+        # imports and that the public scrape_* names exist.
+        import core.scraper as scraper
+
+        for name in (
+            "scrape_spotify_playlist",
+            "scrape_spotify_album",
+            "scrape_spotify_track",
+            "scrape_spotify_artist",
+            "scrape_youtube_channel",
+        ):
+            assert callable(getattr(scraper, name, None)), (
+                f"core.scraper.{name} must be importable on Playwright-less installs"
+            )
+
+    def test_playwright_not_available_carries_localised_messages(self):
+        from utils.playwright_check import PlaywrightNotAvailable
+        exc = PlaywrightNotAvailable("Foo feature")
+        # English text used for str(exc), Hebrew text on exc.message_he.
+        assert "Foo feature" in exc.message_en
+        assert "playwright" in exc.message_en.lower()
+        assert "Foo feature" in exc.message_he
+        # str(exc) returns the English message so error_handler /
+        # CLI doctor can display it directly.
+        assert str(exc) == exc.message_en
+
+    def test_is_playwright_available_returns_bool(self):
+        from utils.playwright_check import is_playwright_available
+        result = is_playwright_available()
+        assert isinstance(result, bool)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 11. SearchPanel restores "ytmusic" as last_search_platform (S1-4 guard)
 # ──────────────────────────────────────────────────────────────────────────────
 

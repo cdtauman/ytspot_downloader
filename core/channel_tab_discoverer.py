@@ -73,14 +73,18 @@ def discover_tabs(url: str) -> DiscoveryResult:
     -------
     DiscoveryResult — always returned; check .error for failures.
     """
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
+    from utils.playwright_check import is_playwright_available
+    if not is_playwright_available():
         return DiscoveryResult(
             channel_name="",
             channel_url=url,
-            error="Playwright is not installed. Run: playwright install chromium",
+            error=(
+                "Channel discovery requires Playwright Chromium, which is "
+                "not installed. Run scripts/install_playwright.ps1 from the "
+                "install folder (or `python -m playwright install chromium`)."
+            ),
         )
+    from playwright.sync_api import sync_playwright
 
     # Strip any trailing tab suffix so we always land on the channel home
     base_url = _strip_tab_suffix(url)
