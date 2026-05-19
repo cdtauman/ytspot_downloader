@@ -64,8 +64,9 @@ class MetadataController(QObject):
     duplicate_scan_error     = Signal(str)
     duplicate_delete_complete = Signal(int, int)          # success, fail
 
-    def __init__(self, parent: QObject = None) -> None:
+    def __init__(self, config=None, parent: QObject = None) -> None:
         super().__init__(parent)
+        self._cfg          = config
         self._scan_worker  = None
         self._apply_worker = None
         self._dup_worker   = None
@@ -303,36 +304,99 @@ class MetadataController(QObject):
         self.status_update.emit(f"נוקה רווחים ב-{count} כותרות")
 
     def strip_web_junk_from_title(self, tracks: list[AudioTrackItem]) -> None:
-        """Remove common YouTube/web annotations from title (Official Video, HD, etc.)."""
+        """Remove common YouTube/web annotations from title based on config settings."""
         import re
-        _JUNK_RE = re.compile(
-            r"\s*[\[\(]"
-            r"(?:Official\s*(?:Music\s*)?(?:Video|Audio|Lyric[s]?|MV)|"
-            r"Lyric[s]?|HD|HQ|4K|Visualizer|Audio|Video|"
-            r"feat\.?\s*[^\]\)]+|ft\.?\s*[^\]\)]+|"
-            r"Remastered(?:\s*\d{4})?|Live(?:\s*Version)?|"
-            r"Cover|Remix|Extended|Radio\s*Edit|"
-            r"מוזיקה\s*רשמית|קליפ\s*רשמי)"
-            r"[^\]\)]*[\]\)]",
-            re.IGNORECASE,
-        )
+        
+        terms = []
+        if not self._cfg or getattr(self._cfg, "tag_clean_title_remove_web_junk", True):
+            terms.extend([
+                r"Official\s*(?:Music\s*)?(?:Video|Audio|Lyric[s]?|MV)",
+                r"Lyric[s]?(?:\s*Video)?", r"HD", r"HQ", r"4K", r"8D(?:\s*Audio)?", r"360(?:\s*Audio)?",
+                r"Visualizer", r"Audio", r"Video", 
+                r"feat\.?\s*[^\]\)\-\|]+", r"ft\.?\s*[^\]\)\-\|]+", r"featuring\s*[^\]\)\-\|]+",
+                r"Remastered(?:\s*\d{4})?", r"Live(?:\s*Version)?", r"Live\s*Performance",
+                r"Cover", r"Remix", r"Extended", r"Radio\s*Edit", r"Acoustic", r"Unplugged",
+                r"Instrumental", r"Sped\s*up", r"Slowed(?:\s*\+\s*Reverb)?",
+                r"Prod\.(?:\s*by)?\s*[^\]\)\-\|]+", r"Directed\s*by\s*[^\]\)\-\|]+", r"Vevo"
+            ])
+            
+        if not self._cfg or getattr(self._cfg, "tag_clean_title_remove_hebrew", True):
+            terms.extend([
+                r"מוזיקה\s*רשמית", r"קליפ\s*רשמי", r"קאבר", r"רמיקס", 
+                r"הופעה\s*חיה", r"מילים", r"קליפ\s*מילים", r"לייב", 
+                r"ביצוע\s*אקוסטי", r"קריוקי", r"גרסת\s*כיסוי", r"אודיו", r"הקלטה"
+            ])
+            
+        if not terms:
+            self.status_update.emit("הגדרות הניקוי ריקות - לא בוצע שינוי")
+            return
+            
+        terms_pattern = "|".join(terms)
+        
+        patterns = []
+        if not self._cfg or getattr(self._cfg, "tag_clean_title_remove_brackets", True):
+            patterns.append(rf"\s*[\[\(](?:{terms_pattern})[^\]\)]*[\]\)]")
+            
+        # Outside brackets, separated by - or |
+        patterns.append(rf"\s*[\-\|]\s*(?:{terms_pattern})(?:\s*[\-\|]|\s*$)")
+        patterns.append(rf"\s+(?:{terms_pattern})\s*$")
+        
+        _JUNK_RE = re.compile("|".join(patterns), re.IGNORECASE)
+        _PUNC_RE = re.compile(r"[\-\|]\s*$")
+        _SPACE_RE = re.compile(r"\s{2,}")
+        
         count = 0
         for item in tracks:
             if item.status == TrackStatus.UNSUPPORTED:
                 continue
             src = item.proposed.title if item.proposed.title is not None else item.original.title
             if src:
-                cleaned = _JUNK_RE.sub("", src).strip()
-                if cleaned != src:
+                cleaned = src
+                for _ in range(3):
+                    old_cleaned = cleaned
+                    cleaned = _JUNK_RE.sub("", cleaned).strip()
+                    if cleaned == old_cleaned:
+                        break
+                        
+                if not self._cfg or getattr(self._cfg, "tag_clean_title_fix_punctuation", True):
+                    cleaned = _PUNC_RE.sub("", cleaned).strip()
+                    cleaned = _SPACE_RE.sub(" ", cleaned)
+                    
+                if cleaned != src and cleaned: 
                     item.proposed.title = cleaned
                     count += 1
         self.tags_modified.emit()
         self.status_update.emit(f"זבל הוסר מ-{count} כותרות")
 
     def clean_filename(self, tracks: list[AudioTrackItem]) -> None:
-        """Clean the physical filename (remove underscores, brackets, etc.)."""
+        """Clean the physical filename based on config settings."""
         import re
         count = 0
+        
+        smart_brackets = not self._cfg or getattr(self._cfg, "tag_clean_filename_smart_brackets", True)
+        remove_domains = not self._cfg or getattr(self._cfg, "tag_clean_filename_remove_domains", True)
+        remove_emojis = not self._cfg or getattr(self._cfg, "tag_clean_filename_remove_emojis", True)
+        fix_spaces = not self._cfg or getattr(self._cfg, "tag_clean_filename_fix_spaces", True)
+        
+        if smart_brackets:
+            terms = [
+                r"Official\s*(?:Music\s*)?(?:Video|Audio|Lyric[s]?|MV)",
+                r"Lyric[s]?(?:\s*Video)?", r"HD", r"HQ", r"4K", r"8D(?:\s*Audio)?", r"360(?:\s*Audio)?",
+                r"Visualizer", r"Audio", r"Video", 
+                r"Remastered(?:\s*\d{4})?", r"Live(?:\s*Version)?", r"Live\s*Performance",
+                r"Cover", r"Remix", r"Extended", r"Radio\s*Edit", r"Acoustic", r"Unplugged",
+                r"Instrumental", r"Sped\s*up", r"Slowed(?:\s*\+\s*Reverb)?",
+                r"מוזיקה\s*רשמית", r"קליפ\s*רשמי", r"קאבר", r"רמיקס", 
+                r"הופעה\s*חיה", r"מילים", r"קליפ\s*מילים", r"לייב", 
+                r"ביצוע\s*אקוסטי", r"קריוקי", r"גרסת\s*כיסוי", r"אודיו", r"הקלטה"
+            ]
+            terms_pattern = "|".join(terms)
+            _BRACKET_RE = re.compile(rf"\s*[\[\(](?:{terms_pattern})[^\]\)]*[\]\)]", re.IGNORECASE)
+        else:
+            _BRACKET_RE = re.compile(r'\s*[\(\[].*?[\)\]]')
+            
+        _DOMAIN_RE = re.compile(r"(?i)\b(?:yt1s\.com|y2mate\.com|\[SPOTIFY-DL\]|ytdownloader)\s*[\-\|]?\s*")
+        
         for item in tracks:
             if item.status == TrackStatus.UNSUPPORTED:
                 continue
@@ -340,11 +404,22 @@ class MetadataController(QObject):
             stem = current_name.rsplit('.', 1)[0] if '.' in current_name else current_name
             ext = item.path.suffix
             
-            cleaned = stem.replace("_", " ")
-            cleaned = re.sub(r'\(.*?\)', '', cleaned)
-            cleaned = re.sub(r'\[.*?\]', '', cleaned)
-            cleaned = " ".join(cleaned.split())
+            cleaned = stem
             
+            if remove_domains:
+                cleaned = _DOMAIN_RE.sub("", cleaned)
+                
+            cleaned = _BRACKET_RE.sub("", cleaned)
+            
+            if remove_emojis:
+                cleaned = re.sub(r'[\\/*?:"<>|!@#$%^&~`+={}]', '', cleaned)
+                cleaned = re.sub(r'[\U00010000-\U0010ffff]', '', cleaned)
+                
+            if fix_spaces:
+                cleaned = cleaned.replace("_", " ")
+                cleaned = re.sub(r'\s*\-\s*\-\s*', ' - ', cleaned)
+                cleaned = re.sub(r'\s+', ' ', cleaned).strip(" .-")
+                
             if cleaned and cleaned != stem:
                 item.proposed_filename = cleaned + ext
                 count += 1

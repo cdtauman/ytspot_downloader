@@ -258,7 +258,7 @@ class AppWindow(FluentWindow):
     def _build_controllers(self) -> None:
         self._fetch_ctrl    = FetchController(self._cfg, parent=self)
         self._search_ctrl   = SearchController(self._cfg, parent=self)
-        self._metadata_ctrl = MetadataController(parent=self)
+        self._metadata_ctrl = MetadataController(self._cfg, parent=self)
         self._download_ctrl = DownloadController(
             config=self._cfg,
             engine=self._engine,

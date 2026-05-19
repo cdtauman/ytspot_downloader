@@ -479,6 +479,93 @@ class _AutoArrangeSettingsDialog(QDialog):
         return self._result
 
 
+class _CleanSettingsDialog(QDialog):
+    """Choose how aggressive the cleaning features should be."""
+
+    def __init__(self, cfg, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("הגדרות ניקוי (אגרסיביות)")
+        self.resize(380, 400)
+        self._cfg = cfg
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        # Title clean settings
+        title_grp = QGroupBox("ניקוי כותרת (Title)")
+        title_lay = QVBoxLayout(title_grp)
+        title_lay.setSpacing(6)
+        
+        self.cb_title_brackets = QCheckBox("נקה סוגריים עם זבל (כמו [HD] וכו')")
+        self.cb_title_brackets.setChecked(getattr(self._cfg, "tag_clean_title_remove_brackets", True))
+        
+        self.cb_title_english = QCheckBox("נקה מילות זבל באנגלית (Official, Audio, 4K, Prod...)")
+        self.cb_title_english.setChecked(getattr(self._cfg, "tag_clean_title_remove_web_junk", True))
+        
+        self.cb_title_hebrew = QCheckBox("נקה מילות זבל בעברית (קאבר, רמיקס, הופעה חיה...)")
+        self.cb_title_hebrew.setChecked(getattr(self._cfg, "tag_clean_title_remove_hebrew", True))
+        
+        self.cb_title_punc = QCheckBox("תקן רווחים, מקפים מיותרים וקווים מפרידים (|)")
+        self.cb_title_punc.setChecked(getattr(self._cfg, "tag_clean_title_fix_punctuation", True))
+        
+        title_lay.addWidget(self.cb_title_brackets)
+        title_lay.addWidget(self.cb_title_english)
+        title_lay.addWidget(self.cb_title_hebrew)
+        title_lay.addWidget(self.cb_title_punc)
+        layout.addWidget(title_grp)
+
+        # Filename clean settings
+        fn_grp = QGroupBox("ניקוי שם קובץ פיזי (Filename)")
+        fn_lay = QVBoxLayout(fn_grp)
+        fn_lay.setSpacing(6)
+        
+        self.cb_fn_brackets = QCheckBox("מחיקת סוגריים חכמה (למחוק זבל, להשאיר feat. וכו')")
+        self.cb_fn_brackets.setChecked(getattr(self._cfg, "tag_clean_filename_smart_brackets", True))
+        self.cb_fn_brackets.setToolTip("אם כבוי, ימחק בצורה 'עיוורת' את כל הסוגריים כולל התוכן שלהם.")
+        
+        self.cb_fn_domains = QCheckBox("נקה שאריות אתרי הורדות (y2mate, yt1s, SPOTIFY-DL...)")
+        self.cb_fn_domains.setChecked(getattr(self._cfg, "tag_clean_filename_remove_domains", True))
+        
+        self.cb_fn_emojis = QCheckBox("נקה אימוג'י וסימנים מיוחדים בעייתיים (!@#$)")
+        self.cb_fn_emojis.setChecked(getattr(self._cfg, "tag_clean_filename_remove_emojis", True))
+        
+        self.cb_fn_spaces = QCheckBox("תקן מקפים ורווחים כפולים ( - - )")
+        self.cb_fn_spaces.setChecked(getattr(self._cfg, "tag_clean_filename_fix_spaces", True))
+        
+        fn_lay.addWidget(self.cb_fn_brackets)
+        fn_lay.addWidget(self.cb_fn_domains)
+        fn_lay.addWidget(self.cb_fn_emojis)
+        fn_lay.addWidget(self.cb_fn_spaces)
+        layout.addWidget(fn_grp)
+
+        layout.addStretch()
+        
+        row = QHBoxLayout()
+        row.addStretch()
+        cancel_btn = QPushButton("ביטול")
+        cancel_btn.clicked.connect(self.reject)
+        ok_btn = QPushButton("אישור שמירה")
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(self._accept)
+        row.addWidget(cancel_btn)
+        row.addWidget(ok_btn)
+        layout.addLayout(row)
+
+    def _accept(self) -> None:
+        if self._cfg:
+            self._cfg.tag_clean_title_remove_brackets = self.cb_title_brackets.isChecked()
+            self._cfg.tag_clean_title_remove_web_junk = self.cb_title_english.isChecked()
+            self._cfg.tag_clean_title_remove_hebrew = self.cb_title_hebrew.isChecked()
+            self._cfg.tag_clean_title_fix_punctuation = self.cb_title_punc.isChecked()
+            
+            self._cfg.tag_clean_filename_smart_brackets = self.cb_fn_brackets.isChecked()
+            self._cfg.tag_clean_filename_remove_domains = self.cb_fn_domains.isChecked()
+            self._cfg.tag_clean_filename_remove_emojis = self.cb_fn_emojis.isChecked()
+            self._cfg.tag_clean_filename_fix_spaces = self.cb_fn_spaces.isChecked()
+            self._cfg.save()
+        self.accept()
+
+
 _BTN_STYLE = (
     "QPushButton { background: #2a2d3a; color: #d0d0e0; border: 1px solid #444460;"
     "  border-radius: 4px; padding: 3px 5px; text-align: left; font-size: 10px; }"
@@ -1100,6 +1187,14 @@ class MetadataEditorPanel(QWidget):
                 btn.clicked.connect(op_handlers[key])
             row_layout.addWidget(btn, stretch=1)
             
+            if key in ("strip_junk", "clean_filename"):
+                cfg_btn = QPushButton("⚙️")
+                cfg_btn.setFixedSize(24, 24)
+                cfg_btn.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 14px; } QPushButton:hover { color: #88aaff; }")
+                cfg_btn.setToolTip("הגדרות ניקוי")
+                cfg_btn.clicked.connect(self._on_clean_settings)
+                row_layout.addWidget(cfg_btn)
+            
             info_btn = QPushButton("ℹ️")
             info_btn.setFixedSize(24, 24)
             info_btn.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 14px; } QPushButton:hover { color: #88aaff; }")
@@ -1109,6 +1204,10 @@ class MetadataEditorPanel(QWidget):
             grp_layout.addLayout(row_layout)
 
         return grp
+
+    def _on_clean_settings(self) -> None:
+        dlg = _CleanSettingsDialog(self._cfg, self)
+        dlg.exec()
 
     def _show_info(self, title: str, desc: str) -> None:
         from qfluentwidgets import MessageBox

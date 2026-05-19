@@ -125,6 +125,16 @@ _DEFAULTS: dict[str, Any] = {
     "magic_auto_ops":        ["title_strip", "track_num", "normalize_spaces"],
     "tag_editor_zoom":       100,
     "tag_editor_splitter_sizes": [],
+
+    # ── Tag Cleaning Settings ─────────────────────────────────────────────────
+    "tag_clean_title_remove_brackets":     True,
+    "tag_clean_title_remove_web_junk":     True,
+    "tag_clean_title_remove_hebrew":       True,
+    "tag_clean_title_fix_punctuation":     True,
+    "tag_clean_filename_smart_brackets":   True,
+    "tag_clean_filename_remove_domains":   True,
+    "tag_clean_filename_remove_emojis":    True,
+    "tag_clean_filename_fix_spaces":       True,
 }
 
 
@@ -667,3 +677,69 @@ class AppConfig:
     @tag_editor_splitter_sizes.setter
     def tag_editor_splitter_sizes(self, value: list[int]) -> None:
         self._data["tag_editor_splitter_sizes"] = list(value)
+
+    # ── Tag Cleaning Settings ─────────────────────────────────────────────────
+
+    @property
+    def tag_clean_title_remove_brackets(self) -> bool:
+        return bool(self._data.get("tag_clean_title_remove_brackets", True))
+
+    @tag_clean_title_remove_brackets.setter
+    def tag_clean_title_remove_brackets(self, value: bool) -> None:
+        self._data["tag_clean_title_remove_brackets"] = bool(value)
+
+    @property
+    def tag_clean_title_remove_web_junk(self) -> bool:
+        return bool(self._data.get("tag_clean_title_remove_web_junk", True))
+
+    @tag_clean_title_remove_web_junk.setter
+    def tag_clean_title_remove_web_junk(self, value: bool) -> None:
+        self._data["tag_clean_title_remove_web_junk"] = bool(value)
+
+    @property
+    def tag_clean_title_remove_hebrew(self) -> bool:
+        return bool(self._data.get("tag_clean_title_remove_hebrew", True))
+
+    @tag_clean_title_remove_hebrew.setter
+    def tag_clean_title_remove_hebrew(self, value: bool) -> None:
+        self._data["tag_clean_title_remove_hebrew"] = bool(value)
+
+    @property
+    def tag_clean_title_fix_punctuation(self) -> bool:
+        return bool(self._data.get("tag_clean_title_fix_punctuation", True))
+
+    @tag_clean_title_fix_punctuation.setter
+    def tag_clean_title_fix_punctuation(self, value: bool) -> None:
+        self._data["tag_clean_title_fix_punctuation"] = bool(value)
+
+    @property
+    def tag_clean_filename_smart_brackets(self) -> bool:
+        return bool(self._data.get("tag_clean_filename_smart_brackets", True))
+
+    @tag_clean_filename_smart_brackets.setter
+    def tag_clean_filename_smart_brackets(self, value: bool) -> None:
+        self._data["tag_clean_filename_smart_brackets"] = bool(value)
+
+    @property
+    def tag_clean_filename_remove_domains(self) -> bool:
+        return bool(self._data.get("tag_clean_filename_remove_domains", True))
+
+    @tag_clean_filename_remove_domains.setter
+    def tag_clean_filename_remove_domains(self, value: bool) -> None:
+        self._data["tag_clean_filename_remove_domains"] = bool(value)
+
+    @property
+    def tag_clean_filename_remove_emojis(self) -> bool:
+        return bool(self._data.get("tag_clean_filename_remove_emojis", True))
+
+    @tag_clean_filename_remove_emojis.setter
+    def tag_clean_filename_remove_emojis(self, value: bool) -> None:
+        self._data["tag_clean_filename_remove_emojis"] = bool(value)
+
+    @property
+    def tag_clean_filename_fix_spaces(self) -> bool:
+        return bool(self._data.get("tag_clean_filename_fix_spaces", True))
+
+    @tag_clean_filename_fix_spaces.setter
+    def tag_clean_filename_fix_spaces(self, value: bool) -> None:
+        self._data["tag_clean_filename_fix_spaces"] = bool(value)
