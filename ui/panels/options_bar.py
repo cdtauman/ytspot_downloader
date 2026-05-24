@@ -28,6 +28,8 @@ from qfluentwidgets import (
 )
 
 from config import AppConfig
+from ui.direction import force_ltr, force_ltr_input
+from ui.i18n import t
 from ui.theme_manager import ACCENT_COLOR, ThemeManager, get_colors
 
 
@@ -132,11 +134,12 @@ class OptionsBar(QFrame):
         row.setSpacing(6)
 
         # ── Format ────────────────────────────────────────────────────────────
-        self._lbl_format = QLabel("Format:")
+        self._lbl_format = QLabel()
         row.addWidget(self._lbl_format)
         self._fmt_combo = ComboBox()
         self._fmt_combo.addItems(["mp3", "mp4"])
         self._fmt_combo.setFixedWidth(74)
+        force_ltr(self._fmt_combo)  # codec/container names are Latin
         self._fmt_combo.currentTextChanged.connect(self._on_format_change)
         row.addWidget(self._fmt_combo)
 
@@ -144,11 +147,12 @@ class OptionsBar(QFrame):
         row.addWidget(self._sep1)
 
         # ── Quality ───────────────────────────────────────────────────────────
-        self._lbl_quality = QLabel("Quality:")
+        self._lbl_quality = QLabel()
         row.addWidget(self._lbl_quality)
         self._quality_combo = ComboBox()
         self._quality_combo.addItems(AUDIO_QUALITY_OPTIONS)
         self._quality_combo.setFixedWidth(140)
+        force_ltr(self._quality_combo)  # bitrate strings are Latin
         self._quality_combo.currentTextChanged.connect(
             lambda _: self.options_changed.emit()
         )
@@ -158,11 +162,12 @@ class OptionsBar(QFrame):
         row.addWidget(self._sep2)
 
         # ── Codec ─────────────────────────────────────────────────────────────
-        self._lbl_codec = QLabel("Codec:")
+        self._lbl_codec = QLabel()
         row.addWidget(self._lbl_codec)
         self._codec_combo = ComboBox()
         self._codec_combo.addItems(AUDIO_FORMAT_OPTIONS)
         self._codec_combo.setFixedWidth(78)
+        force_ltr(self._codec_combo)  # codec names are Latin
         self._codec_combo.currentTextChanged.connect(
             lambda _: self.options_changed.emit()
         )
@@ -172,11 +177,12 @@ class OptionsBar(QFrame):
         row.addWidget(self._sep3)
 
         # ── Output directory ──────────────────────────────────────────────────
-        self._lbl_save = QLabel("Save to:")
+        self._lbl_save = QLabel()
         row.addWidget(self._lbl_save)
         self._dir_entry = LineEdit()
         self._dir_entry.setMinimumWidth(200)
         self._dir_entry.setFixedHeight(30)
+        force_ltr_input(self._dir_entry)  # file path must read L→R
         self._dir_entry.textChanged.connect(lambda _: self.options_changed.emit())
         self._dir_entry.editingFinished.connect(self._on_dir_committed)
         row.addWidget(self._dir_entry, stretch=1)
@@ -191,7 +197,7 @@ class OptionsBar(QFrame):
         row.addWidget(self._sep4)
 
         # ── Clipboard monitor toggle ──────────────────────────────────────────
-        self._lbl_clip = QLabel("Clipboard:")
+        self._lbl_clip = QLabel()
         row.addWidget(self._lbl_clip)
         self._clip_switch = SwitchButton()
         self._clip_switch.setOnText("ON")
@@ -205,7 +211,18 @@ class OptionsBar(QFrame):
                         self._lbl_save, self._lbl_clip]
         self._combos = [self._fmt_combo, self._quality_combo, self._codec_combo]
 
+        self._retranslate()
         self._apply_theme()
+
+    def _retranslate(self) -> None:
+        """Set all translatable label texts. Called from ``_build`` so the
+        ``_retranslate()`` naming convention is in place for a future
+        live-language-switch upgrade (see ui/i18n.py LanguageManager)."""
+        self._lbl_format.setText(t("options_format_label"))
+        self._lbl_quality.setText(t("options_quality_label"))
+        self._lbl_codec.setText(t("options_codec_label"))
+        self._lbl_save.setText(t("options_save_label"))
+        self._lbl_clip.setText(t("options_clipboard_label"))
 
     @staticmethod
     def _make_sep() -> QFrame:

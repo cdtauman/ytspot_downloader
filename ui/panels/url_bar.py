@@ -29,6 +29,7 @@ from qfluentwidgets import (
 )
 
 from config import AppConfig
+from ui.direction import force_ltr_input
 from ui.theme_manager import ACCENT_COLOR, ThemeManager, get_colors
 from ui.i18n import t
 
@@ -126,6 +127,7 @@ class UrlBar(QFrame):
         self._url_entry.setPlaceholderText(t("url_placeholder"))
         self._url_entry.setMinimumHeight(40)
         self._url_entry.setClearButtonEnabled(True)
+        force_ltr_input(self._url_entry)  # URLs must read L→R even in Hebrew mode
         self._url_entry.returnPressed.connect(self._on_fetch)
         row.addWidget(self._url_entry, stretch=1)
 

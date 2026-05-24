@@ -40,6 +40,7 @@ from qfluentwidgets import (
     PushButton, SegmentedWidget, SwitchButton, ToolButton,
 )
 
+from ui.i18n import t
 from ui.theme_manager import (
     ACCENT_COLOR, get_colors,
     SUCCESS_COLOR, ERROR_COLOR,
@@ -429,7 +430,7 @@ class ConverterPanel(QWidget):
         root.addWidget(self._controls_frame)
 
         # Convert button
-        self._convert_btn = PushButton(FluentIcon.PLAY, "Convert All")
+        self._convert_btn = PushButton(FluentIcon.PLAY, t("converter_convert_all_btn"))
         self._convert_btn.setFixedHeight(42)
         self._convert_btn.clicked.connect(self._on_convert)
         root.addWidget(self._convert_btn)
@@ -536,7 +537,7 @@ class ConverterPanel(QWidget):
         self._worker.file_done.connect(self._on_file_done)
         self._worker.file_error.connect(self._on_file_error)
         self._worker.all_done.connect(self._on_all_done)
-        self._convert_btn.setText("⏹  Cancel")
+        self._convert_btn.setText(t("converter_cancel_btn"))
         self._worker.start()
 
     def _on_file_started(self, path: str) -> None:

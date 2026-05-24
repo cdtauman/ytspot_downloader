@@ -246,7 +246,7 @@ QGroupBox {{
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
-    subcontrol-position: top left;
+    subcontrol-position: top;
     padding: 0 8px;
     color: {accent};
 }}
@@ -465,6 +465,9 @@ QComboBox:hover {{ border-color: #c8c0f0; }}
 QComboBox:focus {{ border: 2px solid {accent}; }}
 QComboBox::drop-down {{
     border: none;
+    /* Symmetric padding so the dropdown arrow stays visible regardless of
+       layout direction (the arrow moves to the leading edge under RTL). */
+    padding-left: 10px;
     padding-right: 10px;
 }}
 QComboBox QAbstractItemView {{
@@ -504,7 +507,7 @@ QGroupBox {{
 }}
 QGroupBox::title {{
     subcontrol-origin: margin;
-    subcontrol-position: top left;
+    subcontrol-position: top;
     padding: 0 10px;
     color: {accent};
     font-weight: 700;

@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 from qfluentwidgets import BodyLabel, CaptionLabel, ToolButton
 
+from ui.i18n import t
 from ui.theme_manager import (
     ACCENT_COLOR, get_colors,
     SUCCESS_COLOR, ERROR_COLOR, WARNING_COLOR, PROCESSING_COLOR,
@@ -248,15 +249,15 @@ class TrackCard(QFrame):
         outer.addLayout(text_col, stretch=1)
         outer.addSpacing(8)
 
-        # Badge column
+        # Badge column — Trailing edge so badges mirror under RTL (left in HE).
         badge_col = QVBoxLayout()
         badge_col.setSpacing(4)
-        badge_col.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight)
+        badge_col.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignTrailing)
 
         self._dur_badge  = self._make_badge(duration or "--:--", "default")
         self._plat_badge = self._make_badge(platform.upper(), platform)
-        badge_col.addWidget(self._dur_badge,  alignment=Qt.AlignmentFlag.AlignRight)
-        badge_col.addWidget(self._plat_badge, alignment=Qt.AlignmentFlag.AlignRight)
+        badge_col.addWidget(self._dur_badge,  alignment=Qt.AlignmentFlag.AlignTrailing)
+        badge_col.addWidget(self._plat_badge, alignment=Qt.AlignmentFlag.AlignTrailing)
         outer.addLayout(badge_col)
         outer.addSpacing(4)
 
@@ -270,7 +271,7 @@ class TrackCard(QFrame):
         self._remove_btn.setText("✕")
         self._remove_btn.setFixedSize(28, 28)
         self._remove_btn.setVisible(False)
-        self._remove_btn.setToolTip("Remove from queue")
+        self._remove_btn.setToolTip(t("card_remove_tooltip"))
         self._remove_btn.clicked.connect(
             lambda: self.remove_requested.emit(self.queue_index)
         )
@@ -282,7 +283,7 @@ class TrackCard(QFrame):
         self._pause_btn.setText("⏸")
         self._pause_btn.setFixedSize(28, 28)
         self._pause_btn.setVisible(False)
-        self._pause_btn.setToolTip("Pause download")
+        self._pause_btn.setToolTip(t("card_pause_tooltip"))
         self._pause_btn.clicked.connect(lambda: self.pause_requested.emit(self.queue_index))
         self._pause_btn.setStyleSheet(self._action_btn_style(ACCENT_COLOR))
         btn_col.addWidget(self._pause_btn)
@@ -292,7 +293,7 @@ class TrackCard(QFrame):
         self._resume_btn.setText("▶")
         self._resume_btn.setFixedSize(28, 28)
         self._resume_btn.setVisible(False)
-        self._resume_btn.setToolTip("Resume download")
+        self._resume_btn.setToolTip(t("card_resume_tooltip"))
         self._resume_btn.clicked.connect(lambda: self.resume_requested.emit(self.queue_index))
         self._resume_btn.setStyleSheet(self._action_btn_style(SUCCESS_COLOR))
         btn_col.addWidget(self._resume_btn)

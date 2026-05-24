@@ -1,16 +1,36 @@
 """
 ui/i18n.py
-Simple localization helper for the app.
+Localization helper for the app.
 
-This is intentionally lightweight: translation lookup by key and a
-small API to set the active language at startup or when the user
-changes it in Settings.
+This is intentionally lightweight: translation lookup by key plus a
+small API to coordinate language + layout direction at startup or when
+the user changes it in Settings.
+
+Public API:
+    t(key, **kwargs)                  — translate a key with optional formatting
+    set_language(lang)                — update active language code (no side effects)
+    current_language()                — read active language code
+    apply_language(app, lang)         — single entry point used at startup and
+                                        when the user picks a different language;
+                                        updates translation state, app-wide layout
+                                        direction, and emits language_changed
+    request_language_restart(app, lang) — restart the app process with the new
+                                          language so every widget rebuilds in it
+    language_manager()                — singleton QObject exposing the
+                                        ``language_changed(str)`` signal that
+                                        widgets can connect to for future
+                                        live-retranslation work
 """
 from __future__ import annotations
 
-from typing import Dict
+import logging
+import os
+import sys
+from typing import Dict, Optional, Set
 
 _current: str = "en"
+_log = logging.getLogger("ui.i18n")
+_warned_keys: Set[str] = set()
 
 TRANSLATIONS: Dict[str, Dict[str, str]] = {
     "en": {
@@ -21,6 +41,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "history": "History",
         "settings": "Settings",
         "tag_editor": "Tag Editor",
+        "converter": "Converter",
 
         # ── Download bar ────────────────────────────────────────────────────────
         "no_tracks_selected": "No tracks selected",
@@ -240,6 +261,110 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "release_compilation":  "Compilation",
         "tracks":               "tracks",
         "items":                "items",
+
+        # ── System tray ─────────────────────────────────────────────────────────
+        "tray_tooltip": "YTSpot Downloader",
+        "tray_open": "Open",
+        "tray_cancel_all": "Cancel All Downloads",
+        "tray_quit": "Quit",
+        "tray_all_done": "All downloads complete!",
+
+        # ── Auth / cookie wizard ────────────────────────────────────────────────
+        "auth_wizard_open_btn": "🔑 Open Sign-in Wizard (recommended)",
+        "auth_wizard_close_btn": "Close",
+        "auth_wizard_manual_btn": "🔧 Manual fix in browser",
+        "playwright_required_title": "Playwright Chromium Required",
+        "auth_wizard_title": "Site Sign-in Wizard",
+        "auth_wizard_url_prompt": "Enter the URL you want to sign into:",
+        "auth_wizard_browser_info": (
+            "A browser window will now open.\n\n"
+            "1. Sign in to your account at: {url}\n"
+            "2. After signing in, simply close the browser window.\n\n"
+            "The software will save your sign-in details automatically."
+        ),
+        "auth_wizard_success_title": "Sign-in successful",
+        "auth_wizard_success_msg": "Sign-in details saved. You may now resume downloading.",
+        "auth_wizard_aborted_title": "Wizard closed without saving",
+        "auth_wizard_aborted_msg": "No cookies were saved. The wizard may have been closed before sign-in.",
+        "browser_locked_title": "{browser} is open",
+        "browser_locked_msg": (
+            "{browser} is currently open.\n\n"
+            "Windows does not allow apps to access cookies while the browser is running.\n"
+            "Close all browser windows and try again."
+        ),
+        "browser_locked_retry_btn": "Closed, retry",
+        "cancel_btn": "Cancel",
+
+        # ── Track card tooltips ─────────────────────────────────────────────────
+        "card_remove_tooltip": "Remove from queue",
+        "card_pause_tooltip": "Pause download",
+        "card_resume_tooltip": "Resume download",
+
+        # ── Options bar labels ──────────────────────────────────────────────────
+        "options_format_label": "Format:",
+        "options_quality_label": "Quality:",
+        "options_codec_label": "Codec:",
+        "options_save_label": "Save to:",
+        "options_clipboard_label": "Clipboard:",
+
+        # ── Converter panel ─────────────────────────────────────────────────────
+        "converter_cancel_btn": "⏹  Cancel",
+        "converter_convert_all_btn": "Convert All",
+
+        # ── Duplicate files dialog ──────────────────────────────────────────────
+        "duplicates_manage_title": "🔍 Manage Duplicate Files",
+        "duplicates_strategy_size": "by file size (fast)",
+        "duplicates_strategy_md5": "by MD5 content (precise)",
+        "duplicates_header": (
+            "Found <b>{n_files}</b> duplicate files in <b>{n_groups}</b> "
+            "groups (strategy: {strat}) | scan time: {elapsed:.1f}s"
+        ),
+        "duplicates_hint": "☑ Checked = keep file    ☐ Unchecked = delete file",
+        "duplicates_keep_all_btn": "✅ Keep all",
+        "duplicates_keep_all_tooltip": "Mark all files in every group for keep",
+        "duplicates_group_label": "Group {n}  —  {count} duplicate files",
+        "duplicates_apply_btn": "🗑 Delete & clean up",
+        "duplicates_nothing_title": "Nothing to delete",
+        "duplicates_nothing_msg": (
+            "All files are marked for keeping.\n"
+            "Uncheck files you want to delete."
+        ),
+        "duplicates_confirm_title": "Final delete confirmation",
+        "duplicates_confirm_msg": (
+            "Warning: this will permanently delete the {n} marked files from disk.\n\n"
+            "Are you sure?"
+        ),
+        "duplicates_confirm_yes": "Yes, delete",
+        "duplicates_confirm_no": "No, go back",
+
+        # ── Conflict resolution dialog ──────────────────────────────────────────
+        "conflict_sources_count": "{n} sources",
+        "conflict_dialog_title": "Manage Duplicates",
+        "conflict_dialog_subtitle": "Manage Duplicates — {n} overlapping videos",
+        "conflict_videos_header": "📹 Videos / Shorts / Streams",
+        "conflict_playlists_header": "📋 Playlists",
+        "conflict_explanation": (
+            "The following videos were found in more than one source. "
+            "Check ✓ the copies you want to download.\n"
+            "Different copies will be saved to different folders."
+        ),
+        "conflict_ok_btn": "Confirm — download all checked",
+        "conflict_keep_videos_btn": "✓ Keep in Videos",
+        "conflict_keep_playlists_btn": "✓ Keep in Playlists",
+        "conflict_keep_both_btn": "✓ Keep both",
+        "conflict_clear_all_btn": "✗ Clear all",
+
+        # ── Restart prompt ──────────────────────────────────────────────────────
+        "restart_required_title": "Restart required",
+        "restart_required_msg": (
+            "The language change will take effect after a restart.\n"
+            "Restart now?"
+        ),
+        "restart_now_btn": "Restart now",
+        "restart_later_btn": "Later",
+
+        # ── About ───────────────────────────────────────────────────────────────
+        "about_app": "About",
     },
 
     "he": {
@@ -250,6 +375,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "history": "היסטוריה",
         "settings": "הגדרות",
         "tag_editor": "עורך תגיות",
+        "converter": "ממיר",
 
         # ── Download bar ────────────────────────────────────────────────────────
         "no_tracks_selected": "לא נבחרו שירים",
@@ -469,12 +595,121 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "release_compilation":  "אוסף",
         "tracks":               "שירים",
         "items":                "פריטים",
+
+        # ── System tray ─────────────────────────────────────────────────────────
+        "tray_tooltip": "YTSpot Downloader",
+        "tray_open": "פתח",
+        "tray_cancel_all": "בטל את כל ההורדות",
+        "tray_quit": "יציאה",
+        "tray_all_done": "כל ההורדות הושלמו!",
+
+        # ── Auth / cookie wizard ────────────────────────────────────────────────
+        "auth_wizard_open_btn": "🔑 פתח אשף התחברות (מומלץ)",
+        "auth_wizard_close_btn": "סגור",
+        "auth_wizard_manual_btn": "🔧 תיקון ידני בדפדפן",
+        "playwright_required_title": "נדרש Playwright Chromium",
+        "auth_wizard_title": "אשף התחברות לאתרים",
+        "auth_wizard_url_prompt": "הזן את כתובת האתר שברצונך להתחבר אליו:",
+        "auth_wizard_browser_info": (
+            "כעת ייפתח חלון דפדפן.\n\n"
+            "1. התחבר לחשבון שלך באתר: {url}\n"
+            "2. לאחר ההתחברות, פשוט סגור את חלון הדפדפן.\n\n"
+            "התוכנה תשמור את פרטי ההתחברות באופן אוטומטי."
+        ),
+        "auth_wizard_success_title": "ההתחברות הצליחה",
+        "auth_wizard_success_msg": "פרטי ההתחברות לאתר נשמרו. ניתן להתחיל להוריד מחדש.",
+        "auth_wizard_aborted_title": "האשף נסגר ללא שמירה",
+        "auth_wizard_aborted_msg": "לא נשמרו cookies. ייתכן שהאשף נסגר לפני ההתחברות.",
+        "browser_locked_title": "{browser} פתוח",
+        "browser_locked_msg": (
+            "דפדפן {browser} פתוח כרגע.\n\n"
+            "ווינדוס לא מאפשר לתוכנה לגשת ל-Cookies בזמן שהדפדפן פתוח.\n"
+            "כדי שההורדה תעבוד, עליך לסגור את כל חלונות הדפדפן ולנסות שוב."
+        ),
+        "browser_locked_retry_btn": "סגרתי, נסה שוב",
+        "cancel_btn": "ביטול",
+
+        # ── Track card tooltips ─────────────────────────────────────────────────
+        "card_remove_tooltip": "הסר מהתור",
+        "card_pause_tooltip": "השהה הורדה",
+        "card_resume_tooltip": "המשך הורדה",
+
+        # ── Options bar labels ──────────────────────────────────────────────────
+        "options_format_label": "פורמט:",
+        "options_quality_label": "איכות:",
+        "options_codec_label": "קודק:",
+        "options_save_label": "שמור אל:",
+        "options_clipboard_label": "לוח גזירה:",
+
+        # ── Converter panel ─────────────────────────────────────────────────────
+        "converter_cancel_btn": "⏹  ביטול",
+        "converter_convert_all_btn": "המר הכל",
+
+        # ── Duplicate files dialog ──────────────────────────────────────────────
+        "duplicates_manage_title": "🔍 ניהול קבצים כפולים",
+        "duplicates_strategy_size": "לפי גודל קובץ (מהיר)",
+        "duplicates_strategy_md5": "לפי תוכן MD5 (מדויק)",
+        "duplicates_header": (
+            "נמצאו <b>{n_files}</b> קבצים כפולים ב-<b>{n_groups}</b> "
+            "קבוצות (אסטרטגיה: {strat}) | זמן סריקה: {elapsed:.1f}s"
+        ),
+        "duplicates_hint": "☑ מסומן = שמור קובץ    ☐ לא מסומן = מחק קובץ",
+        "duplicates_keep_all_btn": "✅ שמור את כולם",
+        "duplicates_keep_all_tooltip": "סמן את כל הקבצים בכל הקבוצות לשמירה",
+        "duplicates_group_label": "קבוצה {n}  —  {count} קבצים כפולים",
+        "duplicates_apply_btn": "🗑 בצע מחיקה וניקוי",
+        "duplicates_nothing_title": "אין מה למחוק",
+        "duplicates_nothing_msg": (
+            "כל הקבצים מסומנים לשמירה.\n"
+            "בטל סימון של קבצים שברצונך למחוק."
+        ),
+        "duplicates_confirm_title": "אישור מחיקה סופי",
+        "duplicates_confirm_msg": (
+            "אזהרה: פעולה זו תמחק לצמיתות {n} קבצים מסומנים מהדיסק.\n\n"
+            "האם אתה בטוח?"
+        ),
+        "duplicates_confirm_yes": "כן, מחק",
+        "duplicates_confirm_no": "לא, חזור",
+
+        # ── Conflict resolution dialog ──────────────────────────────────────────
+        "conflict_sources_count": "{n} מקורות",
+        "conflict_dialog_title": "ניהול כפילויות",
+        "conflict_dialog_subtitle": "ניהול כפילויות — {n} סרטונים חופפים",
+        "conflict_videos_header": "📹 סרטונים / קצרים / שידורים",
+        "conflict_playlists_header": "📋 פלייליסטים",
+        "conflict_explanation": (
+            "הסרטונים הבאים נמצאו ביותר ממקור אחד. "
+            "סמן ✓ את העותקים שברצונך להוריד.\n"
+            "עותקים שונים יישמרו לתיקיות שונות."
+        ),
+        "conflict_ok_btn": "אישור — הורד הכל שסומן",
+        "conflict_keep_videos_btn": "✓ שמור בסרטונים",
+        "conflict_keep_playlists_btn": "✓ שמור בפלייליסטים",
+        "conflict_keep_both_btn": "✓ שמור שניהם",
+        "conflict_clear_all_btn": "✗ נקה הכל",
+
+        # ── Restart prompt ──────────────────────────────────────────────────────
+        "restart_required_title": "נדרשת הפעלה מחדש",
+        "restart_required_msg": (
+            "שינוי השפה ייכנס לתוקף לאחר הפעלה מחדש.\n"
+            "להפעיל מחדש כעת?"
+        ),
+        "restart_now_btn": "הפעל מחדש",
+        "restart_later_btn": "מאוחר יותר",
+
+        # ── About ───────────────────────────────────────────────────────────────
+        "about_app": "אודות",
     },
 }
 
 
 def set_language(lang: str) -> None:
-    """Set the active language code (falls back to English)."""
+    """Set the active language code (falls back to English).
+
+    This only updates the in-memory translation state. Use
+    :func:`apply_language` instead when you also need to update the
+    application's layout direction and notify language-aware widgets.
+    """
     global _current
     if lang not in TRANSLATIONS:
         lang = "en"
@@ -485,11 +720,100 @@ def current_language() -> str:
     return _current
 
 
+def _warn_missing(key: str, lang: str, also_missing_in_en: bool = False) -> None:
+    """Log a translation key that's not present in the active language.
+
+    Each (key, lang) pair is logged at most once per session to avoid
+    flooding the log from paint events. Uses DEBUG level so it's silent
+    in normal use but visible when devs raise the log level.
+    """
+    marker = (key, lang)
+    if marker in _warned_keys:
+        return
+    _warned_keys.add(marker)
+    if also_missing_in_en:
+        _log.debug("i18n: key %r missing in %r and in English fallback", key, lang)
+    else:
+        _log.debug("i18n: key %r missing in %r (using English fallback)", key, lang)
+
+
 def t(key: str, **kwargs) -> str:
     """Translate `key` using the active language and format with kwargs."""
     d = TRANSLATIONS.get(_current, TRANSLATIONS["en"])
-    s = d.get(key, TRANSLATIONS["en"].get(key, key))
+    if key in d:
+        s = d[key]
+    elif key in TRANSLATIONS["en"]:
+        s = TRANSLATIONS["en"][key]
+        if _current != "en":
+            _warn_missing(key, _current)
+    else:
+        _warn_missing(key, _current, also_missing_in_en=True)
+        s = key
     try:
         return s.format(**kwargs)
     except Exception:
         return s
+
+
+# ─── Language coordinator ────────────────────────────────────────────────────
+#
+# The LanguageManager singleton exposes a ``language_changed(str)`` Qt signal
+# that widgets can connect to in order to live-update their text when the
+# user changes language. Today the application uses restart-based language
+# switching (see ``request_language_restart`` below), so no widget connects
+# to the signal — but the plumbing is in place so a future live-retranslate
+# phase can wire each widget's ``_retranslate()`` method without an
+# architectural change.
+
+_language_manager: Optional["LanguageManager"] = None
+
+
+def language_manager() -> "LanguageManager":
+    """Return the singleton LanguageManager, creating it on first call.
+
+    Requires a QApplication to exist. Import-deferred so plain ``import ui.i18n``
+    does not pull in Qt symbols.
+    """
+    global _language_manager
+    if _language_manager is None:
+        # Local import: keeps Qt out of the import path for non-UI consumers.
+        from PySide6.QtCore import QObject, Signal
+
+        class LanguageManager(QObject):
+            language_changed = Signal(str)
+
+        _language_manager = LanguageManager()
+    return _language_manager
+
+
+def apply_language(app, lang: str) -> None:
+    """Apply ``lang`` as the active language + layout direction in one call.
+
+    Use at startup (after QApplication is constructed) and whenever the user
+    changes language in Settings. ``app`` must be a ``QApplication`` instance.
+    """
+    set_language(lang)
+    # Local imports keep this module importable without Qt for tooling.
+    from ui.direction import apply_app_direction
+    apply_app_direction(app, _current)
+    language_manager().language_changed.emit(_current)
+
+
+def request_language_restart(app, lang: str) -> None:
+    """Persist ``lang`` to in-memory state then restart the app process.
+
+    The new process re-reads ``cfg.language`` at startup and renders the
+    entire UI cleanly in the new language with the correct RTL direction
+    from frame one — no partial-refresh edge cases.
+    """
+    apply_language(app, lang)
+    from PySide6.QtCore import QProcess
+
+    program = sys.executable
+    # Re-launch with the same argv. When frozen (PyInstaller), sys.argv[0]
+    # is the bundled executable; sys.executable points to the same binary,
+    # so passing sys.argv[1:] as arguments preserves any user-supplied flags.
+    arguments = sys.argv[1:] if getattr(sys, "frozen", False) else list(sys.argv)
+    workdir = os.getcwd()
+    QProcess.startDetached(program, arguments, workdir)
+    app.quit()

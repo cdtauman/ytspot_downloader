@@ -61,13 +61,9 @@ def main() -> int:
     # 5. Service container — owns all shared backend singletons
     svc = ServiceContainer.create_default(cfg)
 
-    # Set UI language and layout direction
-    from ui.i18n import set_language
-    set_language(cfg.language)
-    if cfg.language == "he":
-        app.setLayoutDirection(Qt.RightToLeft)
-    else:
-        app.setLayoutDirection(Qt.LeftToRight)
+    # Set UI language and layout direction (single entry point).
+    from ui.i18n import apply_language
+    apply_language(app, cfg.language)
 
     # 6. Theme (before window construction to avoid white flash)
     theme_mgr = ThemeManager(cfg)

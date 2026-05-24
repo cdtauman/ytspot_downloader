@@ -54,6 +54,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui.direction import force_ltr_label
+from ui.i18n import t
 from ui.theme_manager import ACCENT_COLOR, get_colors
 
 
@@ -123,8 +125,10 @@ class DuplicateFilesDialog(QDialog):
         # _group_cbs[group_idx] = [QCheckBox for file_0, file_1, …]
         self._group_cbs: list[list[QCheckBox]] = []
 
-        self.setWindowTitle("🔍 ניהול קבצים כפולים")
-        self.setLayoutDirection(Qt.RightToLeft)
+        self.setWindowTitle(t("duplicates_manage_title"))
+        # Layout direction is inherited from the app (RTL for Hebrew, LTR for
+        # English). Path and filename labels inside cards are explicitly
+        # forced LTR below via force_ltr_label so they always read correctly.
         self.setMinimumSize(880, 560)
         self.resize(1040, 720)
         self.setModal(True)
@@ -158,18 +162,25 @@ class DuplicateFilesDialog(QDialog):
     def _make_header(self, c) -> QLabel:
         n_groups = len(self._groups)
         n_files  = sum(len(v) for v in self._groups.values())
-        strat = "לפי גודל קובץ (מהיר)" if self._strategy == "size" else "לפי תוכן MD5 (מדויק)"
-        lbl = QLabel(
-            f"נמצאו <b>{n_files}</b> קבצים כפולים ב-<b>{n_groups}</b> קבוצות  "
-            f"(אסטרטגיה: {strat})  |  זמן סריקה: {self._elapsed:.1f}s"
+        strat = (
+            t("duplicates_strategy_size")
+            if self._strategy == "size"
+            else t("duplicates_strategy_md5")
         )
+        lbl = QLabel(t(
+            "duplicates_header",
+            n_files=n_files,
+            n_groups=n_groups,
+            strat=strat,
+            elapsed=self._elapsed,
+        ))
         lbl.setStyleSheet(
             f"font-size: 14px; color: {c.text_primary}; padding: 4px 0; border: none;"
         )
         return lbl
 
     def _make_hint(self, c) -> QLabel:
-        lbl = QLabel("☑ מסומן = שמור קובץ    ☐ לא מסומן = מחק קובץ")
+        lbl = QLabel(t("duplicates_hint"))
         lbl.setStyleSheet(
             f"font-size: 12px; color: {c.text_secondary}; border: none; padding-bottom: 2px;"
         )
@@ -179,9 +190,9 @@ class DuplicateFilesDialog(QDialog):
         row = QHBoxLayout()
         row.setSpacing(8)
 
-        self._both_btn = QPushButton("✅ שמור את כולם")
+        self._both_btn = QPushButton(t("duplicates_keep_all_btn"))
         self._both_btn.setFixedHeight(30)
-        self._both_btn.setToolTip("סמן את כל הקבצים בכל הקבוצות לשמירה")
+        self._both_btn.setToolTip(t("duplicates_keep_all_tooltip"))
         self._both_btn.clicked.connect(self._on_keep_both)
         row.addWidget(self._both_btn)
 
@@ -196,7 +207,6 @@ class DuplicateFilesDialog(QDialog):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         content = QWidget()
-        content.setLayoutDirection(Qt.RightToLeft)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(8, 8, 8, 8)
         content_layout.setSpacing(20)
@@ -207,7 +217,7 @@ class DuplicateFilesDialog(QDialog):
 
         for group_idx, (_key, paths) in enumerate(self._groups.items(), start=1):
             # ── Group header ─────────────────────────────────────────────────
-            grp_lbl = QLabel(f"קבוצה {group_idx}  —  {len(paths)} קבצים כפולים")
+            grp_lbl = QLabel(t("duplicates_group_label", n=group_idx, count=len(paths)))
             grp_lbl.setFont(hdr_font)
             grp_lbl.setStyleSheet(
                 f"color: {c.accent}; padding: 4px 0 2px 0;"
@@ -217,7 +227,6 @@ class DuplicateFilesDialog(QDialog):
 
             # ── 2-column card grid ───────────────────────────────────────────
             grid_widget = QWidget()
-            grid_widget.setLayoutDirection(Qt.RightToLeft)
             grid = QGridLayout(grid_widget)
             grid.setSpacing(10)
             grid.setContentsMargins(0, 4, 0, 0)
@@ -243,7 +252,6 @@ class DuplicateFilesDialog(QDialog):
         card = QFrame()
         card.setObjectName("fileCard")
         card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
-        card.setLayoutDirection(Qt.RightToLeft)
 
         vbox = QVBoxLayout(card)
         vbox.setContentsMargins(12, 10, 12, 10)
@@ -264,6 +272,7 @@ class DuplicateFilesDialog(QDialog):
         name_lbl.setFont(name_font)
         name_lbl.setStyleSheet(f"color: {c.text_primary}; border: none;")
         name_lbl.setWordWrap(True)
+        force_ltr_label(name_lbl)  # filenames are technical, always LTR
         top_row.addWidget(name_lbl, stretch=1)
         vbox.addLayout(top_row)
 
@@ -275,6 +284,7 @@ class DuplicateFilesDialog(QDialog):
         )
         path_lbl.setWordWrap(True)
         path_lbl.setToolTip(str(path))  # full absolute path in tooltip
+        force_ltr_label(path_lbl)  # paths are technical, always LTR
         vbox.addWidget(path_lbl)
 
         # Row 3: size + modification date
@@ -296,14 +306,14 @@ class DuplicateFilesDialog(QDialog):
         row.setSpacing(10)
         row.addStretch()
 
-        self._cancel_btn = QPushButton("ביטול")
+        self._cancel_btn = QPushButton(t("cancel_btn"))
         self._cancel_btn.setFixedHeight(36)
         self._cancel_btn.setMinimumWidth(90)
         self._cancel_btn.setObjectName("cancelBtn")
         self._cancel_btn.clicked.connect(self.reject)
         row.addWidget(self._cancel_btn)
 
-        self._apply_btn = QPushButton("🗑 בצע מחיקה וניקוי")
+        self._apply_btn = QPushButton(t("duplicates_apply_btn"))
         self._apply_btn.setFixedHeight(36)
         self._apply_btn.setMinimumWidth(170)
         self._apply_btn.clicked.connect(self._on_apply)
@@ -325,23 +335,20 @@ class DuplicateFilesDialog(QDialog):
         to_delete = self._collect_unchecked()
         if not to_delete:
             QMessageBox.information(
-                self, "אין מה למחוק",
-                "כל הקבצים מסומנים לשמירה.\nבטל סימון של הקבצים שברצונך למחוק.",
+                self,
+                t("duplicates_nothing_title"),
+                t("duplicates_nothing_msg"),
             )
             return
 
         confirm = QMessageBox(self)
-        confirm.setWindowTitle("אישור מחיקה סופי")
+        confirm.setWindowTitle(t("duplicates_confirm_title"))
         confirm.setIcon(QMessageBox.Warning)
-        confirm.setLayoutDirection(Qt.RightToLeft)
-        confirm.setText(
-            f"אזהרה: פעולה זו תמחק לצמיתות את {len(to_delete)} הקבצים "
-            f"המסומנים מהדיסק.\n\nהאם אתה בטוח?"
-        )
+        confirm.setText(t("duplicates_confirm_msg", n=len(to_delete)))
         confirm.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         confirm.setDefaultButton(QMessageBox.No)
-        confirm.button(QMessageBox.Yes).setText("כן, מחק")
-        confirm.button(QMessageBox.No).setText("לא, חזור")
+        confirm.button(QMessageBox.Yes).setText(t("duplicates_confirm_yes"))
+        confirm.button(QMessageBox.No).setText(t("duplicates_confirm_no"))
 
         if confirm.exec() == QMessageBox.Yes:
             self._files_to_delete = to_delete

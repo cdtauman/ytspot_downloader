@@ -37,6 +37,7 @@ from qfluentwidgets import (
 from core.duplicate_detector import (
     DuplicateGroup, DuplicateDecision, VideoInfo, _appearance_key,
 )
+from ui.i18n import t
 from ui.theme_manager import get_colors, ACCENT_COLOR, WARNING_COLOR, SUCCESS_COLOR
 
 
@@ -150,7 +151,7 @@ class _DuplicateCard(QFrame):
         title_lbl = BodyLabel(self._group.title)
         title_lbl.setStyleSheet(f"color: {c.text_primary}; font-weight: 600; background: transparent;")
         title_lbl.setWordWrap(True)
-        count_lbl = CaptionLabel(f"{len(self._group.appearances)} מקורות")
+        count_lbl = CaptionLabel(t("conflict_sources_count", n=len(self._group.appearances)))
         count_lbl.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
         title_row.addWidget(warn_lbl)
         title_row.addWidget(title_lbl, 1)
@@ -161,8 +162,8 @@ class _DuplicateCard(QFrame):
         cols = QHBoxLayout()
         cols.setSpacing(8)
 
-        left_col  = self._make_column("📹 סרטונים / קצרים / שידורים", "non_playlist")
-        right_col = self._make_column("📋 פלייליסטים", "playlist")
+        left_col  = self._make_column(t("conflict_videos_header"), "non_playlist")
+        right_col = self._make_column(t("conflict_playlists_header"), "playlist")
         cols.addLayout(left_col, 1)
 
         # Divider
@@ -230,7 +231,7 @@ class ConflictResolutionDialog(QDialog):
 
     def _build(self) -> None:
         c = get_colors()
-        self.setWindowTitle("ניהול כפילויות")
+        self.setWindowTitle(t("conflict_dialog_title"))
         self.setMinimumSize(640, 500)
         self.setModal(True)
         self.setStyleSheet(f"background: {c.bg};")
@@ -243,16 +244,13 @@ class ConflictResolutionDialog(QDialog):
         hdr = QHBoxLayout()
         icon_lbl = QLabel("📁")
         icon_lbl.setStyleSheet("font-size: 22px;")
-        title_lbl = SubtitleLabel(f"ניהול כפילויות — {len(self._groups)} סרטונים חופפים")
+        title_lbl = SubtitleLabel(t("conflict_dialog_subtitle", n=len(self._groups)))
         title_lbl.setStyleSheet(f"color: {c.text_primary};")
         hdr.addWidget(icon_lbl)
         hdr.addWidget(title_lbl, 1)
         root.addLayout(hdr)
 
-        desc = CaptionLabel(
-            "הסרטונים הבאים נמצאו ביותר ממקור אחד. סמן ✓ את העותקים שאתה רוצה להוריד.\n"
-            "עותקים שונים יישמרו בתיקיות שונות."
-        )
+        desc = CaptionLabel(t("conflict_explanation"))
         desc.setStyleSheet(f"color: {c.text_secondary};")
         desc.setWordWrap(True)
         root.addWidget(desc)
@@ -284,8 +282,8 @@ class ConflictResolutionDialog(QDialog):
         # Bottom buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        cancel_btn = PushButton("ביטול")
-        ok_btn = PrimaryPushButton("אישור — הורד הכל שסומן")
+        cancel_btn = PushButton(t("cancel_btn"))
+        ok_btn = PrimaryPushButton(t("conflict_ok_btn"))
         cancel_btn.clicked.connect(self.reject)
         ok_btn.clicked.connect(self._on_ok)
         btn_row.addWidget(cancel_btn)
@@ -302,10 +300,10 @@ class ConflictResolutionDialog(QDialog):
             b.setFixedHeight(28)
             return b
 
-        row.addWidget(_btn("✓ שמור בסרטונים",    lambda: self._apply_all("non_playlist", True)))
-        row.addWidget(_btn("✓ שמור בפלייליסטים", lambda: self._apply_all("playlist", True)))
-        row.addWidget(_btn("✓ שמור שניהם",        lambda: self._apply_all("all", True)))
-        row.addWidget(_btn("✗ נקה הכל",           lambda: self._apply_all("all", False)))
+        row.addWidget(_btn(t("conflict_keep_videos_btn"),    lambda: self._apply_all("non_playlist", True)))
+        row.addWidget(_btn(t("conflict_keep_playlists_btn"), lambda: self._apply_all("playlist", True)))
+        row.addWidget(_btn(t("conflict_keep_both_btn"),       lambda: self._apply_all("all", True)))
+        row.addWidget(_btn(t("conflict_clear_all_btn"),        lambda: self._apply_all("all", False)))
         row.addStretch()
         return row
 

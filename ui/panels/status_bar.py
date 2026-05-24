@@ -134,12 +134,15 @@ class StatusBar(QFrame):
 
         self._speed_lbl = QLabel("")
         self._speed_lbl.setFixedWidth(90)
-        self._speed_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        # AlignTrailing follows layout direction (right-aligned in LTR,
+        # left-aligned in RTL) so the metric label sits at the bar's edge
+        # regardless of language.
+        self._speed_lbl.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
         bottom_row.addWidget(self._speed_lbl)
 
         self._eta_lbl = QLabel("")
         self._eta_lbl.setFixedWidth(72)
-        self._eta_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._eta_lbl.setAlignment(Qt.AlignmentFlag.AlignTrailing | Qt.AlignmentFlag.AlignVCenter)
         bottom_row.addWidget(self._eta_lbl)
 
         self._cancel_btn = ToolButton()

@@ -154,6 +154,23 @@ class _ExplorerFileListDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+class _LtrPathDelegate(QStyledItemDelegate):
+    """Force LTR + left alignment + middle elide on cells holding file paths.
+
+    Used on the filename columns of the center metadata table so that paths
+    read correctly L→R even when the table inherits RTL from the app.
+    Hebrew column headers stay translated and right-aligned (RTL-natural).
+    """
+
+    def initStyleOption(self, option, index) -> None:
+        super().initStyleOption(option, index)
+        option.direction = Qt.LayoutDirection.LeftToRight
+        option.displayAlignment = (
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        option.textElideMode = Qt.TextElideMode.ElideMiddle
+
+
 class _ExplorerFileListView(QTableView):
     """QTableView with Explorer-like empty-area deselect and rubber-band rows."""
 
@@ -1036,9 +1053,16 @@ class MetadataEditorPanel(QWidget):
         self._table.verticalHeader().setVisible(False)
         self._table.setShowGrid(False)
         self._table.setWordWrap(False)
-        self._table.setLayoutDirection(Qt.RightToLeft)
+        # Layout direction inherits from the app (RTL for Hebrew, LTR for
+        # English). The filename columns get a per-column LTR delegate below
+        # so file paths read correctly in either mode.
         table_colors = get_colors()
         self._table.setItemDelegate(_ExplorerFileListDelegate(self._table))
+        # Per-column LTR delegate keeps file paths readable even when the
+        # surrounding table inherits RTL under Hebrew.
+        _ltr_path_delegate = _LtrPathDelegate(self._table)
+        self._table.setItemDelegateForColumn(COL_FILENAME, _ltr_path_delegate)
+        self._table.setItemDelegateForColumn(COL_FILENAME_NEW, _ltr_path_delegate)
 
         hdr = self._table.horizontalHeader()
         hdr.setSectionResizeMode(QHeaderView.Interactive)

@@ -41,6 +41,7 @@ from qfluentwidgets import (
 
 from config import AppConfig
 from core.update_checker import CURRENT_VERSION
+from ui.direction import force_ltr_input
 from ui.i18n import t
 from ui.theme_manager import ACCENT_COLOR, ACCENT_PALETTE, ThemeManager, get_colors
 
@@ -916,6 +917,9 @@ class _TextSettingCard(QFrame):
         self._edit = LineEdit(self)
         self._edit.setText(self._value)
         self._edit.setFixedWidth(260)
+        # All three _TextSettingCard instances hold technical values (proxy
+        # URL, API token, server URL) that must read L→R even in Hebrew.
+        force_ltr_input(self._edit)
         self._edit.editingFinished.connect(self._on_editing_finished)
         row.addWidget(self._edit)
 

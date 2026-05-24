@@ -73,7 +73,7 @@ from ui.components.update_banner  import UpdateBanner
 from ui.components.offline_banner import OfflineBanner
 
 # ── Theme / i18n ───────────────────────────────────────────────────────────────
-from ui.i18n         import t, set_language
+from ui.i18n         import t, request_language_restart
 from ui.theme_manager import ThemeManager, ACCENT_COLOR, get_colors
 
 logger = logging.getLogger(__name__)
@@ -209,6 +209,10 @@ class AppWindow(FluentWindow):
         self._engine = services.engine
         self._theme  = ThemeManager(config)
 
+        # Snapshot the language at startup so _on_settings_saved can detect
+        # a change and prompt for a restart.
+        self._previous_language: str = config.language
+
         # ── URL routing state (needed when building download jobs) ─────────────
         self._last_playlist_title: str               = ""
         self._last_url_kind:       Optional[UrlKind] = None
@@ -329,7 +333,7 @@ class AppWindow(FluentWindow):
         )
         self._converter_panel.setObjectName("converterPage")
         self.addSubInterface(
-            self._converter_panel, FluentIcon.SYNC, "Converter",
+            self._converter_panel, FluentIcon.SYNC, t("converter"),
             position=NavigationItemPosition.TOP,
         )
         self._metadata_panel.setObjectName("metadataEditorPage")
@@ -505,7 +509,7 @@ class AppWindow(FluentWindow):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return
         self._tray = QSystemTrayIcon(self)
-        self._tray.setToolTip("YTSpot Downloader")
+        self._tray.setToolTip(t("tray_tooltip"))
         try:
             from PySide6.QtGui import QPixmap
             px = QPixmap(32, 32)
@@ -514,11 +518,11 @@ class AppWindow(FluentWindow):
         except Exception:
             pass
         menu = QMenu(self)
-        menu.addAction("Open", self._tray_open)
+        menu.addAction(t("tray_open"), self._tray_open)
         menu.addSeparator()
-        menu.addAction("Cancel All Downloads", self._on_cancel)
+        menu.addAction(t("tray_cancel_all"), self._on_cancel)
         menu.addSeparator()
-        menu.addAction("Quit", self._tray_quit)
+        menu.addAction(t("tray_quit"), self._tray_quit)
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
@@ -728,20 +732,23 @@ class AppWindow(FluentWindow):
             detail = err.error_message
             
         msg = MessageBox(headline, detail, self)
-        
-        # 1. Handle Login/Sign-in blocks — offer the wizard
-        if any(x in detail for x in ["Please sign in", "sign in", "PO Token", 
+
+        # The substring lists below are matched against raw upstream error
+        # text (yt-dlp / Playwright / Windows DPAPI). They include Hebrew
+        # tokens because some error sources emit Hebrew — those are
+        # detection signatures, not UI text, and stay hardcoded.
+        if any(x in detail for x in ["Please sign in", "sign in", "PO Token",
                                       "account cookies", "אימות", "חשבון", "Cookies",
                                       "DPAPI", "Chrome", "bot", "visitor_data"]):
-            msg.yesButton.setText("🔑 פתח אשף התחברות (מומלץ)")
-            msg.cancelButton.setText("סגור")
+            msg.yesButton.setText(t("auth_wizard_open_btn"))
+            msg.cancelButton.setText(t("auth_wizard_close_btn"))
             if msg.exec():
                 self._run_cookie_wizard_ui()
-                
+
         # 2. Handle Signature / Manual "Puzzle" solving
         elif any(x in detail for x in ["Signature", "n challenge"]):
-            msg.yesButton.setText("🔧 תיקון ידני בדפדפן")
-            msg.cancelButton.setText("סגור")
+            msg.yesButton.setText(t("auth_wizard_manual_btn"))
+            msg.cancelButton.setText(t("auth_wizard_close_btn"))
             if msg.exec() and failing_url:
                 self._run_cookie_wizard_ui()
         else:
@@ -764,7 +771,7 @@ class AppWindow(FluentWindow):
             exc = PlaywrightNotAvailable("Sign-in / Cookie wizard")
             QMessageBox.warning(
                 self,
-                "נדרש Playwright Chromium",
+                t("playwright_required_title"),
                 exc.message_he,
             )
             return
@@ -772,7 +779,7 @@ class AppWindow(FluentWindow):
         target_url = "https://www.youtube.com"
         if prompt_for_url:
             url, ok = QInputDialog.getText(
-                self, "אשף התחברות לאתרים", "הזן את כתובת האתר שברצונך להתחבר אליו:",
+                self, t("auth_wizard_title"), t("auth_wizard_url_prompt"),
                 text=target_url
             )
             if not ok or not url:
@@ -780,13 +787,11 @@ class AppWindow(FluentWindow):
             target_url = url
 
         # Instruct the user what to do before the browser opens
-        info_msg = (
-            "כעת ייפתח חלון דפדפן.\n\n"
-            f"1. התחבר לחשבון שלך באתר: {target_url}\n"
-            "2. לאחר ההתחברות, פשוט סגור את חלון הדפדפן.\n\n"
-            "התוכנה תשמור את פרטי ההתחברות באופן אוטומטי."
+        QMessageBox.information(
+            self,
+            t("auth_wizard_title"),
+            t("auth_wizard_browser_info", url=target_url),
         )
-        QMessageBox.information(self, "אשף התחברות לאתרים", info_msg)
 
         # Run the wizard in a background thread using a subprocess so the Qt UI stays responsive
         # and avoids Playwright crashes inside a QThread on Windows.
@@ -817,8 +822,8 @@ class AppWindow(FluentWindow):
         def on_wizard_done(success: bool):
             if success:
                 InfoBar.success(
-                    title="ההתחברות הצליחה",
-                    content="פרטי ההתחברות לאתר נשמרו. ניתן להתחיל להוריד מחדש.",
+                    title=t("auth_wizard_success_title"),
+                    content=t("auth_wizard_success_msg"),
                     parent=self,
                     duration=6000
                 )
@@ -829,8 +834,8 @@ class AppWindow(FluentWindow):
                     self._options_bar.apply_config(self._cfg)
             else:
                 InfoBar.warning(
-                    title="האשף נסגר ללא שמירה",
-                    content="לא נשמרו cookies. ייתכן שהאשף נסגר לפני ההתחברות.",
+                    title=t("auth_wizard_aborted_title"),
+                    content=t("auth_wizard_aborted_msg"),
                     parent=self,
                     duration=5000
                 )
@@ -840,15 +845,13 @@ class AppWindow(FluentWindow):
 
     def _on_browser_lock_warning(self, browser_name: str) -> None:
         """Friendly warning for 'Simple Users' when Chrome/Edge etc is open."""
-        title = f"{browser_name} פתוח"
-        content = (
-            f"דפדפן {browser_name} פתוח כרגע.\n\n"
-            "ווינדוס לא מאפשר לתוכנה לגשת ל-Cookies בזמן שהדפדפן פתוח.\n"
-            "כדי שההורדה תעבוד, עליך לסגור את כל חלונות הדפדפן ולנסות שוב."
+        msg = MessageBox(
+            t("browser_locked_title", browser=browser_name),
+            t("browser_locked_msg", browser=browser_name),
+            self,
         )
-        msg = MessageBox(title, content, self)
-        msg.yesButton.setText("סגרתי, נסה שוב")
-        msg.cancelButton.setText("ביטול")
+        msg.yesButton.setText(t("browser_locked_retry_btn"))
+        msg.cancelButton.setText(t("cancel_btn"))
         if msg.exec():
             # Retry download flow (trigger the button click logic)
             self._on_download()
@@ -865,8 +868,8 @@ class AppWindow(FluentWindow):
         self._cfg.save()
         if self._tray and not self.isVisible():
             self._tray.showMessage(
-                "YTSpot Downloader",
-                "All downloads complete!",
+                t("tray_tooltip"),
+                t("tray_all_done"),
                 QSystemTrayIcon.MessageIcon.Information,
                 3000,
             )
@@ -1113,12 +1116,32 @@ class AppWindow(FluentWindow):
     # ──────────────────────────────────────────────────────────────────────────
 
     def _on_settings_saved(self) -> None:
-        set_language(self._cfg.language)
-        QApplication.setLayoutDirection(
-            Qt.LayoutDirection.RightToLeft
-            if self._cfg.language == "he"
-            else Qt.LayoutDirection.LeftToRight
-        )
+        # Language change is restart-based for this stage: rebuilding every
+        # widget tree (tooltips, dialog texts initialised in __init__) is
+        # less reliable than a clean restart. See ui/i18n.py for the
+        # language_changed signal that future live-retranslate work will use.
+        if self._cfg.language != self._previous_language:
+            new_lang = self._cfg.language
+            confirm = MessageBox(
+                t("restart_required_title"),
+                t("restart_required_msg"),
+                self,
+            )
+            confirm.yesButton.setText(t("restart_now_btn"))
+            confirm.cancelButton.setText(t("restart_later_btn"))
+            if confirm.exec():
+                request_language_restart(QApplication.instance(), new_lang)
+                return
+            # User declined — revert config so the in-memory state matches
+            # what the user will see until they restart manually.
+            self._cfg.language = self._previous_language
+            self._cfg.save()
+            try:
+                self._settings_panel.refresh()
+            except Exception:
+                pass
+            return
+
         try:
             self.setWindowTitle(t("app_name"))
         except Exception:
