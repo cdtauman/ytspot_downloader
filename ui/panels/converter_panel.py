@@ -336,16 +336,13 @@ class ConverterPanel(QWidget):
         root.setSpacing(14)
 
         # Header
-        self._header_lbl = QLabel("🔄  Local File Converter")
+        self._header_lbl = QLabel(t("converter_header_title"))
         self._header_lbl.setStyleSheet(
             f"color: {c.text_primary}; font-size: 20px; font-weight: 700; background: transparent;"
         )
         root.addWidget(self._header_lbl)
 
-        self._sub_lbl = QLabel(
-            "Convert audio files already on your disk to a different format. "
-            "Drag files here or use the Add button — no internet connection needed."
-        )
+        self._sub_lbl = QLabel(t("converter_subtitle"))
         self._sub_lbl.setWordWrap(True)
         self._sub_lbl.setStyleSheet(
             f"color: {c.text_secondary}; font-size: 12px; background: transparent;"
@@ -364,7 +361,7 @@ class ConverterPanel(QWidget):
         self._list_layout.setSpacing(6)
         self._list_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        self._drop_hint = QLabel("⬆  Drop audio files here or click Add Files")
+        self._drop_hint = QLabel(t("converter_drop_hint"))
         self._drop_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._list_layout.addWidget(self._drop_hint)
 
@@ -378,19 +375,19 @@ class ConverterPanel(QWidget):
         ctrl_row.setSpacing(12)
 
         # Add files button
-        add_btn = PushButton(FluentIcon.ADD, "Add Files")
+        add_btn = PushButton(FluentIcon.ADD, t("converter_add_files"))
         add_btn.clicked.connect(self._on_add_files)
         ctrl_row.addWidget(add_btn)
 
         # Clear button
-        clear_btn = PushButton(FluentIcon.DELETE, "Clear All")
+        clear_btn = PushButton(FluentIcon.DELETE, t("converter_clear_all"))
         clear_btn.clicked.connect(self._on_clear)
         ctrl_row.addWidget(clear_btn)
 
         ctrl_row.addStretch()
 
         # Format selector
-        self._fmt_lbl = QLabel("Output Format:")
+        self._fmt_lbl = QLabel(t("converter_output_format"))
         ctrl_row.addWidget(self._fmt_lbl)
 
         self._fmt_combo = ComboBox()
@@ -401,7 +398,7 @@ class ConverterPanel(QWidget):
         ctrl_row.addWidget(self._fmt_combo)
 
         # Bitrate selector
-        self._br_lbl = QLabel("Bitrate:")
+        self._br_lbl = QLabel(t("converter_bitrate"))
         ctrl_row.addWidget(self._br_lbl)
 
         self._br_combo = ComboBox()
@@ -414,7 +411,7 @@ class ConverterPanel(QWidget):
         ctrl_row.addSpacing(12)
 
         # Output folder toggle
-        self._same_dir_lbl = QLabel("Same folder as source")
+        self._same_dir_lbl = QLabel(t("converter_same_folder"))
         ctrl_row.addWidget(self._same_dir_lbl)
 
         self._same_dir_sw = SwitchButton()
@@ -422,7 +419,7 @@ class ConverterPanel(QWidget):
         self._same_dir_sw.checkedChanged.connect(self._on_same_dir_toggle)
         ctrl_row.addWidget(self._same_dir_sw)
 
-        self._out_dir_btn = PushButton(FluentIcon.FOLDER, "Output Folder")
+        self._out_dir_btn = PushButton(FluentIcon.FOLDER, t("converter_output_folder"))
         self._out_dir_btn.setVisible(False)
         self._out_dir_btn.clicked.connect(self._on_browse_out)
         ctrl_row.addWidget(self._out_dir_btn)
@@ -494,7 +491,10 @@ class ConverterPanel(QWidget):
     def _on_add_files(self) -> None:
         exts = " ".join(f"*{e}" for e in sorted(_INPUT_EXTS))
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select Audio Files", "", f"Audio Files ({exts});;All Files (*)"
+            self,
+            t("converter_select_files_dialog"),
+            "",
+            f"{t('converter_audio_files_filter')} ({exts});;{t('converter_all_files_filter')} (*)",
         )
         for p in paths:
             self._add_file(p)
@@ -514,7 +514,7 @@ class ConverterPanel(QWidget):
             self._out_dir = None
 
     def _on_browse_out(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        path = QFileDialog.getExistingDirectory(self, t("converter_select_output_dialog"))
         if path:
             self._out_dir = path
             self._out_dir_btn.setText(Path(path).name[:30])

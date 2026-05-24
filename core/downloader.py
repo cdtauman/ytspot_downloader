@@ -37,6 +37,7 @@ from utils.cookie_validator import check_cookies_valid
 from utils.paths import get_app_cookies_path, get_bundled_ffmpeg_dir
 from utils.yt_dlp_opts import build_base_ydl_opts as _build_base_opts
 from core.playlist_parser import SourcePlatform
+from ui.i18n import t
 
 
 logger = logging.getLogger(__name__)
@@ -218,44 +219,28 @@ def _strip_ansi_codes(text: str) -> str:
 
 
 def _get_friendly_error(raw_err: str) -> str:
-    """Analyze technical yt-dlp error and add Hebrew tips."""
+    """Analyze a technical yt-dlp error and append a localized tip."""
     clean = _strip_ansi_codes(raw_err)
 
     if "Sign in to confirm you’re not a bot" in clean or "Sign in to confirm your age" in clean or "Confirm you're not a bot" in clean:
-        return (
-            f"{clean}\n\n"
-            "💡 יוטיוב דורש אימות (חשבון גוגל) כדי להמשיך בהורדה.\n\n"
-            "יש לך שתי אפשרויות:\n"
-            "1. התחברות מהירה: לחץ על 'תיקון התחברות' כדי להתחבר לחשבון גוגל ישירות מהתוכנה (הכי פשוט).\n"
-            "2. ייצוא קוקיז: השתמש בתוסף 'Get cookies.txt LOCALLY' לדפדפן כדי לייצא קובץ טקסט ולהגדיר אותו בהגדרות.\n"
-            "קישור לתוסף: https://chromewebstore.google.com/detail/get-cookiestxt-locally/ccmgnabidkenghhcidlkgeimdbgefecl\n"
-        )
+        return f"{clean}\n\n" + t("downloader_auth_required_hint")
 
     if "Could not copy Chrome cookie database" in clean or "Failed to decrypt with DPAPI" in clean:
-        return (
-            f"{clean}\n\n"
-            "💡 טיפ: דפדפן Chrome נעול או מוצפן. סגור את הדפדפן לגמרי ונסה שוב.\n"
-            "אם זה לא עוזר, השתמש בלחצן 'תיקון התחברות (פשוט)' כדי לקרוא את קובצי העוגיות המוצפנים של כרום."
-        )
+        return f"{clean}\n\n" + t("downloader_chrome_locked_hint")
 
     if "Signature solving failed" in clean or "n challenge solving failed" in clean:
         return (
             f"{clean}\n\n"
-            "💡 טיפ: חסר רכיב להרצת JavaScript (נחוץ לפתרון ה'חידות' של יוטיוב).\n"
-            "יש להריץ בטרמינל את הפקודות הבאות:\n"
-            "1. pip install quickjs\n"
+            + t("downloader_node_missing_hint")
+            + "1. pip install quickjs\n"
             "2. pip install -U yt-dlp"
         )
 
     if "Requested format is not available" in clean or "Please sign in" in clean:
-        return (
-            f"{clean}\n\n"
-            "💡 טיפ: יוטיוב דורש רכיב אימות נוסף (PO Token) או התחברות לחשבון.\n"
-            "ייתכן שתצטרך לעדכן את קובץ ה-Cookies שלך דרך 'אשף ההתחברות' או להשתמש בלחצן 'תיקון ידני בדפדפן' כדי לחמם את ה-Token."
-        )
+        return f"{clean}\n\n" + t("downloader_po_token_hint")
 
     if "HTTP Error 403" in clean or "Forbidden" in clean:
-        return f"{clean}\n\n💡 טיפ: שגיאת גישה (403). ייתכן שצריך לעדכן את קובץ ה-Cookies או להחליף כתובת IP."
+        return f"{clean}\n\n" + t("downloader_403_hint")
 
     return clean
 

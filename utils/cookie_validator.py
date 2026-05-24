@@ -13,6 +13,8 @@ import logging
 import time
 from pathlib import Path
 
+from ui.i18n import t
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,12 +31,12 @@ def check_cookies_valid(path: str | Path) -> tuple[bool, str]:
     """
     p = Path(path)
     if not p.exists():
-        return False, f"קובץ Cookies לא נמצא: {p}"
+        return False, t("cookies_file_not_found", path=p)
 
     try:
         text = p.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
-        return False, f"שגיאה בקריאת קובץ Cookies: {exc}"
+        return False, t("cookies_read_error", exc=exc)
 
     now = time.time()
     total = 0
@@ -59,13 +61,10 @@ def check_cookies_valid(path: str | Path) -> tuple[bool, str]:
             expired += 1
 
     if total == 0:
-        return False, "קובץ Cookies ריק או לא תקין."
+        return False, t("cookies_empty_or_invalid")
 
     if expired == total:
-        return False, (
-            "⚠️ כל ה-Cookies פגו תוקף! ייתכן שתקבל שגיאת 403.\n"
-            "מומלץ להתחבר מחדש דרך 'אשף ההתחברות'."
-        )
+        return False, t("cookies_all_expired")
 
     if expired > 0:
         pct = int(expired / total * 100)

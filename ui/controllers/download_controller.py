@@ -34,6 +34,7 @@ from core.downloader import (
 )
 from core.history_db import HistoryDB
 from core.playlist_parser import SourcePlatform, UrlKind
+from ui.i18n import localized_folder_name
 
 logger = logging.getLogger(__name__)
 
@@ -223,10 +224,11 @@ class DownloadController(QObject):
                         (card.total_tracks > 1 and album)
                     )
                     
+                    cat_folder = localized_folder_name(cat_name)
                     if is_grouped and album:
-                        track_playlist_name = f"{parent_artist}/{cat_name}/{album}"
+                        track_playlist_name = f"{parent_artist}/{cat_folder}/{album}"
                     else:
-                        track_playlist_name = f"{parent_artist}/{cat_name}"
+                        track_playlist_name = f"{parent_artist}/{cat_folder}"
 
                     is_parent_discography = True
 
@@ -618,9 +620,9 @@ class DownloadController(QObject):
         if is_discography and artist:
             path_parts.append(artist)
             if rel_type == "album":
-                path_parts.append("אלבומים")
+                path_parts.append(localized_folder_name("אלבומים"))
             else:
-                path_parts.append("סינגלים ו-EP")
+                path_parts.append(localized_folder_name("סינגלים ו-EP"))
     
         if album:
             path_parts.append(album.replace("Album - ", "").strip())

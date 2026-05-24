@@ -21,6 +21,7 @@ from core.metadata_processor import (
     clean_filename_to_title,
     extract_track_number,
 )
+from ui.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ class MetadataController(QObject):
         self._session = TagEditSession()
 
         self.scan_started.emit()
-        self.status_update.emit(f"סורק: {folder.name}…")
+        self.status_update.emit(t("md_scanning_folder", folder=folder.name))
 
         self._scan_worker = MetadataScanWorker(folder, recursive, parent=self)
         self._scan_worker.track_found.connect(self._on_track_found)
@@ -127,13 +128,13 @@ class MetadataController(QObject):
             if num is not None and num != item.original.track_num:
                 p.track_num = num
 
-        changed_count = sum(1 for t in tracks if t.has_changes)
+        changed_count = sum(1 for tr in tracks if tr.has_changes)
         self.auto_rules_applied.emit()
         self.tags_modified.emit()
         if changed_count:
-            self.status_update.emit(f"סדר אוטומטי: {changed_count} שינויים הוצעו")
+            self.status_update.emit(t("md_auto_changes_proposed", n=changed_count))
         else:
-            self.status_update.emit("סדר אוטומטי: כל הקבצים כבר מסודרים")
+            self.status_update.emit(t("md_auto_no_changes"))
 
     def apply_artist_to_scope(self, artist: str, tracks: list[AudioTrackItem]) -> None:
         """Set proposed.artist (and album_artist) on all given tracks."""
@@ -144,19 +145,19 @@ class MetadataController(QObject):
             if not item.proposed.album_artist:
                 item.proposed.album_artist = artist
         self.tags_modified.emit()
-        self.status_update.emit(f"אמן '{artist}' הוחל על {len(tracks)} קבצים")
+        self.status_update.emit(t("md_artist_applied", artist=artist, n=len(tracks)))
 
     def apply_album_to_folder(
         self, album: str, folder: Path, tracks: list[AudioTrackItem]
     ) -> None:
         """Set proposed.album on all tracks whose folder matches."""
-        affected = [t for t in tracks if t.folder == folder]
+        affected = [tr for tr in tracks if tr.folder == folder]
         for item in affected:
             if item.status == TrackStatus.UNSUPPORTED:
                 continue
             item.proposed.album = album
         self.tags_modified.emit()
-        self.status_update.emit(f"אלבום '{album}' הוחל על {len(affected)} קבצים")
+        self.status_update.emit(t("md_album_applied", album=album, n=len(affected)))
 
     def apply_album_to_scope(self, album: str, tracks: list[AudioTrackItem]) -> None:
         """Set proposed.album on all given tracks (regardless of folder)."""
@@ -167,7 +168,7 @@ class MetadataController(QObject):
             item.proposed.album = album
             affected += 1
         self.tags_modified.emit()
-        self.status_update.emit(f"אלבום '{album}' הוחל על {affected} קבצים")
+        self.status_update.emit(t("md_album_applied", album=album, n=affected))
 
     def apply_title_from_filename(
         self, tracks: list[AudioTrackItem], strip_numbering: bool = True
@@ -217,7 +218,7 @@ class MetadataController(QObject):
         changed = [t for t in candidates if t.has_changes]
 
         if not changed:
-            self.status_update.emit("אין שינויים להחלה בקבצים הנבחרים")
+            self.status_update.emit(t("md_no_changes_to_apply"))
             return
 
         bd = backup_dir or _BACKUP_DIR
@@ -226,7 +227,7 @@ class MetadataController(QObject):
         self._session.backup_path = backup_path
 
         self.apply_started.emit()
-        self.status_update.emit(f"כותב תגיות ל-{len(changed)} קבצים…")
+        self.status_update.emit(t("md_writing_tags_to_n", n=len(changed)))
 
         self._apply_worker = MetadataApplyWorker(candidates, backup_path, parent=self)
         self._apply_worker.progress.connect(self._on_apply_progress)
@@ -245,7 +246,7 @@ class MetadataController(QObject):
             if src:
                 item.proposed.album_artist = src
         self.tags_modified.emit()
-        self.status_update.emit(f"אמן אלבום הועתק מ-אמן ({len(tracks)} קבצים)")
+        self.status_update.emit(t("md_album_artist_copied", n=len(tracks)))
 
     def split_artist_title_from_filename(self, tracks: list[AudioTrackItem]) -> None:
         """Parse filenames of the form 'Artist – Title.ext' into separate fields."""
@@ -261,7 +262,7 @@ class MetadataController(QObject):
                 item.proposed.title  = m.group(2).strip()
                 count += 1
         self.tags_modified.emit()
-        self.status_update.emit(f"פיצול אמן-כותרת הושלם ({count} קבצים)")
+        self.status_update.emit(t("md_artist_title_split_done", n=count))
 
     def clear_year(self, tracks: list[AudioTrackItem]) -> None:
         for item in tracks:
@@ -269,7 +270,7 @@ class MetadataController(QObject):
                 continue
             item.proposed.year = ""
         self.tags_modified.emit()
-        self.status_update.emit("שנה נוקתה")
+        self.status_update.emit(t("md_year_cleared"))
 
     def clear_genre(self, tracks: list[AudioTrackItem]) -> None:
         for item in tracks:
@@ -277,7 +278,7 @@ class MetadataController(QObject):
                 continue
             item.proposed.genre = ""
         self.tags_modified.emit()
-        self.status_update.emit("ז'אנר נוקה")
+        self.status_update.emit(t("md_genre_cleared"))
 
     def clear_track_num(self, tracks: list[AudioTrackItem]) -> None:
         for item in tracks:
@@ -285,7 +286,7 @@ class MetadataController(QObject):
                 continue
             item.proposed.track_num = ""
         self.tags_modified.emit()
-        self.status_update.emit("מספר רצועה נוקה")
+        self.status_update.emit(t("md_track_num_cleared"))
 
     def normalize_title_spaces(self, tracks: list[AudioTrackItem]) -> None:
         """Replace underscores with spaces and collapse multiple spaces in title."""
@@ -301,7 +302,7 @@ class MetadataController(QObject):
                     item.proposed.title = cleaned
                     count += 1
         self.tags_modified.emit()
-        self.status_update.emit(f"נוקה רווחים ב-{count} כותרות")
+        self.status_update.emit(t("md_spaces_normalised", n=count))
 
     def strip_web_junk_from_title(self, tracks: list[AudioTrackItem]) -> None:
         """Remove common YouTube/web annotations from title based on config settings."""
@@ -328,7 +329,7 @@ class MetadataController(QObject):
             ])
             
         if not terms:
-            self.status_update.emit("הגדרות הניקוי ריקות - לא בוצע שינוי")
+            self.status_update.emit(t("md_clean_settings_empty"))
             return
             
         terms_pattern = "|".join(terms)
@@ -366,7 +367,7 @@ class MetadataController(QObject):
                     item.proposed.title = cleaned
                     count += 1
         self.tags_modified.emit()
-        self.status_update.emit(f"זבל הוסר מ-{count} כותרות")
+        self.status_update.emit(t("md_junk_removed", n=count))
 
     def clean_filename(self, tracks: list[AudioTrackItem]) -> None:
         """Clean the physical filename based on config settings."""
@@ -425,7 +426,7 @@ class MetadataController(QObject):
                 count += 1
                 
         self.tags_modified.emit()
-        self.status_update.emit(f"שם קובץ פיזי נוקה עבור {count} קבצים")
+        self.status_update.emit(t("md_filename_cleaned", n=count))
 
     def strip_filename_numbering(self, tracks: list[AudioTrackItem]) -> None:
         """Remove leading numbering (e.g. '01 - ') from physical filename."""
@@ -446,7 +447,7 @@ class MetadataController(QObject):
                 count += 1
                 
         self.tags_modified.emit()
-        self.status_update.emit(f"מספור הוסר משם הקובץ עבור {count} קבצים")
+        self.status_update.emit(t("md_filename_numbering_removed", n=count))
 
     def find_duplicates(self, folder: Path, recursive: bool) -> None:
         """Launch DuplicateDetectorWorker to scan for duplicate audio files."""
@@ -456,7 +457,7 @@ class MetadataController(QObject):
             self._dup_worker.cancel()
             self._dup_worker.wait(1000)
 
-        self.status_update.emit(f"מחפש כפילויות ב-{folder.name}…")
+        self.status_update.emit(t("md_searching_duplicates_in", folder=folder.name))
         self._dup_worker = DuplicateDetectorWorker(folder, recursive, parent=self)
         self._dup_worker.progress.connect(self.duplicate_scan_progress)
         self._dup_worker.finished.connect(self._on_dup_finished)
@@ -484,8 +485,8 @@ class MetadataController(QObject):
                 fail += 1
 
         self.duplicate_delete_complete.emit(success, fail)
-        note = f", {fail} שגיאות" if fail else ""
-        self.status_update.emit(f"נמחקו {success} קבצים כפולים{note}")
+        note = t("md_duplicates_deleted_errors_suffix", fail=fail) if fail else ""
+        self.status_update.emit(t("md_duplicates_deleted", success=success, note=note))
 
     def cancel_apply(self) -> None:
         if self._apply_worker and self._apply_worker.isRunning():
@@ -496,7 +497,7 @@ class MetadataController(QObject):
         for item in tracks:
             item.proposed.clear()
         self.tags_modified.emit()
-        self.status_update.emit("כל השינויים בוטלו")
+        self.status_update.emit(t("md_all_changes_reverted"))
 
     # ── Private slots ──────────────────────────────────────────────────────────
 
@@ -510,17 +511,15 @@ class MetadataController(QObject):
         self._session.scan_result = result
         self.scan_complete.emit(result)
         n = result.files_count
-        self.status_update.emit(
-            f"נסרקו {n} קבצים ב-{result.folders_count} תיקיות"
-        )
+        self.status_update.emit(t("md_scan_done", n=n, folders=result.folders_count))
 
     def _on_scan_error(self, msg: str) -> None:
         logger.error("[MetadataController] Scan error: %s", msg)
-        self.status_update.emit(f"שגיאה בסריקה: {msg}")
+        self.status_update.emit(t("md_scan_error", msg=msg))
 
     def _on_apply_progress(self, done: int, total: int) -> None:
         self.apply_progress.emit(done, total)
-        self.status_update.emit(f"כותב תגיות… {done}/{total}")
+        self.status_update.emit(t("md_writing_tags_progress", done=done, total=total))
 
     def _on_apply_finished(self, success: int, fail: int, skip: int) -> None:
         self._session.apply_done    = success
@@ -528,17 +527,15 @@ class MetadataController(QObject):
         self._session.apply_skipped = skip
         self.apply_complete.emit(success, fail, skip)
         bp = self._session.backup_path
-        bp_note = f" (גיבוי: {bp.name})" if bp else ""
-        self.status_update.emit(
-            f"הושלם — {success} הצליחו, {fail} נכשלו, {skip} דולגו{bp_note}"
-        )
+        bp_note = t("md_apply_done_backup_note", name=bp.name) if bp else ""
+        self.status_update.emit(t("md_apply_done", success=success, fail=fail, skip=skip, bp_note=bp_note))
 
     def _on_dup_finished(self, groups: dict, elapsed: float, strategy: str) -> None:
         n_groups = len(groups)
         n_files  = sum(len(v) for v in groups.values())
-        strat_lbl = "גודל קובץ" if strategy == "size" else "MD5"
+        strat_lbl = t("md_strategy_size") if strategy == "size" else t("md_strategy_md5")
         self.status_update.emit(
-            f"נמצאו {n_files} כפילויות ב-{n_groups} קבוצות ({strat_lbl}, {elapsed:.1f}s)"
+            t("md_duplicates_found_summary", n_files=n_files, n_groups=n_groups, strat=strat_lbl, elapsed=elapsed)
         )
         self.duplicate_scan_complete.emit(groups, elapsed, strategy)
 

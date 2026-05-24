@@ -27,6 +27,7 @@ from qfluentwidgets import (
 
 from core.channel_tab_discoverer import TabInfo, DiscoveryResult
 from core.duplicate_detector import VideoInfo
+from ui.i18n import t
 from ui.theme_manager import get_colors, ACCENT_COLOR, SUCCESS_COLOR
 
 
@@ -118,7 +119,7 @@ class _TabCard(QFrame):
 
     def set_count(self, n: int) -> None:
         if n >= 0:
-            self._count_lbl.setText(f"{n:,} פריטים")
+            self._count_lbl.setText(t("import_channel_items_count", n=n))
             self._count_lbl.show()
 
     def mousePressEvent(self, event) -> None:
@@ -168,7 +169,7 @@ class TabSelectDialog(QDialog):
 
     def _build(self) -> None:
         c = get_colors()
-        self.setWindowTitle("ייבוא ערוץ יוטיוב")
+        self.setWindowTitle(t("import_channel_title"))
         self.setMinimumWidth(520)
         self.setModal(True)
         self.setStyleSheet(f"background: {c.bg};")
@@ -178,12 +179,12 @@ class TabSelectDialog(QDialog):
         root.setSpacing(16)
 
         # Title
-        self._title = SubtitleLabel("ייבוא ערוץ יוטיוב")
+        self._title = SubtitleLabel(t("import_channel_title"))
         self._title.setStyleSheet(f"color: {c.text_primary};")
         root.addWidget(self._title)
 
         # Subtitle / status line
-        self._subtitle = CaptionLabel("מגלה טאבים זמינים…")
+        self._subtitle = CaptionLabel(t("import_channel_discovering"))
         self._subtitle.setStyleSheet(f"color: {c.text_secondary};")
         root.addWidget(self._subtitle)
 
@@ -229,8 +230,8 @@ class TabSelectDialog(QDialog):
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.addStretch()
-        self._cancel_btn = PushButton("ביטול")
-        self._scan_btn   = PrimaryPushButton("סרוק טאבים נבחרים")
+        self._cancel_btn = PushButton(t("import_channel_cancel"))
+        self._scan_btn   = PrimaryPushButton(t("import_channel_scan_selected"))
         self._scan_btn.setEnabled(False)
         self._cancel_btn.clicked.connect(self.reject)
         self._scan_btn.clicked.connect(self._on_scan_clicked)
@@ -257,15 +258,15 @@ class TabSelectDialog(QDialog):
         self.channel_name = result.channel_name
 
         if result.error and not result.tabs:
-            self._subtitle.setText(f"שגיאה בגילוי טאבים: {result.error}")
+            self._subtitle.setText(t("import_channel_error_prefix", error=result.error))
             self._scan_btn.setEnabled(False)
             return
 
         if result.channel_name:
-            self._title.setText(f"ייבוא: {result.channel_name}")
+            self._title.setText(t("import_channel_with_name", name=result.channel_name))
 
         self._subtitle.setText(
-            f"נמצאו {len(result.tabs)} טאבים — בחר מה לסרוק:"
+            t("import_channel_tabs_found", n=len(result.tabs))
             + (f"\n⚠ {result.error}" if result.error else "")
         )
 
@@ -302,7 +303,7 @@ class TabSelectDialog(QDialog):
 
         self._scan_btn.setEnabled(False)
         self._cancel_btn.setEnabled(False)
-        self._subtitle.setText("סורק טאבים נבחרים…")
+        self._subtitle.setText(t("import_channel_scanning_selected"))
         self._progress_bar.show()
         self._progress_label.show()
 
@@ -325,10 +326,10 @@ class TabSelectDialog(QDialog):
         self._scraper.start()
 
     def _on_tab_started(self, tab_name: str) -> None:
-        self._progress_label.setText(f"סורק: {tab_name}…")
+        self._progress_label.setText(t("import_channel_scanning_tab", tab=tab_name))
 
     def _on_tab_progress(self, tab_name: str, current: int, total: int) -> None:
-        self._progress_label.setText(f"מרחיב פלייליסטים: {current}/{total}")
+        self._progress_label.setText(t("import_channel_expanding_playlists", current=current, total=total))
         if total > 0:
             pct = int(self._tabs_done / self._total_tabs * 100
                       + current / total * (100 / self._total_tabs))
@@ -348,11 +349,11 @@ class TabSelectDialog(QDialog):
         self.scrape_results = results
         total_items = sum(len(v) for v in results.values())
         self._progress_bar.setValue(100)
-        self._progress_label.setText(f"סריקה הושלמה — {total_items:,} פריטים")
+        self._progress_label.setText(t("import_channel_scan_complete", n=total_items))
         self.accept()
 
     def _on_scrape_error(self, msg: str) -> None:
-        self._subtitle.setText(f"שגיאת סריקה: {msg}")
+        self._subtitle.setText(t("import_channel_scrape_error", msg=msg))
         self._scan_btn.setEnabled(True)
         self._cancel_btn.setEnabled(True)
         self._progress_bar.hide()

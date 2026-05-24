@@ -18,6 +18,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QBrush, QColor, QFont
 
 from core.metadata_models import AudioTrackItem, TrackStatus
+from ui.i18n import t
 from ui.theme_manager import ACCENT_COLOR, ERROR_COLOR, WARNING_COLOR
 
 # ── Column constants ──────────────────────────────────────────────────────────
@@ -41,17 +42,30 @@ COL_COMMENT_CUR  = 14
 COL_COMMENT_NEW  = 15
 COLUMN_COUNT     = 16
 
-_HEADERS = [
-    "", "שם קובץ",
-    "כותרת", "כותרת (חדש)",
-    "אמן", "אמן (חדש)",
-    "אלבום", "אלבום (חדש)",
-    "רצועה", "רצועה (חדש)",
-    "סטטוס",
-    "שם קובץ חדש",
-    "ז'אנר", "ז'אנר (חדש)",
-    "הערות", "הערות (חדש)",
+# Header *translation keys*, looked up via t() in headerData() so the
+# headers reflect the active language each time the view repaints.
+_HEADER_KEYS: list[str] = [
+    "",
+    "mt_col_filename",
+    "mt_col_title",        "mt_col_title_new",
+    "mt_col_artist",       "mt_col_artist_new",
+    "mt_col_album",        "mt_col_album_new",
+    "mt_col_track",        "mt_col_track_new",
+    "mt_col_status",
+    "mt_col_filename_new",
+    "mt_col_genre",        "mt_col_genre_new",
+    "mt_col_comment",      "mt_col_comment_new",
 ]
+
+
+def _headers() -> list[str]:
+    return [t(k) if k else "" for k in _HEADER_KEYS]
+
+
+# Backwards-compat alias for any external importer that reads `_HEADERS`
+# at import time. Captures the English headers at module load — UI code
+# should use ``_headers()`` (or ``model.headerData()``) for live values.
+_HEADERS = _headers()
 
 # Alpha-blended accent / warning brush colours
 _ACCENT_BG  = QColor(ACCENT_COLOR)
@@ -94,7 +108,10 @@ class MetadataTableModel(QAbstractTableModel):
 
     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return _HEADERS[section] if section < len(_HEADERS) else ""
+            if section < len(_HEADER_KEYS):
+                key = _HEADER_KEYS[section]
+                return t(key) if key else ""
+            return ""
         return None
 
     def data(self, index: QModelIndex, role=Qt.DisplayRole):
@@ -378,8 +395,8 @@ class MetadataTableModel(QAbstractTableModel):
 def _status_label(status: str) -> str:
     return {
         TrackStatus.PENDING:     "",
-        TrackStatus.CHANGED:     "שונה",
-        TrackStatus.DONE:        "✓ הושלם",
-        TrackStatus.ERROR:       "✗ שגיאה",
-        TrackStatus.UNSUPPORTED: "לא נתמך",
+        TrackStatus.CHANGED:     t("mt_status_changed"),
+        TrackStatus.DONE:        t("mt_status_done"),
+        TrackStatus.ERROR:       t("mt_status_error"),
+        TrackStatus.UNSUPPORTED: t("mt_status_unsupported"),
     }.get(status, status)

@@ -42,6 +42,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
+from ui.i18n import t
+
 _AUDIO_EXTS = frozenset({
     ".mp3", ".flac", ".m4a", ".ogg",
     ".wav", ".aac", ".opus", ".wma",
@@ -277,7 +279,7 @@ class DuplicateDetectorWorker(QThread):
     @staticmethod
     def _eta(done: int, total: int, t0: float) -> str:
         if done == 0:
-            return "מחשב…"
+            return t("dup_calculating")
         elapsed   = time.perf_counter() - t0
         remaining = (total - done) / (done / elapsed)
         if remaining < 60:

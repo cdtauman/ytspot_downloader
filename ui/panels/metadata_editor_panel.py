@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
 )
 
 from core.metadata_models import AudioTrackItem, ScanResult, TrackStatus
+from ui.i18n import t
 from ui.models.metadata_table_model import (
     COL_CHECK, COL_FILENAME, COL_TITLE_CUR, COL_TITLE_NEW,
     COL_ARTIST_CUR, COL_ARTIST_NEW, COL_ALBUM_CUR, COL_ALBUM_NEW,
@@ -82,21 +83,23 @@ _PAGE_EMPTY  = 0
 _PAGE_FOLDER = 1
 _PAGE_TRACKS = 2
 
-# All magic operations: (key, toolbar label, inspector label)
+# All magic operations: (op_id, label_translation_key, desc_translation_key)
+# Labels/descriptions are looked up via t() at display time so they follow the
+# user's current language.
 _MAGIC_OP_DEFS: list[tuple[str, str, str]] = [
-    ("title_strip",      "העתק שם קובץ לכותרת (ללא מספר)", "לוקח את שם הקובץ הקיים ומעתיק אותו לתוך שדה 'כותרת', תוך הסרת מספרים בתחילת השם (למשל '01 שיר' יהפוך ל-'שיר')."),
-    ("title_full",       "העתק שם קובץ לכותרת (כולל מספר)", "לוקח את שם הקובץ הקיים ומעתיק אותו לתוך שדה 'כותרת' בדיוק כפי שהוא."),
-    ("normalize_spaces", "מחק רווחים כפולים וקווים תחתונים מהכותרת", "סורק את הכותרת, מחליף קווים תחתונים (_) ברווחים, ומוחק רווחים כפולים או מיותרים מהכותרת."),
-    ("track_num",        "חלץ מספר רצועה משם הקובץ", "מחפש מספר בתחילת שם הקובץ (למשל '03') ושומר אותו בתור מספר הרצועה."),
-    ("split_at",         "פצל שם קובץ ל'אמן' ו'כותרת'", "מזהה מקף (-) בשם הקובץ. מה שלפני המקף הופך ל'אמן', ומה שאחריו ל'כותרת'."),
-    ("album_artist",     "העתק 'אמן' ל'אמן אלבום'", "מעתיק את שם ה'אמן' של כל שיר ושם אותו גם בשדה 'אמן אלבום' (חשוב לסידור נכון של אלבומים בנגנים)."),
-    ("strip_junk",       "נקה מילים מיותרות מהכותרת", "מנקה מהכותרת תוספות שכיחות מיוטיוב כמו '(Official Video)', '[HD]', או 'Lyrics'."),
-    ("clear_comments",   "מחק תוכן מתגית 'הערות'", "מוחק לחלוטין את כל מה שכתוב בשדה ההערות של השיר."),
-    ("clear_track_num",  "מחק תוכן מתגית 'מספר רצועה'", "מוחק לחלוטין את מספר הרצועה של השיר."),
-    ("clear_year",       "מחק תוכן מתגית 'שנה'", "מוחק את שנת ההוצאה מהתגיות."),
-    ("clear_genre",      "מחק תוכן מתגית 'ז'אנר'", "מוחק את סגנון המוזיקה (ז'אנר) מהתגיות."),
-    ("clean_filename",   "נקה שם קובץ פיזי", "מנקה את שם הקובץ עצמו: מסיר קווים תחתונים, מוחק כל מה שבתוך סוגריים () או [], ומסדר רווחים כפולים."),
-    ("strip_filename_numbering", "הסר מספור משם הקובץ הפיזי", "מוחק משם הקובץ הפיזי מספור בתחילתו (כמו '01-', '01 -', או '01_')."),
+    ("title_strip",              "meta_op_title_strip_label",              "meta_op_title_strip_desc"),
+    ("title_full",               "meta_op_title_full_label",               "meta_op_title_full_desc"),
+    ("normalize_spaces",         "meta_op_normalize_spaces_label",         "meta_op_normalize_spaces_desc"),
+    ("track_num",                "meta_op_track_num_label",                "meta_op_track_num_desc"),
+    ("split_at",                 "meta_op_split_at_label",                 "meta_op_split_at_desc"),
+    ("album_artist",             "meta_op_album_artist_label",             "meta_op_album_artist_desc"),
+    ("strip_junk",               "meta_op_strip_junk_label",               "meta_op_strip_junk_desc"),
+    ("clear_comments",           "meta_op_clear_comments_label",           "meta_op_clear_comments_desc"),
+    ("clear_track_num",          "meta_op_clear_track_num_label",          "meta_op_clear_track_num_desc"),
+    ("clear_year",               "meta_op_clear_year_label",               "meta_op_clear_year_desc"),
+    ("clear_genre",              "meta_op_clear_genre_label",              "meta_op_clear_genre_desc"),
+    ("clean_filename",           "meta_op_clean_filename_label",           "meta_op_clean_filename_desc"),
+    ("strip_filename_numbering", "meta_op_strip_filename_numbering_label", "meta_op_strip_filename_numbering_desc"),
 ]
 
 # Which ops the auto-arrange button runs by default
@@ -463,18 +466,18 @@ class _AutoArrangeSettingsDialog(QDialog):
 
     def __init__(self, enabled: set[str], parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("הגדרות סדר אוטומטי")
+        self.setWindowTitle(t("meta_auto_settings_title"))
         self.resize(400, 480)
 
         self._result = set(enabled)
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
 
-        hdr = QLabel("בחר אילו פעולות יבצע כפתור 'סדר אוטומטי':")
+        hdr = QLabel(t("meta_auto_header"))
         hdr.setStyleSheet("font-weight: bold;")
         layout.addWidget(hdr)
 
-        note = QLabel("(אלבום משם תיקייה תמיד פעיל)")
+        note = QLabel(t("meta_auto_album_note"))
         note.setStyleSheet(f"color: {get_colors().text_secondary}; font-size: 11px;")
         layout.addWidget(note)
         layout.addSpacing(4)
@@ -489,14 +492,16 @@ class _AutoArrangeSettingsDialog(QDialog):
         scroll_layout.setSpacing(6)
 
         self._cbs: dict[str, QCheckBox] = {}
-        for key, label, desc in _MAGIC_OP_DEFS:
+        for key, label_key, desc_key in _MAGIC_OP_DEFS:
+            label = t(label_key)
+            desc  = t(desc_key)
             row = QHBoxLayout()
             row.setSpacing(4)
             cb = QCheckBox(label)
             cb.setChecked(key in enabled)
             self._cbs[key] = cb
             row.addWidget(cb)
-            
+
             info_btn = QPushButton("ℹ️")
             info_btn.setFixedSize(20, 20)
             info_btn.setStyleSheet(f"QPushButton {{ border: none; background: transparent; font-size: 14px; color: {get_colors().text_secondary}; }} QPushButton:hover {{ color: {ACCENT_COLOR}; }}")
@@ -512,9 +517,9 @@ class _AutoArrangeSettingsDialog(QDialog):
         layout.addSpacing(8)
         row = QHBoxLayout()
         row.addStretch()
-        cancel_btn = QPushButton("ביטול")
+        cancel_btn = QPushButton(t("meta_cancel"))
         cancel_btn.clicked.connect(self.reject)
-        ok_btn = QPushButton("אישור")
+        ok_btn = QPushButton(t("meta_ok"))
         ok_btn.setDefault(True)
         ok_btn.clicked.connect(self._accept)
         row.addWidget(cancel_btn)
@@ -541,7 +546,7 @@ class _CleanSettingsDialog(QDialog):
 
     def __init__(self, cfg, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("הגדרות ניקוי (אגרסיביות)")
+        self.setWindowTitle(t("meta_clean_settings_title"))
         self.resize(380, 400)
         self._cfg = cfg
 
@@ -549,22 +554,22 @@ class _CleanSettingsDialog(QDialog):
         layout.setSpacing(8)
 
         # Title clean settings
-        title_grp = QGroupBox("ניקוי כותרת (Title)")
+        title_grp = QGroupBox(t("meta_clean_title_group"))
         title_lay = QVBoxLayout(title_grp)
         title_lay.setSpacing(6)
-        
-        self.cb_title_brackets = QCheckBox("נקה סוגריים עם זבל (כמו [HD] וכו')")
+
+        self.cb_title_brackets = QCheckBox(t("meta_clean_brackets"))
         self.cb_title_brackets.setChecked(getattr(self._cfg, "tag_clean_title_remove_brackets", True))
-        
-        self.cb_title_english = QCheckBox("נקה מילות זבל באנגלית (Official, Audio, 4K, Prod...)")
+
+        self.cb_title_english = QCheckBox(t("meta_clean_english_junk"))
         self.cb_title_english.setChecked(getattr(self._cfg, "tag_clean_title_remove_web_junk", True))
-        
-        self.cb_title_hebrew = QCheckBox("נקה מילות זבל בעברית (קאבר, רמיקס, הופעה חיה...)")
+
+        self.cb_title_hebrew = QCheckBox(t("meta_clean_hebrew_junk"))
         self.cb_title_hebrew.setChecked(getattr(self._cfg, "tag_clean_title_remove_hebrew", True))
-        
-        self.cb_title_punc = QCheckBox("תקן רווחים, מקפים מיותרים וקווים מפרידים (|)")
+
+        self.cb_title_punc = QCheckBox(t("meta_clean_punctuation"))
         self.cb_title_punc.setChecked(getattr(self._cfg, "tag_clean_title_fix_punctuation", True))
-        
+
         title_lay.addWidget(self.cb_title_brackets)
         title_lay.addWidget(self.cb_title_english)
         title_lay.addWidget(self.cb_title_hebrew)
@@ -572,23 +577,23 @@ class _CleanSettingsDialog(QDialog):
         layout.addWidget(title_grp)
 
         # Filename clean settings
-        fn_grp = QGroupBox("ניקוי שם קובץ פיזי (Filename)")
+        fn_grp = QGroupBox(t("meta_clean_filename_group"))
         fn_lay = QVBoxLayout(fn_grp)
         fn_lay.setSpacing(6)
-        
-        self.cb_fn_brackets = QCheckBox("מחיקת סוגריים חכמה (למחוק זבל, להשאיר feat. וכו')")
+
+        self.cb_fn_brackets = QCheckBox(t("meta_clean_filename_brackets"))
         self.cb_fn_brackets.setChecked(getattr(self._cfg, "tag_clean_filename_smart_brackets", True))
-        self.cb_fn_brackets.setToolTip("אם כבוי, ימחק בצורה 'עיוורת' את כל הסוגריים כולל התוכן שלהם.")
-        
-        self.cb_fn_domains = QCheckBox("נקה שאריות אתרי הורדות (y2mate, yt1s, SPOTIFY-DL...)")
+        self.cb_fn_brackets.setToolTip(t("meta_clean_filename_brackets_tooltip"))
+
+        self.cb_fn_domains = QCheckBox(t("meta_clean_filename_domains"))
         self.cb_fn_domains.setChecked(getattr(self._cfg, "tag_clean_filename_remove_domains", True))
-        
-        self.cb_fn_emojis = QCheckBox("נקה אימוג'י וסימנים מיוחדים בעייתיים (!@#$)")
+
+        self.cb_fn_emojis = QCheckBox(t("meta_clean_filename_emojis"))
         self.cb_fn_emojis.setChecked(getattr(self._cfg, "tag_clean_filename_remove_emojis", True))
-        
-        self.cb_fn_spaces = QCheckBox("תקן מקפים ורווחים כפולים ( - - )")
+
+        self.cb_fn_spaces = QCheckBox(t("meta_clean_filename_spaces"))
         self.cb_fn_spaces.setChecked(getattr(self._cfg, "tag_clean_filename_fix_spaces", True))
-        
+
         fn_lay.addWidget(self.cb_fn_brackets)
         fn_lay.addWidget(self.cb_fn_domains)
         fn_lay.addWidget(self.cb_fn_emojis)
@@ -596,12 +601,12 @@ class _CleanSettingsDialog(QDialog):
         layout.addWidget(fn_grp)
 
         layout.addStretch()
-        
+
         row = QHBoxLayout()
         row.addStretch()
-        cancel_btn = QPushButton("ביטול")
+        cancel_btn = QPushButton(t("meta_cancel"))
         cancel_btn.clicked.connect(self.reject)
-        ok_btn = QPushButton("אישור שמירה")
+        ok_btn = QPushButton(t("meta_save_ok"))
         ok_btn.setDefault(True)
         ok_btn.clicked.connect(self._accept)
         row.addWidget(cancel_btn)
@@ -917,16 +922,16 @@ class MetadataEditorPanel(QWidget):
         layout.setContentsMargins(12, 6, 12, 6)
         layout.setSpacing(8)
 
-        self._browse_btn = QPushButton("📁 בחר תיקייה")
+        self._browse_btn = QPushButton(t("meta_browse_folder"))
         self._browse_btn.setFixedHeight(32)
         self._browse_btn.clicked.connect(self._on_browse)
         layout.addWidget(self._browse_btn)
 
-        self._folder_lbl = QLabel("לא נבחרה תיקייה")
+        self._folder_lbl = QLabel(t("meta_no_folder_selected"))
         self._folder_lbl.setMaximumWidth(260)
         layout.addWidget(self._folder_lbl)
 
-        self._subdirs_cb = QCheckBox("כלול תתי-תיקיות")
+        self._subdirs_cb = QCheckBox(t("meta_include_subdirs"))
         self._subdirs_cb.setChecked(True)
         layout.addWidget(self._subdirs_cb)
 
@@ -934,7 +939,7 @@ class MetadataEditorPanel(QWidget):
 
         auto_wrap = QHBoxLayout()
         auto_wrap.setSpacing(2)
-        self._auto_btn = QPushButton("🪄 סדר אוטומטי")
+        self._auto_btn = QPushButton(t("meta_auto_btn"))
         self._auto_btn.setFixedHeight(34)
         self._auto_btn.setEnabled(False)
         self._auto_btn.clicked.connect(self._on_auto_arrange)
@@ -942,33 +947,33 @@ class MetadataEditorPanel(QWidget):
 
         self._auto_cfg_btn = QPushButton("⚙")
         self._auto_cfg_btn.setFixedSize(28, 34)
-        self._auto_cfg_btn.setToolTip("הגדר מה סדר אוטומטי יבצע")
+        self._auto_cfg_btn.setToolTip(t("meta_auto_cfg_tooltip"))
         self._auto_cfg_btn.clicked.connect(self._on_auto_arrange_settings)
         auto_wrap.addWidget(self._auto_cfg_btn)
         layout.addLayout(auto_wrap)
 
-        self._apply_btn = QPushButton("✅ החל שינויים")
+        self._apply_btn = QPushButton(t("meta_apply_changes"))
         self._apply_btn.setFixedHeight(32)
         self._apply_btn.setEnabled(False)
         self._apply_btn.clicked.connect(self._on_apply)
         layout.addWidget(self._apply_btn)
 
-        self._revert_btn = QPushButton("↩ בטל שינויים")
+        self._revert_btn = QPushButton(t("meta_revert_changes"))
         self._revert_btn.setFixedHeight(32)
         self._revert_btn.setEnabled(False)
         self._revert_btn.clicked.connect(self._on_revert)
         layout.addWidget(self._revert_btn)
 
-        self._dupes_btn = QPushButton("🔍 חפש כפילויות")
+        self._dupes_btn = QPushButton(t("meta_find_duplicates"))
         self._dupes_btn.setFixedHeight(32)
         self._dupes_btn.setEnabled(False)
-        self._dupes_btn.setToolTip("סרוק את התיקייה לאיתור קבצי מוזיקה כפולים")
+        self._dupes_btn.setToolTip(t("meta_dupes_tooltip"))
         self._dupes_btn.clicked.connect(self._on_find_duplicates)
         layout.addWidget(self._dupes_btn)
 
         layout.addStretch()
 
-        self._summary_lbl = QLabel("לא נסרקה תיקייה")
+        self._summary_lbl = QLabel(t("meta_no_folder_scanned"))
         layout.addWidget(self._summary_lbl)
 
         return bar
@@ -986,7 +991,7 @@ class MetadataEditorPanel(QWidget):
         tree_layout.setContentsMargins(4, 4, 0, 4)
         tree_layout.setSpacing(4)
 
-        tree_header = QLabel("📂 קבצים ותיקיות")
+        tree_header = QLabel(t("meta_files_folders_header"))
         tree_header.setStyleSheet("font-weight: bold; font-size: 12px; padding: 2px 0;")
         tree_layout.addWidget(tree_header)
 
@@ -1163,7 +1168,7 @@ class MetadataEditorPanel(QWidget):
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setAlignment(Qt.AlignCenter)
-        lbl = QLabel("בחר קבצים\nאו תיקייה\nלעריכה")
+        lbl = QLabel(t("meta_select_files_prompt"))
         lbl.setAlignment(Qt.AlignCenter)
         lbl.setStyleSheet(f"color: {get_colors().text_tertiary}; font-size: 13px;")
         lbl.setWordWrap(True)
@@ -1177,7 +1182,7 @@ class MetadataEditorPanel(QWidget):
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignTop)
 
-        self._insp_folder_title = QLabel("כל הקבצים המסומנים")
+        self._insp_folder_title = QLabel(t("meta_all_checked_files"))
         self._insp_folder_title.setStyleSheet("font-weight: bold; font-size: 13px;")
         self._insp_folder_title.setWordWrap(True)
         layout.addWidget(self._insp_folder_title)
@@ -1188,25 +1193,25 @@ class MetadataEditorPanel(QWidget):
             f"QPushButton:hover {{ background: {_md_dim_hex(ACCENT_COLOR)}; }}"
         )
 
-        grp_artist = QGroupBox("החל אמן")
+        grp_artist = QGroupBox(t("meta_apply_artist_group"))
         grp_layout = QVBoxLayout(grp_artist)
         grp_layout.setSpacing(6)
         self._insp_folder_artist = QLineEdit()
-        self._insp_folder_artist.setPlaceholderText("שם האמן…")
+        self._insp_folder_artist.setPlaceholderText(t("meta_artist_placeholder"))
         grp_layout.addWidget(self._insp_folder_artist)
-        btn_artist = QPushButton("✅ החל אמן על המסומנים")
+        btn_artist = QPushButton(t("meta_apply_artist_btn"))
         btn_artist.setStyleSheet(_btn_style)
         btn_artist.clicked.connect(self._on_insp_folder_artist)
         grp_layout.addWidget(btn_artist)
         layout.addWidget(grp_artist)
 
-        grp_album = QGroupBox("החל אלבום")
+        grp_album = QGroupBox(t("meta_apply_album_group"))
         grp_album_layout = QVBoxLayout(grp_album)
         grp_album_layout.setSpacing(6)
         self._insp_folder_album = QLineEdit()
-        self._insp_folder_album.setPlaceholderText("שם האלבום…")
+        self._insp_folder_album.setPlaceholderText(t("meta_album_placeholder"))
         grp_album_layout.addWidget(self._insp_folder_album)
-        btn_album = QPushButton("✅ החל אלבום על המסומנים")
+        btn_album = QPushButton(t("meta_apply_album_btn"))
         btn_album.setStyleSheet(_btn_style)
         btn_album.clicked.connect(self._on_insp_folder_album)
         grp_album_layout.addWidget(btn_album)
@@ -1229,11 +1234,11 @@ class MetadataEditorPanel(QWidget):
         layout.setSpacing(8)
         layout.setAlignment(Qt.AlignTop)
 
-        self._insp_tracks_title = QLabel("0 שירים נבחרו")
+        self._insp_tracks_title = QLabel(t("meta_tracks_selected_count", n=0))
         self._insp_tracks_title.setStyleSheet("font-weight: bold; font-size: 13px;")
         layout.addWidget(self._insp_tracks_title)
 
-        fields_grp = QGroupBox("עריכת תגיות")
+        fields_grp = QGroupBox(t("meta_edit_tags_group"))
         fields_layout = QVBoxLayout(fields_grp)
         fields_layout.setSpacing(6)
 
@@ -1243,19 +1248,19 @@ class MetadataEditorPanel(QWidget):
             lbl.setFixedWidth(85)
             lbl.setStyleSheet("font-size: 11px;")
             edit = QLineEdit()
-            edit.setPlaceholderText("ריק / מעורב")
+            edit.setPlaceholderText(t("meta_mixed_placeholder"))
             row.addWidget(lbl)
             row.addWidget(edit)
             fields_layout.addLayout(row)
             return edit
 
-        self._insp_title        = _field("כותרת:")
-        self._insp_artist       = _field("אמן:")
-        self._insp_album        = _field("אלבום:")
-        self._insp_album_artist = _field("אמן אלבום:")
-        self._insp_track        = _field("רצועה:")
+        self._insp_title        = _field(t("meta_field_title"))
+        self._insp_artist       = _field(t("meta_field_artist"))
+        self._insp_album        = _field(t("meta_field_album"))
+        self._insp_album_artist = _field(t("meta_field_album_artist"))
+        self._insp_track        = _field(t("meta_field_track"))
 
-        btn_apply_fields = QPushButton("✅ החל על הבחירה")
+        btn_apply_fields = QPushButton(t("meta_apply_to_selection"))
         btn_apply_fields.setStyleSheet(
             f"QPushButton {{ background: {ACCENT_COLOR}; color: #000; "
             f"font-weight: bold; border-radius: 5px; padding: 4px 8px; }}"
@@ -1265,14 +1270,14 @@ class MetadataEditorPanel(QWidget):
         fields_layout.addWidget(btn_apply_fields)
         layout.addWidget(fields_grp)
 
-        rename_grp = QGroupBox("שינוי שם קובץ")
+        rename_grp = QGroupBox(t("meta_rename_group"))
         rename_layout = QVBoxLayout(rename_grp)
         rename_layout.setSpacing(6)
-        rename_note = QLabel("שנה את שם הקובץ הפיזי לפי הכותרת החדשה")
+        rename_note = QLabel(t("meta_rename_note"))
         rename_note.setWordWrap(True)
         rename_note.setStyleSheet(f"color: {get_colors().text_secondary}; font-size: 11px;")
         rename_layout.addWidget(rename_note)
-        btn_rename = QPushButton("📝 שנה שם קובץ לפי כותרת")
+        btn_rename = QPushButton(t("meta_rename_btn"))
         btn_rename.setStyleSheet(_btn_style())
         btn_rename.clicked.connect(
             lambda: self.rename_from_title.emit(self._get_selected_tracks())
@@ -1291,7 +1296,7 @@ class MetadataEditorPanel(QWidget):
 
     def _build_magic_ops_widget(self) -> QGroupBox:
         """Build magic operations group — all ops always visible, all act on checked tracks."""
-        grp = QGroupBox("פעולות על המסומנים")
+        grp = QGroupBox(t("meta_actions_on_selected"))
         grp_layout = QVBoxLayout(grp)
         grp_layout.setSpacing(4)
 
@@ -1313,7 +1318,9 @@ class MetadataEditorPanel(QWidget):
             "strip_filename_numbering": lambda: self.strip_filename_numbering.emit(checked()),
         }
 
-        for key, label, desc in _MAGIC_OP_DEFS:
+        for key, label_key, desc_key in _MAGIC_OP_DEFS:
+            label = t(label_key)
+            desc  = t(desc_key)
             row_layout = QHBoxLayout()
             row_layout.setSpacing(4)
             row_layout.setContentsMargins(0, 0, 0, 0)
@@ -1322,12 +1329,12 @@ class MetadataEditorPanel(QWidget):
             if key in op_handlers:
                 btn.clicked.connect(op_handlers[key])
             row_layout.addWidget(btn, stretch=1)
-            
+
             if key in ("strip_junk", "clean_filename"):
                 cfg_btn = QPushButton("⚙️")
                 cfg_btn.setFixedSize(24, 24)
                 cfg_btn.setStyleSheet(f"QPushButton {{ border: none; background: transparent; font-size: 14px; color: {get_colors().text_secondary}; }} QPushButton:hover {{ color: {ACCENT_COLOR}; }}")
-                cfg_btn.setToolTip("הגדרות ניקוי")
+                cfg_btn.setToolTip(t("meta_clean_cfg_tooltip"))
                 cfg_btn.clicked.connect(self._on_clean_settings)
                 row_layout.addWidget(cfg_btn)
             
@@ -1355,7 +1362,7 @@ class MetadataEditorPanel(QWidget):
 
     def _on_browse(self) -> None:
         path = QFileDialog.getExistingDirectory(
-            self, "בחר תיקיית מוזיקה", str(Path.home())
+            self, t("meta_choose_music_folder"), str(Path.home())
         )
         if path:
             self._root_folder = Path(path)
@@ -1376,7 +1383,7 @@ class MetadataEditorPanel(QWidget):
         self._auto_btn.setEnabled(False)
         self._apply_btn.setEnabled(False)
         self._revert_btn.setEnabled(False)
-        self._summary_lbl.setText("סורק…")
+        self._summary_lbl.setText(t("meta_scanning"))
         self.scan_requested.emit(self._root_folder, self._subdirs_cb.isChecked())
 
     def _on_auto_arrange(self) -> None:
@@ -1414,7 +1421,7 @@ class MetadataEditorPanel(QWidget):
         if not self._root_folder:
             return
         self._dupes_btn.setEnabled(False)
-        self._summary_lbl.setText("מחפש כפילויות…")
+        self._summary_lbl.setText(t("meta_searching_duplicates"))
         self.find_duplicates_requested.emit(self._root_folder, True)  # always recursive
 
     # ── Tree handlers ─────────────────────────────────────────────────────────
@@ -1455,7 +1462,7 @@ class MetadataEditorPanel(QWidget):
         elif self._model.get_all_tracks():
             # Default back to "apply to all checked" panel
             checked = len(self._model.get_checked_tracks())
-            self._insp_folder_title.setText(f"{checked} קבצים מסומנים")
+            self._insp_folder_title.setText(t("meta_n_files_checked", n=checked))
             self._inspector.setCurrentIndex(_PAGE_FOLDER)
         else:
             self._inspector.setCurrentIndex(_PAGE_EMPTY)
@@ -1578,7 +1585,7 @@ class MetadataEditorPanel(QWidget):
             self._tree.topLevelItem(0).setExpanded(True)
 
         if n > 0:
-            self._insp_folder_title.setText(f"{n} קבצים מסומנים")
+            self._insp_folder_title.setText(t("meta_n_files_checked", n=n))
             self._inspector.setCurrentIndex(_PAGE_FOLDER)
 
     def on_auto_rules_applied(self) -> None:
@@ -1587,7 +1594,7 @@ class MetadataEditorPanel(QWidget):
         self._update_summary()
 
     def on_apply_progress(self, done: int, total: int) -> None:
-        self._summary_lbl.setText(f"כותב תגיות… {done}/{total}")
+        self._summary_lbl.setText(t("meta_writing_tags_progress", done=done, total=total))
 
     def on_apply_file_done(self, path_str: str, success: bool) -> None:
         path = Path(path_str)
@@ -1600,23 +1607,23 @@ class MetadataEditorPanel(QWidget):
         self._update_summary()
         self._model.refresh_all()
 
-        msg = f"הושלם: {success} הצליחו"
+        msg = t("meta_done_success_base", success=success)
         if fail:
-            msg += f", {fail} נכשלו"
+            msg += t("meta_done_failed_suffix", fail=fail)
         if skip:
-            msg += f", {skip} דולגו"
+            msg += t("meta_done_skipped_suffix", skip=skip)
         self._summary_lbl.setText(msg)
 
         try:
             from qfluentwidgets import InfoBar, InfoBarPosition
             if fail == 0:
                 InfoBar.success(
-                    title="הצלחה", content=msg, parent=self,
+                    title=t("meta_done_summary_title"), content=msg, parent=self,
                     position=InfoBarPosition.BOTTOM_RIGHT, duration=4000,
                 )
             else:
                 InfoBar.warning(
-                    title="הושלם עם שגיאות", content=msg, parent=self,
+                    title=t("meta_done_with_errors_title"), content=msg, parent=self,
                     position=InfoBarPosition.BOTTOM_RIGHT, duration=6000,
                 )
         except Exception:
@@ -1626,12 +1633,12 @@ class MetadataEditorPanel(QWidget):
         self._summary_lbl.setText(msg)
 
     def on_duplicate_scan_progress(self, done: int, total: int, eta: str) -> None:
-        self._summary_lbl.setText(f"מחפש כפילויות… {done}/{total}  ({eta})")
+        self._summary_lbl.setText(t("meta_searching_duplicates_progress", done=done, total=total, eta=eta))
 
     def on_duplicate_scan_complete(self, groups: dict, elapsed: float, strategy: str) -> None:
         self._dupes_btn.setEnabled(True)
         if not groups:
-            self.on_status_update(f"לא נמצאו כפילויות ({elapsed:.1f}s)")
+            self.on_status_update(t("meta_no_duplicates_found", elapsed=elapsed))
             self._update_summary()
             return
 
@@ -1642,12 +1649,12 @@ class MetadataEditorPanel(QWidget):
 
     def on_duplicate_scan_error(self, msg: str) -> None:
         self._dupes_btn.setEnabled(True)
-        self.on_status_update(f"שגיאה בחיפוש כפילויות: {msg}")
+        self.on_status_update(t("meta_duplicate_search_error", msg=msg))
         self._update_summary()
 
     def on_duplicate_delete_complete(self, success: int, fail: int) -> None:
-        note = f" ({fail} שגיאות)" if fail else ""
-        self.on_status_update(f"נמחקו {success} קבצים כפולים{note}")
+        note = t("meta_files_deleted_errors_suffix", fail=fail) if fail else ""
+        self.on_status_update(t("meta_files_deleted", success=success, note=note))
         self._on_scan()   # trigger full folder rescan → refreshes tree and table
 
     # ── Tree construction helpers ─────────────────────────────────────────────
@@ -1786,23 +1793,26 @@ class MetadataEditorPanel(QWidget):
 
     def _update_summary(self) -> None:
         tracks = self._model.get_all_tracks()
-        folders = len(self._folder_items) if self._folder_items else len({t.folder for t in tracks})
+        folders = len(self._folder_items) if self._folder_items else len({tr.folder for tr in tracks})
         changed = self._model.get_changed_count()
         warnings = self._model.get_warning_count()
-        parts = [f"{len(tracks)} קבצים", f"{folders} תיקיות"]
+        parts = [
+            t("meta_files_count", n=len(tracks)),
+            t("meta_folders_count", n=folders),
+        ]
         if changed:
-            parts.append(f"{changed} שינויים מוצעים")
+            parts.append(t("meta_changes_proposed", n=changed))
         if warnings:
-            parts.append(f"{warnings} אזהרות")
+            parts.append(t("meta_warnings_count", n=warnings))
         self._summary_lbl.setText(" | ".join(parts) if parts else "")
 
     def _update_table_info(self) -> None:
         checked = len(self._model.get_checked_tracks())
         total   = len(self._model.get_all_tracks())
         if checked == total:
-            self._table_info_lbl.setText(f"{total} קבצים")
+            self._table_info_lbl.setText(t("meta_total_files", total=total))
         else:
-            self._table_info_lbl.setText(f"מציג {checked} מסומנים מתוך {total}")
+            self._table_info_lbl.setText(t("meta_showing_filtered", checked=checked, total=total))
 
     # ── Selection helpers ─────────────────────────────────────────────────────
 
@@ -1820,8 +1830,9 @@ class MetadataEditorPanel(QWidget):
         return self._model.get_visible_tracks()
 
     def _populate_track_inspector(self, tracks: list[AudioTrackItem]) -> None:
+        plural = "" if len(tracks) == 1 else "s"
         self._insp_tracks_title.setText(
-            f"{len(tracks)} שיר{'ים' if len(tracks) != 1 else ''} נבחרו"
+            t("meta_tracks_selected_summary", n=len(tracks), plural=plural)
         )
 
         def _common(vals):
@@ -1919,7 +1930,7 @@ class MetadataEditorPanel(QWidget):
         try:
             if dest.exists():
                 from qfluentwidgets import MessageBox
-                MessageBox("שגיאה", f"היעד כבר קיים:\n{dest.name}", self).exec()
+                MessageBox(t("meta_error_title"), t("meta_move_target_exists", name=dest.name), self).exec()
                 return
 
             import shutil
@@ -1928,7 +1939,7 @@ class MetadataEditorPanel(QWidget):
         except Exception as e:
             logger.exception("Failed to move tree item")
             from qfluentwidgets import MessageBox
-            MessageBox("שגיאה", f"כשל בהעברת הקובץ:\n{str(e)}", self).exec()
+            MessageBox(t("meta_error_title"), t("meta_move_failed", error=str(e)), self).exec()
 
     def _on_tree_context_menu(self, pos: QPoint) -> None:
         item = self._tree.itemAt(pos)
@@ -1945,11 +1956,11 @@ class MetadataEditorPanel(QWidget):
         from PySide6.QtWidgets import QMenu
         menu = QMenu(self)
         if not is_file:
-            add_folder_action = menu.addAction("📁 הוסף תיקייה")
+            add_folder_action = menu.addAction(t("meta_add_folder"))
             menu.addSeparator()
 
-        rename_action = menu.addAction("✏️ שנה שם")
-        delete_action = menu.addAction("🗑️ מחק")
+        rename_action = menu.addAction(t("meta_rename_menu"))
+        delete_action = menu.addAction(t("meta_delete_menu"))
 
         action = menu.exec(self._tree.viewport().mapToGlobal(pos))
         if add_folder_action is not None and action == add_folder_action:
@@ -1962,9 +1973,9 @@ class MetadataEditorPanel(QWidget):
     def _on_tree_add_folder(self, parent_path: Path) -> None:
         new_name, ok = QInputDialog.getText(
             self,
-            "הוסף תיקייה",
-            "שם התיקייה החדשה:",
-            text="תיקייה חדשה"
+            t("meta_new_folder_dialog_title"),
+            t("meta_new_folder_prompt"),
+            text=t("meta_new_folder_default"),
         )
         if not ok or not new_name.strip():
             return
@@ -1978,14 +1989,14 @@ class MetadataEditorPanel(QWidget):
             or "\\" in new_name
         ):
             from qfluentwidgets import MessageBox
-            MessageBox("שגיאה", "שם התיקייה אינו חוקי.", self).exec()
+            MessageBox(t("meta_error_title"), t("meta_invalid_folder_name"), self).exec()
             return
 
         dest = parent_path / new_name
         try:
             if dest.exists():
                 from qfluentwidgets import MessageBox
-                MessageBox("שגיאה", "תיקייה בשם הזה כבר קיימת.", self).exec()
+                MessageBox(t("meta_error_title"), t("meta_folder_exists"), self).exec()
                 return
 
             dest.mkdir()
@@ -1993,14 +2004,14 @@ class MetadataEditorPanel(QWidget):
         except Exception as e:
             logger.exception("Failed to create tree folder")
             from qfluentwidgets import MessageBox
-            MessageBox("שגיאה", f"כשל ביצירת התיקייה:\n{str(e)}", self).exec()
+            MessageBox(t("meta_error_title"), t("meta_create_folder_failed", error=str(e)), self).exec()
 
     def _on_tree_rename(self, path: Path, is_file: bool) -> None:
         new_name, ok = QInputDialog.getText(
             self,
-            "שנה שם",
-            "הכנס שם חדש:",
-            text=path.name
+            t("meta_rename_dialog_title"),
+            t("meta_rename_prompt"),
+            text=path.name,
         )
         if not ok or not new_name.strip():
             return
@@ -2013,7 +2024,7 @@ class MetadataEditorPanel(QWidget):
         try:
             if dest.exists():
                 from qfluentwidgets import MessageBox
-                MessageBox("שגיאה", "שם היעד כבר קיים בתיקייה זו.", self).exec()
+                MessageBox(t("meta_error_title"), t("meta_target_name_exists"), self).exec()
                 return
 
             path.rename(dest)
@@ -2021,14 +2032,14 @@ class MetadataEditorPanel(QWidget):
         except Exception as e:
             logger.exception("Failed to rename tree item")
             from qfluentwidgets import MessageBox
-            MessageBox("שגיאה", f"כשל בשינוי השם:\n{str(e)}", self).exec()
+            MessageBox(t("meta_error_title"), t("meta_rename_failed", error=str(e)), self).exec()
 
     def _on_tree_delete(self, path: Path, is_file: bool) -> None:
         from qfluentwidgets import MessageBox
-        title = "מחיקת קובץ" if is_file else "מחיקת תיקייה"
-        text = f"האם אתה בטוח שברצונך למחוק לצמיתות את:\n{path.name}?"
+        title = t("meta_delete_file_title") if is_file else t("meta_delete_folder_title")
+        text = t("meta_delete_confirm", name=path.name)
         if not is_file:
-            text += "\n(כל הקבצים בתוך התיקייה יימחקו גם הם)"
+            text += t("meta_delete_recursive_note")
 
         msg = MessageBox(title, text, self)
         if msg.exec():
@@ -2042,7 +2053,7 @@ class MetadataEditorPanel(QWidget):
             except Exception as e:
                 logger.exception("Failed to delete tree item")
                 from qfluentwidgets import MessageBox
-                MessageBox("שגיאה", f"כשל במחיקה:\n{str(e)}", self).exec()
+                MessageBox(t("meta_error_title"), t("meta_delete_failed", error=str(e)), self).exec()
 
 
 

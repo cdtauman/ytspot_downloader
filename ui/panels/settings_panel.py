@@ -25,10 +25,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
-    QFileDialog, QFrame, QHBoxLayout, QLabel, QScrollArea,
+    QBoxLayout, QFileDialog, QFrame, QHBoxLayout, QLabel, QScrollArea,
     QSizePolicy, QVBoxLayout, QWidget,
 )
 from qfluentwidgets import (
@@ -110,6 +110,7 @@ class SettingsPanel(QScrollArea):
             self._youtube_proxy_card.setText(self._cfg.get("youtube_proxy_url", ""))
         except Exception:
             pass
+        QTimer.singleShot(0, self._adjust_layouts)
 
     # ── Build ──────────────────────────────────────────────────────────────────
 
@@ -162,11 +163,8 @@ class SettingsPanel(QScrollArea):
         # Accessibility mode
         self._a11y_card = SwitchSettingCard(
             icon=FluentIcon.PEOPLE,
-            title="Accessibility Mode",
-            content=(
-                "High-contrast colours and enhanced keyboard navigation "
-                "(restart recommended)"
-            ),
+            title=t("accessibility_mode"),
+            content=t("accessibility_mode_desc"),
             parent=appearance_grp,
         )
         self._a11y_card.setChecked(self._cfg.accessibility_mode)
@@ -204,8 +202,8 @@ class SettingsPanel(QScrollArea):
 
         self._parallel_card = _SpinnerSettingCard(
             icon=FluentIcon.SPEED_HIGH,
-            title="Concurrent Downloads",
-            content="Number of tracks downloaded simultaneously (1 – 5)",
+            title=t("concurrent_downloads"),
+            content=t("concurrent_downloads_desc"),
             value=self._cfg.max_parallel_downloads,
             min_val=1,
             max_val=5,
@@ -219,12 +217,12 @@ class SettingsPanel(QScrollArea):
         layout.addWidget(downloads_grp)
 
         # ── 3. Playlist Behaviour ──────────────────────────────────────────────
-        playlist_grp = SettingCardGroup("Playlist Behaviour", content)
+        playlist_grp = SettingCardGroup(t("playlist_behaviour"), content)
 
         self._subfolder_card = SwitchSettingCard(
             icon=FluentIcon.FOLDER,
-            title="Playlist Sub-folders",
-            content="Create a named subfolder for each playlist download",
+            title=t("playlist_subfolders"),
+            content=t("playlist_subfolders_desc"),
             parent=playlist_grp,
         )
         self._subfolder_card.setChecked(self._cfg.playlist_subfolders)
@@ -235,8 +233,8 @@ class SettingsPanel(QScrollArea):
 
         self._index_card = SwitchSettingCard(
             icon=FluentIcon.LABEL,
-            title="Track Index Prefix",
-            content="Prefix filenames with 01-, 02- … to preserve playlist order",
+            title=t("track_index_prefix"),
+            content=t("track_index_prefix_desc"),
             parent=playlist_grp,
         )
         self._index_card.setChecked(self._cfg.playlist_index_prefix)
@@ -247,13 +245,13 @@ class SettingsPanel(QScrollArea):
 
         self._dup_card = _LanguageSettingCard(
             icon=FluentIcon.COPY,
-            title="Duplicate Detection",
-            content="Action when the output file already exists",
+            title=t("duplicate_detection"),
+            content=t("duplicate_detection_desc"),
             value=self._cfg.duplicate_action,
             options=(
-                ("skip",      "Skip silently"),
-                ("warn",      "Show warning dialog"),
-                ("overwrite", "Always overwrite"),
+                ("skip",      t("duplicate_skip")),
+                ("warn",      t("duplicate_warn")),
+                ("overwrite", t("duplicate_overwrite")),
             ),
             parent=playlist_grp,
         )
@@ -312,12 +310,12 @@ class SettingsPanel(QScrollArea):
         layout.addWidget(features_grp)
 
         # ── 5. System Integration ──────────────────────────────────────────────
-        system_grp = SettingCardGroup("System Integration", content)
+        system_grp = SettingCardGroup(t("system_integration"), content)
 
         self._tray_card = SwitchSettingCard(
             icon=FluentIcon.MINIMIZE,
-            title="Minimise to System Tray",
-            content="Keep app running in the background when window is closed",
+            title=t("minimise_to_tray"),
+            content=t("minimise_to_tray_desc"),
             parent=system_grp,
         )
         self._tray_card.setChecked(self._cfg.tray_on_close)
@@ -328,8 +326,8 @@ class SettingsPanel(QScrollArea):
 
         self._hotkeys_card = SwitchSettingCard(
             icon=FluentIcon.COMMAND_PROMPT,
-            title="Global Hotkeys",
-            content="Register system-wide keyboard shortcuts (requires restart)",
+            title=t("global_hotkeys"),
+            content=t("global_hotkeys_desc"),
             parent=system_grp,
         )
         self._hotkeys_card.setChecked(self._cfg.global_hotkeys_enabled)
@@ -341,16 +339,13 @@ class SettingsPanel(QScrollArea):
         layout.addWidget(system_grp)
 
         # ── 6. Advanced Audio Processing ───────────────────────────────────────
-        advanced_grp = SettingCardGroup("⚙  Advanced Audio Processing", content)
+        advanced_grp = SettingCardGroup(t("advanced_audio_processing"), content)
 
         # SponsorBlock
         self._sb_card = SwitchSettingCard(
             icon=FluentIcon.REMOVE,
-            title="SponsorBlock – Remove Non-Music Segments",
-            content=(
-                "Automatically cut sponsor reads, intros, and outros "
-                "from YouTube music videos using the SponsorBlock API"
-            ),
+            title=t("sponsorblock_title"),
+            content=t("sponsorblock_desc"),
             parent=advanced_grp,
         )
         self._sb_card.setChecked(self._cfg.sponsorblock_enabled)
@@ -362,11 +357,8 @@ class SettingsPanel(QScrollArea):
         # MusicBrainz
         self._mb_card = SwitchSettingCard(
             icon=FluentIcon.SEARCH,
-            title="MusicBrainz Metadata Enrichment",
-            content=(
-                "After downloading, query MusicBrainz for genre, label, "
-                "ISRC, release year, and country"
-            ),
+            title=t("musicbrainz_title"),
+            content=t("musicbrainz_desc"),
             parent=advanced_grp,
         )
         self._mb_card.setChecked(self._cfg.musicbrainz_enabled)
@@ -378,11 +370,8 @@ class SettingsPanel(QScrollArea):
         # Lyrics (disabled by default)
         self._lyrics_card = SwitchSettingCard(
             icon=FluentIcon.DOCUMENT,
-            title="Lyrics Downloader  [Advanced]",
-            content=(
-                "Fetch lyrics automatically and embed them into the file's "
-                "metadata tags (requires: pip install syncedlyrics)"
-            ),
+            title=t("lyrics_title"),
+            content=t("lyrics_desc"),
             parent=advanced_grp,
         )
         self._lyrics_card.setChecked(self._cfg.lyrics_enabled)
@@ -394,12 +383,8 @@ class SettingsPanel(QScrollArea):
         # Replay Gain (disabled by default)
         self._rg_card = SwitchSettingCard(
             icon=FluentIcon.VOLUME,
-            title="Replay Gain Analysis  [Advanced]",
-            content=(
-                "Analyse loudness and embed REPLAYGAIN_TRACK_GAIN tags for "
-                "normalised playback volume across tracks "
-                "(requires: rsgain or pip install pyloudnorm soundfile)"
-            ),
+            title=t("replay_gain_title"),
+            content=t("replay_gain_desc"),
             parent=advanced_grp,
         )
         self._rg_card.setChecked(self._cfg.replay_gain_enabled)
@@ -411,12 +396,8 @@ class SettingsPanel(QScrollArea):
         # Square Thumbnails (disabled by default)
         self._sq_card = SwitchSettingCard(
             icon=FluentIcon.PHOTO,
-            title="Square Thumbnail Crop  [Advanced]",
-            content=(
-                "Crop the embedded 16:9 YouTube thumbnail to a 1:1 square "
-                "before embedding — ideal for standard music players "
-                "(requires: pip install Pillow)"
-            ),
+            title=t("square_thumbnails_title"),
+            content=t("square_thumbnails_desc"),
             parent=advanced_grp,
         )
         self._sq_card.setChecked(self._cfg.square_thumbnails)
@@ -428,11 +409,8 @@ class SettingsPanel(QScrollArea):
         # Expand Thumbnails (disabled by default)
         self._expand_card = SwitchSettingCard(
             icon=FluentIcon.PHOTO,
-            title="הרחב תמונות מרובעות למלבן עבור וידאו (MP4)",
-            content=(
-                "כאשר מורידים קובץ וידאו עם תמונה מרובעת במקור (כמו ספוטיפיי), "
-                "התמונה תורחב למלבן 16:9 על ידי יצירת רקע מטושטש ואלגנטי."
-            ),
+            title=t("expand_square_to_rectangle_title"),
+            content=t("expand_square_to_rectangle_desc"),
             parent=advanced_grp,
         )
         self._expand_card.setChecked(self._cfg.expand_thumbnails)
@@ -471,10 +449,10 @@ class SettingsPanel(QScrollArea):
         auth_grp.addSettingCard(self._clear_cookies_card)
 
         self._login_fix_card = PushSettingCard(
-            text="התחבר עכשיו",
+            text=t("external_login_now_btn"),
             icon=FluentIcon.PEOPLE,
-            title="התחברות לאתר חיצוני (קוקיז)",
-            content="התחבר ליוטיוב או לכל אתר אחר ישירות מהתוכנה כדי לשמור פרטי גישה ולפתור בקשות אימות.",
+            title=t("external_login_title"),
+            content=t("external_login_desc"),
             parent=auth_grp,
         )
         self._login_fix_card.clicked.connect(self.login_fix_requested)
@@ -539,8 +517,8 @@ class SettingsPanel(QScrollArea):
 
         self._youtube_proxy_card = _TextSettingCard(
             icon=FluentIcon.VPN,
-            title="YouTube Proxy",
-            content="HTTP/HTTPS/SOCKS proxy for YouTube downloads (e.g. http://127.0.0.1:7890). Leave empty for direct connection.",
+            title=t("youtube_proxy_title"),
+            content=t("youtube_proxy_desc"),
             value=self._cfg.get("youtube_proxy_url", ""),
             parent=search_grp,
         )
@@ -568,6 +546,7 @@ class SettingsPanel(QScrollArea):
         # After all cards are built and parented, apply theme once more so the
         # force-restyler can actually find them via findChildren.
         self._apply_theme()
+        QTimer.singleShot(0, self._adjust_layouts)
 
     def _apply_theme(self) -> None:
         c = get_colors()
@@ -592,6 +571,7 @@ class SettingsPanel(QScrollArea):
         # invalidate. We also override the card stylesheet inline so it shows
         # the correct surface/border colors regardless of which QSS layer wins.
         self._force_restyle_fluent_cards(c)
+        QTimer.singleShot(0, self._adjust_layouts)
 
     def _force_restyle_fluent_cards(self, c) -> None:
         """Walk all descendants and force-style every SettingCard variant."""
@@ -668,6 +648,101 @@ class SettingsPanel(QScrollArea):
             self._scroll_content.update()
             self._scroll_content.repaint()
 
+    def _apply_card_alignment(self, card, rtl: bool) -> None:
+        """Apply layout direction, margins, and alignments to a card based on RTL state."""
+        # Force LTR layout direction on the card container itself to prevent
+        # double-mirroring of the horizontal QBoxLayout direction.
+        card.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+
+        # 1. Defensively set horizontal layout direction and margins
+        h_layout = getattr(card, "hBoxLayout", None)
+        if h_layout is not None:
+            try:
+                if rtl:
+                    h_layout.setDirection(QBoxLayout.Direction.RightToLeft)
+                    h_layout.setContentsMargins(0, 0, 16, 0)
+                else:
+                    h_layout.setDirection(QBoxLayout.Direction.LeftToRight)
+                    h_layout.setContentsMargins(16, 0, 0, 0)
+            except Exception:
+                pass
+
+        # 2. Defensively set alignment of icon label
+        icon_label = getattr(card, "iconLabel", None)
+        if icon_label is not None:
+            try:
+                align_icon = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                if h_layout is not None:
+                    h_layout.setAlignment(icon_label, align_icon)
+            except Exception:
+                pass
+
+        # 3. Defensively set alignment of internal vertical text layout
+        v_layout = getattr(card, "vBoxLayout", None)
+        if v_layout is not None:
+            try:
+                align_v = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                v_layout.setAlignment(align_v)
+            except Exception:
+                pass
+
+        # 4. Defensively set alignment of labels
+        title_label = getattr(card, "titleLabel", None)
+        if title_label is not None:
+            try:
+                align_text = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                title_label.setAlignment(align_text)
+            except Exception:
+                pass
+
+        content_label = getattr(card, "contentLabel", None)
+        if content_label is not None:
+            try:
+                align_text = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                content_label.setAlignment(align_text)
+            except Exception:
+                pass
+
+        # Support custom card fallback attributes
+        title_lbl_custom = getattr(card, "_title_lbl", None)
+        if title_lbl_custom is not None:
+            try:
+                align_text = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                title_lbl_custom.setAlignment(align_text)
+            except Exception:
+                pass
+
+        sub_lbl_custom = getattr(card, "_sub_lbl", None)
+        if sub_lbl_custom is not None:
+            try:
+                align_text = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                sub_lbl_custom.setAlignment(align_text)
+            except Exception:
+                pass
+
+        # Defensively set child QComboBox layout directions to RTL if needed
+        from PySide6.QtWidgets import QComboBox
+        for combo in card.findChildren(QComboBox):
+            try:
+                combo.setLayoutDirection(Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight)
+            except Exception:
+                pass
+
+    def _adjust_layouts(self) -> None:
+        """Walk all setting cards and apply proper RTL/LTR alignment rules."""
+        is_hebrew = (self._cfg.language == "he")
+        
+        # 1. Walk and adjust all standard QFluentWidgets SettingCards
+        from qfluentwidgets import SettingCard
+        for card in self.findChildren(SettingCard):
+            self._apply_card_alignment(card, is_hebrew)
+
+        # 2. Walk and adjust custom cards
+        custom_classes = (_LanguageSettingCard, _SpinnerSettingCard, _TextSettingCard, _AccentPickerCard)
+        for cls in custom_classes:
+            for card in self.findChildren(cls):
+                self._apply_card_alignment(card, is_hebrew)
+
     # ── Handlers ───────────────────────────────────────────────────────────────
 
     def _on_theme_click(self) -> None:
@@ -704,6 +779,7 @@ class SettingsPanel(QScrollArea):
 
     def _on_language_change(self, lang_code: str) -> None:
         self._persist("language", lang_code)
+        QTimer.singleShot(0, self._adjust_layouts)
 
     # ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -739,7 +815,7 @@ class _AccentPickerCard(QFrame):
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(10)
 
-        self._title_lbl = QLabel("Accent Color")
+        self._title_lbl = QLabel(t("accent_color"))
         row.addWidget(self._title_lbl)
         row.addStretch()
 
@@ -822,22 +898,28 @@ class _SpinnerSettingCard(QFrame):
 
         self.setFixedHeight(76)
         row = QHBoxLayout(self)
-        row.setContentsMargins(16, 0, 16, 0)
-        row.setSpacing(12)
+        row.setSpacing(0)
+        row.setContentsMargins(16, 0, 0, 0)
 
-        icon_lbl = IconWidget(icon, self)
-        icon_lbl.setFixedSize(20, 20)
-        row.addWidget(icon_lbl)
+        self.hBoxLayout = row
+
+        self.iconLabel = IconWidget(icon, self)
+        self.iconLabel.setFixedSize(16, 16)
+        row.addWidget(self.iconLabel)
+        row.addSpacing(16)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
+        self.vBoxLayout = text_col
 
-        self._title_lbl = QLabel(title)
-        self._sub_lbl = QLabel(content)
-        self._sub_lbl.setWordWrap(True)
-        text_col.addWidget(self._title_lbl)
-        text_col.addWidget(self._sub_lbl)
+        self.titleLabel = QLabel(title)
+        self.contentLabel = QLabel(content)
+        self.contentLabel.setWordWrap(True)
+        text_col.addWidget(self.titleLabel)
+        text_col.addWidget(self.contentLabel)
         row.addLayout(text_col, stretch=1)
+
+        row.addSpacing(16)
 
         self._spin_box = SpinBox(self)
         self._spin_box.setRange(self._min_val, self._max_val)
@@ -845,6 +927,11 @@ class _SpinnerSettingCard(QFrame):
         self._spin_box.setFixedWidth(120)
         self._spin_box.valueChanged.connect(self._on_spin_changed)
         row.addWidget(self._spin_box)
+
+        row.addSpacing(16)
+
+        self._title_lbl = self.titleLabel
+        self._sub_lbl = self.contentLabel
 
     def _restyle(self) -> None:
         c = get_colors()
@@ -899,20 +986,28 @@ class _TextSettingCard(QFrame):
 
         self.setFixedHeight(76)
         row = QHBoxLayout(self)
-        row.setContentsMargins(16, 0, 16, 0)
-        row.setSpacing(12)
+        row.setSpacing(0)
+        row.setContentsMargins(16, 0, 0, 0)
 
-        icon_lbl = IconWidget(icon, self)
-        icon_lbl.setFixedSize(20, 20)
-        row.addWidget(icon_lbl)
+        self.hBoxLayout = row
+
+        self.iconLabel = IconWidget(icon, self)
+        self.iconLabel.setFixedSize(16, 16)
+        row.addWidget(self.iconLabel)
+        row.addSpacing(16)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
-        self._title_lbl = QLabel(title)
-        self._sub_lbl = QLabel(content)
-        text_col.addWidget(self._title_lbl)
-        text_col.addWidget(self._sub_lbl)
+        self.vBoxLayout = text_col
+
+        self.titleLabel = QLabel(title)
+        self.contentLabel = QLabel(content)
+        self.contentLabel.setWordWrap(True)
+        text_col.addWidget(self.titleLabel)
+        text_col.addWidget(self.contentLabel)
         row.addLayout(text_col, stretch=1)
+
+        row.addSpacing(16)
 
         self._edit = LineEdit(self)
         self._edit.setText(self._value)
@@ -922,6 +1017,11 @@ class _TextSettingCard(QFrame):
         force_ltr_input(self._edit)
         self._edit.editingFinished.connect(self._on_editing_finished)
         row.addWidget(self._edit)
+
+        row.addSpacing(16)
+
+        self._title_lbl = self.titleLabel
+        self._sub_lbl = self.contentLabel
 
     def _restyle(self) -> None:
         c = get_colors()
@@ -979,20 +1079,28 @@ class _LanguageSettingCard(QFrame):
 
         self.setFixedHeight(76)
         row = QHBoxLayout(self)
-        row.setContentsMargins(16, 0, 16, 0)
-        row.setSpacing(12)
+        row.setSpacing(0)
+        row.setContentsMargins(16, 0, 0, 0)
 
-        icon_lbl = IconWidget(icon, self)
-        icon_lbl.setFixedSize(20, 20)
-        row.addWidget(icon_lbl)
+        self.hBoxLayout = row
+
+        self.iconLabel = IconWidget(icon, self)
+        self.iconLabel.setFixedSize(16, 16)
+        row.addWidget(self.iconLabel)
+        row.addSpacing(16)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
-        self._title_lbl = QLabel(title)
-        self._sub_lbl = QLabel(content)
-        text_col.addWidget(self._title_lbl)
-        text_col.addWidget(self._sub_lbl)
+        self.vBoxLayout = text_col
+
+        self.titleLabel = QLabel(title)
+        self.contentLabel = QLabel(content)
+        self.contentLabel.setWordWrap(True)
+        text_col.addWidget(self.titleLabel)
+        text_col.addWidget(self.contentLabel)
         row.addLayout(text_col, stretch=1)
+
+        row.addSpacing(16)
 
         self._combo = QComboBox(self)
         for code, label in self._options:
@@ -1000,6 +1108,11 @@ class _LanguageSettingCard(QFrame):
         self.setValue(self._value)
         self._combo.currentIndexChanged.connect(self._on_index_changed)
         row.addWidget(self._combo)
+
+        row.addSpacing(16)
+
+        self._title_lbl = self.titleLabel
+        self._sub_lbl = self.contentLabel
 
     def _restyle(self) -> None:
         c = get_colors()

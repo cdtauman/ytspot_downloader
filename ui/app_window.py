@@ -763,16 +763,12 @@ class AppWindow(FluentWindow):
 
         # Pre-check Playwright before spawning the subprocess so the
         # user sees a clean message instead of a "wizard failed" toast.
-        from utils.playwright_check import (
-            is_playwright_available,
-            PlaywrightNotAvailable,
-        )
+        from utils.playwright_check import is_playwright_available
         if not is_playwright_available():
-            exc = PlaywrightNotAvailable("Sign-in / Cookie wizard")
             QMessageBox.warning(
                 self,
                 t("playwright_required_title"),
-                exc.message_he,
+                t("playwright_missing_message", feature="Sign-in / Cookie wizard"),
             )
             return
 
@@ -1189,8 +1185,8 @@ class AppWindow(FluentWindow):
             event.ignore()
             self.hide()
             self._tray.showMessage(
-                "YTSpot Downloader",
-                "Running in the background. Double-click the tray icon to restore.",
+                t("tray_minimized_title"),
+                t("tray_minimized_message"),
                 QSystemTrayIcon.MessageIcon.Information,
                 3000,
             )

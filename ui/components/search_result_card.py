@@ -194,11 +194,11 @@ class SearchResultCard(QFrame):
 
         # ── Action button ─────────────────────────────────────────────────────
         if kind == ResultKind.TRACK:
-            btn = PrimaryPushButton("＋  Add")
+            btn = PrimaryPushButton(t("search_card_add_btn"))
             btn.setFixedSize(72, 30)
             btn.clicked.connect(lambda: self.add_to_queue.emit(self._result))
         else:
-            btn = PushButton("Browse  →")
+            btn = PushButton(t("search_card_browse_btn"))
             btn.setFixedSize(84, 30)
             btn.setStyleSheet(f"""
                 PushButton {{

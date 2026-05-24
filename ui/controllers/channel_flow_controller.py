@@ -41,6 +41,7 @@ from core.duplicate_detector import (
     DuplicateGroup, DuplicateDecision, VideoInfo,
     detect_duplicates, apply_decisions,
 )
+from ui.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class ChannelFlowController(QObject):
         from ui.dialogs.tab_select_dialog import TabSelectDialog
         from PySide6.QtWidgets import QDialog
 
-        self.status_update.emit("מגלה טאבים…")
+        self.status_update.emit(t("channel_discovering_tabs"))
 
         dialog = TabSelectDialog(
             channel_url=self._url,
@@ -95,7 +96,7 @@ class ChannelFlowController(QObject):
         )
 
         if dialog.exec() != QDialog.DialogCode.Accepted:
-            self.status_update.emit("ייבוא ערוץ בוטל.")
+            self.status_update.emit(t("channel_import_cancelled"))
             self.cancelled.emit()
             self.finished.emit()
             return
@@ -107,19 +108,17 @@ class ChannelFlowController(QObject):
         tab_results: dict[str, list[VideoInfo]] = dialog.scrape_results
         total_raw = sum(len(v) for v in tab_results.values())
 
-        self.status_update.emit(f"נמצאו {total_raw:,} פריטים — בודק כפילויות…")
+        self.status_update.emit(t("channel_items_found", n=total_raw))
 
         # ── Duplicate detection ────────────────────────────────────────────────
         groups: list[DuplicateGroup] = detect_duplicates(tab_results)
 
         if groups:
-            self.status_update.emit(
-                f"נמצאו {len(groups)} כפילויות — ממתין להחלטת המשתמש…"
-            )
+            self.status_update.emit(t("channel_duplicates_found", n=len(groups)))
             decisions = self._run_conflict_dialog(groups)
             if decisions is None:
                 # User cancelled conflict dialog
-                self.status_update.emit("ייבוא ערוץ בוטל.")
+                self.status_update.emit(t("channel_import_cancelled"))
                 self.cancelled.emit()
                 self.finished.emit()
                 return
@@ -129,7 +128,7 @@ class ChannelFlowController(QObject):
         tracks = self._build_tracks(tab_results)
         total_final = len(tracks)
 
-        self.status_update.emit(f"מוסיף {total_final:,} פריטים לתור…")
+        self.status_update.emit(t("channel_adding_to_queue", n=total_final))
         self.tracks_ready.emit(tracks)
         self.finished.emit()
 
@@ -189,6 +188,10 @@ class ChannelFlowController(QObject):
                         "parent_artist": self._channel_name,
                         # "ep" triggers is_grouped=True and forced_index in download_controller
                         "release_type":  "ep",
+                        # ``category`` stays in its canonical Hebrew form so the
+                        # download controller's category-based comparisons work
+                        # unchanged. The folder path is localized later via
+                        # ``localized_folder_name`` at the path-building step.
                         "category":      "פלייליסטים",
                         "album_index":   v.playlist_index,
                         "total_tracks":  playlist_sizes.get(v.playlist_name, 0),
