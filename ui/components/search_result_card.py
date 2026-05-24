@@ -31,32 +31,22 @@ from qfluentwidgets import BodyLabel, CaptionLabel, PrimaryPushButton, PushButto
 
 from core.search_engine import ResultKind, SearchResult
 from ui.i18n import t
-from ui.theme_manager import (
-    ACCENT_COLOR,
-    BG_DARK, SURFACE_DARK, SURFACE2_DARK, BORDER_DARK,
-    TEXT_DARK, TEXT2_DARK, TEXT3_DARK,
-)
+from ui.theme_manager import ACCENT_COLOR, ThemeManager, get_colors
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Design tokens
+# Constants
 # ──────────────────────────────────────────────────────────────────────────────
 
-_BG_NORMAL  = SURFACE_DARK     # "#16161f"
-_BG_HOVER   = SURFACE2_DARK    # "#1e1e2a"
-_BORDER     = BORDER_DARK      # "#252533"
-_TEXT       = TEXT_DARK        # "#eeeef5"
-_TEXT_2     = TEXT2_DARK       # "#8888a8"
-_TEXT_3     = TEXT3_DARK       # "#4a4a66"
-_RADIUS     = 8
-_THUMB_W    = 60
-_THUMB_H    = 60
+_RADIUS  = 8
+_THUMB_W = 60
+_THUMB_H = 60
 
 _PLATFORM_COLORS: dict[str, tuple[str, str]] = {
-    "YOUTUBE":  ("#cc2200", "#ffffff"),   # deeper YouTube red
+    "YOUTUBE":  ("#cc2200", "#ffffff"),
     "YTMUSIC":  ("#cc2200", "#ffffff"),
-    "SPOTIFY":  ("#1aa34a", "#ffffff"),   # richer Spotify green
-    "UNKNOWN":  (_BORDER, _TEXT_2),
+    "SPOTIFY":  ("#1aa34a", "#ffffff"),
+    "UNKNOWN":  ("#252533", "#8888a8"),
 }
 
 # ResultKind icon characters shown in the avatar placeholder for non-track kinds
@@ -70,8 +60,9 @@ _KIND_ICONS: dict[ResultKind, str] = {
 
 def _placeholder_pixmap(w: int = _THUMB_W, h: int = _THUMB_H) -> QPixmap:
     from PySide6.QtGui import QImage
+    from ui.theme_manager import get_colors
     img = QImage(w, h, QImage.Format.Format_RGB32)
-    img.fill(QColor("#1a1a20"))
+    img.fill(QColor(get_colors().border))
     return QPixmap.fromImage(img)
 
 
@@ -100,13 +91,16 @@ class SearchResultCard(QFrame):
         super().__init__(parent)
         self._result = result
         self._build()
-        self._apply_base_style()
 
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(10)
         shadow.setOffset(0, 2)
         shadow.setColor(QColor(0, 0, 0, 90))
         self.setGraphicsEffect(shadow)
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._restyle)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -156,11 +150,10 @@ class SearchResultCard(QFrame):
         row.setSpacing(0)
 
         # ── Rank label ────────────────────────────────────────────────────────
-        rank_lbl = QLabel(f"{r.result_index}.")
-        rank_lbl.setFixedWidth(24)
-        rank_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        rank_lbl.setStyleSheet(f"color: {_TEXT_3}; font-size: 10px; background: transparent;")
-        row.addWidget(rank_lbl)
+        self._rank_lbl = QLabel(f"{r.result_index}.")
+        self._rank_lbl.setFixedWidth(24)
+        self._rank_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self._rank_lbl)
         row.addSpacing(6)
 
         # ── Thumbnail / avatar ────────────────────────────────────────────────
@@ -173,17 +166,15 @@ class SearchResultCard(QFrame):
         text_col.setSpacing(2)
         text_col.setContentsMargins(0, 0, 0, 0)
 
-        title_lbl = BodyLabel(r.title)
-        title_lbl.setStyleSheet(f"color: {_TEXT}; background: transparent;")
+        self._title_lbl = BodyLabel(r.title)
         title_font = QFont()
         title_font.setPointSize(10)
-        title_lbl.setFont(title_font)
-        title_lbl.setMaximumWidth(360)
-        text_col.addWidget(title_lbl)
+        self._title_lbl.setFont(title_font)
+        self._title_lbl.setMaximumWidth(360)
+        text_col.addWidget(self._title_lbl)
 
-        sub_lbl = CaptionLabel(self._build_sub_text(r, kind))
-        sub_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
-        text_col.addWidget(sub_lbl)
+        self._sub_lbl = CaptionLabel(self._build_sub_text(r, kind))
+        text_col.addWidget(self._sub_lbl)
 
         row.addLayout(text_col, stretch=1)
         row.addSpacing(8)
@@ -226,20 +217,15 @@ class SearchResultCard(QFrame):
 
         row.addWidget(btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
+        self._restyle()
+
     def _build_thumb(self, kind: ResultKind) -> QLabel:
         """Return a thumbnail label; initialized with placeholder."""
         lbl = QLabel()
         lbl.setFixedSize(_THUMB_W, _THUMB_H)
         lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # Start with placeholder; actual image will be loaded by ThumbnailWorker
         lbl.setPixmap(_placeholder_pixmap())
-        
-        if kind == ResultKind.ARTIST:
-            lbl.setStyleSheet(f"border-radius: {_THUMB_H // 2}px; border: 1px solid {_BORDER}; background: #1a1a20;")
-        else:
-            lbl.setStyleSheet(f"border-radius: 6px; border: 1px solid {_BORDER}; background: #1a1a20;")
-            
+        self._thumb_is_artist = (kind == ResultKind.ARTIST)
         return lbl
 
 
@@ -293,19 +279,34 @@ class SearchResultCard(QFrame):
 
     # ── Styling ───────────────────────────────────────────────────────────────
 
+    def _restyle(self) -> None:
+        c = get_colors()
+        self._rank_lbl.setStyleSheet(f"color: {c.text_tertiary}; font-size: 10px; background: transparent;")
+        self._title_lbl.setStyleSheet(f"color: {c.text_primary}; background: transparent;")
+        self._sub_lbl.setStyleSheet(f"color: {c.text_secondary}; background: transparent;")
+
+        radius = f"{_THUMB_H // 2}px" if self._thumb_is_artist else "6px"
+        self._thumb_label.setStyleSheet(
+            f"border-radius: {radius}; border: 1px solid {c.border}; background: {c.surface};"
+        )
+
+        self._apply_base_style()
+
     def _apply_base_style(self) -> None:
+        c = get_colors()
         self.setStyleSheet(f"""
             SearchResultCard {{
-                background-color: {_BG_NORMAL};
-                border: 1px solid {_BORDER};
+                background-color: {c.surface};
+                border: 1px solid {c.border};
                 border-radius: {_RADIUS}px;
             }}
         """)
 
     def enterEvent(self, event) -> None:
+        c = get_colors()
         self.setStyleSheet(f"""
             SearchResultCard {{
-                background-color: {_BG_HOVER};
+                background-color: {c.surface2};
                 border: 1px solid {ACCENT_COLOR};
                 border-radius: {_RADIUS}px;
             }}

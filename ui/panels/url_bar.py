@@ -29,20 +29,10 @@ from qfluentwidgets import (
 )
 
 from config import AppConfig
-from ui.theme_manager import ACCENT_COLOR
+from ui.theme_manager import ACCENT_COLOR, ThemeManager, get_colors
 from ui.i18n import t
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Design tokens
-# ──────────────────────────────────────────────────────────────────────────────
-
-_BG          = "#0e0e0f"
-_SURFACE     = "#18181b"
-_BORDER      = "#2e2e35"
-_TEXT        = "#f0f0f0"
-_TEXT_3      = "#55555f"
-_SUCCESS     = "#34d399"
+_SUCCESS = "#34d399"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -67,7 +57,12 @@ class UrlBar(QFrame):
         super().__init__(parent)
         self._config          = config
         self._clipboard_active = False
+        self._tool_btns: list[ToolButton] = []
         self._build()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -97,6 +92,7 @@ class UrlBar(QFrame):
     def set_clipboard_monitor_active(self, active: bool) -> None:
         """Update the clipboard indicator dot colour."""
         self._clipboard_active = active
+        c = get_colors()
         if active:
             self._clip_dot.setStyleSheet(
                 f"color: {_SUCCESS}; background: transparent; font-size: 10px;"
@@ -104,7 +100,7 @@ class UrlBar(QFrame):
             self._clip_dot.setToolTip(t("clipboard_on_tooltip"))
         else:
             self._clip_dot.setStyleSheet(
-                f"color: {_TEXT_3}; background: transparent; font-size: 10px;"
+                f"color: {c.text_tertiary}; background: transparent; font-size: 10px;"
             )
             self._clip_dot.setToolTip(t("clipboard_off_tooltip"))
 
@@ -113,7 +109,6 @@ class UrlBar(QFrame):
     def _build(self) -> None:
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(64)
-        self.setStyleSheet(f"background: {_BG}; border: none;")
 
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 10, 16, 10)
@@ -132,19 +127,6 @@ class UrlBar(QFrame):
         self._url_entry.setMinimumHeight(40)
         self._url_entry.setClearButtonEnabled(True)
         self._url_entry.returnPressed.connect(self._on_fetch)
-        self._url_entry.setStyleSheet(f"""
-            LineEdit {{
-                background: {_SURFACE};
-                border: 1.5px solid {_BORDER};
-                border-radius: 6px;
-                color: {_TEXT};
-                font-size: 13px;
-                padding: 0 8px;
-            }}
-            LineEdit:focus {{
-                border-color: {ACCENT_COLOR};
-            }}
-        """)
         row.addWidget(self._url_entry, stretch=1)
 
         # ── Paste button ──────────────────────────────────────────────────────
@@ -165,6 +147,57 @@ class UrlBar(QFrame):
         # ── Fetch button ──────────────────────────────────────────────────────
         self._fetch_btn = PrimaryPushButton(t("fetch_info_button"))
         self._fetch_btn.setMinimumSize(120, 40)
+        self._fetch_btn.clicked.connect(self._on_fetch)
+        row.addWidget(self._fetch_btn)
+
+        self._apply_theme()
+
+    def _tool_btn(self, icon: str, tooltip: str) -> ToolButton:
+        btn = ToolButton()
+        btn.setText(icon)
+        btn.setFixedSize(38, 38)
+        btn.setToolTip(tooltip)
+        self._tool_btns.append(btn)
+        return btn
+
+    # ── Theme ──────────────────────────────────────────────────────────────────
+
+    def _apply_theme(self) -> None:
+        c = get_colors()
+
+        self.setStyleSheet(f"background: {c.bg}; border: none;")
+
+        self._url_entry.setStyleSheet(f"""
+            LineEdit {{
+                background: {c.surface};
+                border: 1.5px solid {c.border};
+                border-radius: 6px;
+                color: {c.text_primary};
+                font-size: 13px;
+                padding: 0 8px;
+            }}
+            LineEdit:focus {{
+                border-color: {ACCENT_COLOR};
+            }}
+        """)
+
+        tool_qss = f"""
+            ToolButton {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 6px;
+                font-size: 15px;
+                color: {c.text_primary};
+            }}
+            ToolButton:hover {{
+                border-color: {ACCENT_COLOR};
+                color: {ACCENT_COLOR};
+            }}
+        """
+        for btn in self._tool_btns:
+            btn.setStyleSheet(tool_qss)
+
+        dim_accent = _dim_color(ACCENT_COLOR)
         self._fetch_btn.setStyleSheet(f"""
             PrimaryPushButton {{
                 background-color: {ACCENT_COLOR};
@@ -175,36 +208,16 @@ class UrlBar(QFrame):
                 font-weight: bold;
             }}
             PrimaryPushButton:hover {{
-                background-color: #e09418;
+                background-color: {dim_accent};
             }}
             PrimaryPushButton:disabled {{
-                background-color: #5a3e0e;
-                color: #888888;
+                background-color: {c.surface2};
+                color: {c.text_tertiary};
             }}
         """)
-        self._fetch_btn.clicked.connect(self._on_fetch)
-        row.addWidget(self._fetch_btn)
 
-    @staticmethod
-    def _tool_btn(icon: str, tooltip: str) -> ToolButton:
-        btn = ToolButton()
-        btn.setText(icon)
-        btn.setFixedSize(38, 38)
-        btn.setToolTip(tooltip)
-        btn.setStyleSheet(f"""
-            ToolButton {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 6px;
-                font-size: 15px;
-                color: {_TEXT};
-            }}
-            ToolButton:hover {{
-                border-color: {ACCENT_COLOR};
-                color: {ACCENT_COLOR};
-            }}
-        """)
-        return btn
+        # Re-apply clipboard dot with correct off-state color
+        self.set_clipboard_monitor_active(self._clipboard_active)
 
     # ── Slots ──────────────────────────────────────────────────────────────────
 
@@ -239,3 +252,13 @@ class UrlBar(QFrame):
         url = self.get_url()
         if url:
             self.scrape_requested.emit(url)
+
+
+def _dim_color(hex_color: str, factor: float = 0.82) -> str:
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r = max(0, int(int(h[0:2], 16) * factor))
+    g = max(0, int(int(h[2:4], 16) * factor))
+    b = max(0, int(int(h[4:6], 16) * factor))
+    return f"#{r:02x}{g:02x}{b:02x}"

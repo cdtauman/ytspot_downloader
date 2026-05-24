@@ -34,19 +34,36 @@ from qfluentwidgets import PrimaryPushButton, ToolButton
 
 from core.update_checker import ReleaseInfo
 from ui.i18n import t
-from ui.theme_manager import ACCENT_COLOR, ACCENT_COLOR_DIM
+from ui.theme_manager import ACCENT_COLOR, ACCENT_COLOR_DIM, ThemeManager
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Design tokens
 # ──────────────────────────────────────────────────────────────────────────────
 
-_BANNER_BG     = "#1a1200"       # Very dark amber tint
-_BANNER_BORDER = "#8b5e00"       # Muted amber border
-_TEXT          = "#f5e0a0"       # Warm off-white on the dark amber bg
-_TEXT_DIM      = "#c4a95a"
+# Dark variant – warm dark amber notification
+_BG_DARK        = "#1a1200"
+_BORDER_DARK    = "#8b5e00"
+_TEXT_DARK      = "#f5e0a0"
+_TEXT_DIM_DARK  = "#c4a95a"
+
+# Light variant – soft pastel amber notification
+_BG_LIGHT       = "#fff7e0"
+_BORDER_LIGHT   = "#f3c265"
+_TEXT_LIGHT     = "#5a3d00"
+_TEXT_DIM_LIGHT = "#8b6a14"
+
 _FULL_HEIGHT   = 52              # px – banner height when fully expanded
 _ANIM_MS       = 280             # animation duration in milliseconds
+
+
+def _banner_tokens() -> tuple[str, str, str, str]:
+    """Return (bg, border, text, text_dim) for the current theme."""
+    tm = ThemeManager.instance()
+    is_dark = (tm._current in ("dark", "oled")) if tm else True
+    if is_dark:
+        return _BG_DARK, _BORDER_DARK, _TEXT_DARK, _TEXT_DIM_DARK
+    return _BG_LIGHT, _BORDER_LIGHT, _TEXT_LIGHT, _TEXT_DIM_LIGHT
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -80,6 +97,10 @@ class UpdateBanner(QFrame):
         # Start collapsed so it takes zero space before show_release() is called
         self.setMaximumHeight(0)
         self.setVisible(False)
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -121,47 +142,58 @@ class UpdateBanner(QFrame):
     def _build(self) -> None:
         self.setFixedHeight(_FULL_HEIGHT)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setStyleSheet(f"""
-            UpdateBanner {{
-                background-color: {_BANNER_BG};
-                border-bottom: 1px solid {_BANNER_BORDER};
-            }}
-        """)
 
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 8, 0)
         row.setSpacing(0)
 
-        # ── Bell / version label ──────────────────────────────────────────────
         self._version_lbl = QLabel(t("update_available"))
         self._version_lbl.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
-        self._version_lbl.setStyleSheet(
-            f"color: {ACCENT_COLOR}; background: transparent;"
-        )
         row.addWidget(self._version_lbl)
         row.addSpacing(16)
 
-        # ── Short release notes ───────────────────────────────────────────────
         self._notes_lbl = QLabel("")
         self._notes_lbl.setFont(QFont("Consolas", 9))
-        self._notes_lbl.setStyleSheet(
-            f"color: {_TEXT_DIM}; background: transparent;"
-        )
         self._notes_lbl.setVisible(False)
         row.addWidget(self._notes_lbl, stretch=1)
         row.addSpacing(12)
 
-        # ── View release button ───────────────────────────────────────────────
         view_btn = PrimaryPushButton(t("view_release"))
         view_btn.setFixedSize(108, 32)
         view_btn.clicked.connect(self._open_release_page)
         row.addWidget(view_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         row.addSpacing(6)
 
-        # ── Download button (visible only when asset URL is present) ──────────
         self._download_btn = PrimaryPushButton(t("download_btn"))
         self._download_btn.setFixedSize(90, 32)
         self._download_btn.setVisible(False)
+        self._download_btn.clicked.connect(self._open_download_link)
+        row.addWidget(self._download_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+        row.addSpacing(8)
+
+        self._dismiss_btn = ToolButton()
+        self._dismiss_btn.setText("✕")
+        self._dismiss_btn.setFixedSize(28, 28)
+        self._dismiss_btn.setToolTip(t("dismiss_tooltip"))
+        self._dismiss_btn.clicked.connect(self.dismiss)
+        row.addWidget(self._dismiss_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        bg, border, text, text_dim = _banner_tokens()
+        self.setStyleSheet(f"""
+            UpdateBanner {{
+                background-color: {bg};
+                border-bottom: 1px solid {border};
+            }}
+        """)
+        self._version_lbl.setStyleSheet(
+            f"color: {ACCENT_COLOR}; background: transparent;"
+        )
+        self._notes_lbl.setStyleSheet(
+            f"color: {text_dim}; background: transparent;"
+        )
         self._download_btn.setStyleSheet(f"""
             PrimaryPushButton {{
                 background-color: {ACCENT_COLOR};
@@ -173,26 +205,15 @@ class UpdateBanner(QFrame):
                 background-color: {ACCENT_COLOR_DIM};
             }}
         """)
-        self._download_btn.clicked.connect(self._open_download_link)
-        row.addWidget(self._download_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-        row.addSpacing(8)
-
-        # ── Dismiss (×) button ────────────────────────────────────────────────
-        dismiss_btn = ToolButton()
-        dismiss_btn.setText("✕")
-        dismiss_btn.setFixedSize(28, 28)
-        dismiss_btn.setToolTip(t("dismiss_tooltip"))
-        dismiss_btn.setStyleSheet(f"""
+        self._dismiss_btn.setStyleSheet(f"""
             ToolButton {{
                 background: transparent;
                 border: none;
-                color: {_TEXT_DIM};
+                color: {text_dim};
                 font-size: 12px;
             }}
-            ToolButton:hover {{ color: {_TEXT}; }}
+            ToolButton:hover {{ color: {text}; }}
         """)
-        dismiss_btn.clicked.connect(self.dismiss)
-        row.addWidget(dismiss_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
     # ── Animations ────────────────────────────────────────────────────────────
 

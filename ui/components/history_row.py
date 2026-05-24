@@ -32,21 +32,15 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import CaptionLabel, ToolButton
 
 from core.history_db import DownloadRecord
-from ui.theme_manager import ACCENT_COLOR
+from ui.theme_manager import ACCENT_COLOR, ThemeManager, get_colors
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Design tokens
+# Constants
 # ──────────────────────────────────────────────────────────────────────────────
 
-_BG_NORMAL   = "#18181b"
-_BG_HOVER    = "#1f1f23"
-_BORDER      = "#2e2e35"
-_TEXT        = "#f0f0f0"
-_TEXT_2      = "#9090a0"
-_TEXT_3      = "#55555f"
-_ERROR       = "#f87171"
-_RADIUS      = 6
+_ERROR  = "#f87171"
+_RADIUS = 6
 
 _PLATFORM_COLORS: dict[str, tuple[str, str]] = {
     "youtube":  ("#ff4444", "#ffffff"),
@@ -87,7 +81,11 @@ class HistoryRow(QFrame):
         super().__init__(parent)
         self._record = record
         self._build()
-        self._apply_base_style()
+        self._restyle()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._restyle)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -110,10 +108,9 @@ class HistoryRow(QFrame):
         row.setSpacing(0)
 
         # ── Date ──────────────────────────────────────────────────────────────
-        date_lbl = CaptionLabel(r.display_date())
-        date_lbl.setFixedWidth(116)
-        date_lbl.setStyleSheet(f"color: {_TEXT_3}; background: transparent;")
-        row.addWidget(date_lbl)
+        self._date_lbl = CaptionLabel(r.display_date())
+        self._date_lbl.setFixedWidth(116)
+        row.addWidget(self._date_lbl)
         row.addSpacing(6)
 
         # ── Title + artist ────────────────────────────────────────────────────
@@ -122,15 +119,13 @@ class HistoryRow(QFrame):
         text_col.setSpacing(1)
         text_col.setContentsMargins(0, 0, 0, 0)
 
-        title_lbl = QLabel(_truncate(r.title, 52))
-        title_lbl.setStyleSheet(f"color: {_TEXT}; background: transparent; font-size: 11px;")
-        title_lbl.setFont(QFont("Consolas", 10))
+        self._title_lbl = QLabel(_truncate(r.title, 52))
+        self._title_lbl.setFont(QFont("Consolas", 10))
 
-        artist_lbl = CaptionLabel(_truncate(r.artist or "—", 40))
-        artist_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
+        self._artist_lbl = CaptionLabel(_truncate(r.artist or "—", 40))
 
-        text_col.addWidget(title_lbl)
-        text_col.addWidget(artist_lbl)
+        text_col.addWidget(self._title_lbl)
+        text_col.addWidget(self._artist_lbl)
         row.addLayout(text_col, stretch=1)
         row.addSpacing(8)
 
@@ -148,88 +143,90 @@ class HistoryRow(QFrame):
         row.addSpacing(6)
 
         # ── Duration ──────────────────────────────────────────────────────────
-        dur_lbl = CaptionLabel(r.duration_str())
-        dur_lbl.setFixedWidth(52)
-        dur_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        dur_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
-        row.addWidget(dur_lbl)
+        self._dur_lbl = CaptionLabel(r.duration_str())
+        self._dur_lbl.setFixedWidth(52)
+        self._dur_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self._dur_lbl)
         row.addSpacing(4)
 
         # ── File size ─────────────────────────────────────────────────────────
-        size_lbl = CaptionLabel(r.file_size_str())
-        size_lbl.setFixedWidth(60)
-        size_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        size_lbl.setStyleSheet(f"color: {_TEXT_2}; background: transparent;")
-        row.addWidget(size_lbl)
+        self._size_lbl = CaptionLabel(r.file_size_str())
+        self._size_lbl.setFixedWidth(60)
+        self._size_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self._size_lbl)
         row.addSpacing(4)
 
         # ── Action buttons ────────────────────────────────────────────────────
-        # Open folder
-        open_btn = self._action_btn("📁", f"Open folder in file manager")
-        open_btn.clicked.connect(
+        self._open_btn = _make_action_btn("📁", "Open folder in file manager")
+        self._open_btn.clicked.connect(
             lambda: self.open_folder_requested.emit(self._record)
         )
-        row.addWidget(open_btn)
+        row.addWidget(self._open_btn)
         row.addSpacing(2)
 
-        # Re-download
-        redl_btn = self._action_btn("↺", "Re-add to download queue")
-        redl_btn.clicked.connect(
+        self._redl_btn = _make_action_btn("↺", "Re-add to download queue")
+        self._redl_btn.clicked.connect(
             lambda: self.redownload_requested.emit(self._record)
         )
-        row.addWidget(redl_btn)
+        row.addWidget(self._redl_btn)
         row.addSpacing(2)
 
-        # Delete from history
-        del_btn = self._action_btn("✕", "Remove from history")
-        del_btn.setStyleSheet(f"""
+        self._del_btn = _make_action_btn("✕", "Remove from history")
+        self._del_btn.clicked.connect(
+            lambda: self.delete_requested.emit(self._record)
+        )
+        row.addWidget(self._del_btn)
+
+    # ── Styling ───────────────────────────────────────────────────────────────
+
+    def _restyle(self) -> None:
+        c = get_colors()
+
+        self._date_lbl.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
+        self._title_lbl.setStyleSheet(f"color: {c.text_primary}; background: transparent; font-size: 11px;")
+        self._artist_lbl.setStyleSheet(f"color: {c.text_secondary}; background: transparent;")
+        self._dur_lbl.setStyleSheet(f"color: {c.text_secondary}; background: transparent;")
+        self._size_lbl.setStyleSheet(f"color: {c.text_secondary}; background: transparent;")
+
+        btn_qss = f"""
             ToolButton {{
                 background: transparent;
                 border: none;
-                color: {_TEXT_3};
+                color: {c.text_tertiary};
+                font-size: 12px;
+            }}
+            ToolButton:hover {{ color: {ACCENT_COLOR}; }}
+        """
+        self._open_btn.setStyleSheet(btn_qss)
+        self._redl_btn.setStyleSheet(btn_qss)
+
+        self._del_btn.setStyleSheet(f"""
+            ToolButton {{
+                background: transparent;
+                border: none;
+                color: {c.text_tertiary};
                 font-size: 11px;
             }}
             ToolButton:hover {{ color: {_ERROR}; }}
         """)
-        del_btn.clicked.connect(
-            lambda: self.delete_requested.emit(self._record)
-        )
-        row.addWidget(del_btn)
 
-    @staticmethod
-    def _action_btn(icon_text: str, tooltip: str) -> ToolButton:
-        btn = ToolButton()
-        btn.setText(icon_text)
-        btn.setFixedSize(28, 28)
-        btn.setToolTip(tooltip)
-        btn.setStyleSheet(f"""
-            ToolButton {{
-                background: transparent;
-                border: none;
-                color: {_TEXT_3};
-                font-size: 12px;
-            }}
-            ToolButton:hover {{
-                color: {ACCENT_COLOR};
-            }}
-        """)
-        return btn
-
-    # ── Styling ───────────────────────────────────────────────────────────────
+        self._apply_base_style()
 
     def _apply_base_style(self) -> None:
+        c = get_colors()
         self.setStyleSheet(f"""
             HistoryRow {{
-                background-color: {_BG_NORMAL};
-                border: 1px solid {_BORDER};
+                background-color: {c.surface};
+                border: 1px solid {c.border};
                 border-radius: {_RADIUS}px;
             }}
         """)
 
     def enterEvent(self, event) -> None:
+        c = get_colors()
         self.setStyleSheet(f"""
             HistoryRow {{
-                background-color: {_BG_HOVER};
+                background-color: {c.surface2};
                 border: 1px solid {ACCENT_COLOR};
                 border-radius: {_RADIUS}px;
             }}
@@ -244,6 +241,14 @@ class HistoryRow(QFrame):
 # ──────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _make_action_btn(icon_text: str, tooltip: str) -> ToolButton:
+    btn = ToolButton()
+    btn.setText(icon_text)
+    btn.setFixedSize(28, 28)
+    btn.setToolTip(tooltip)
+    return btn
+
 
 def _truncate(text: str, max_chars: int) -> str:
     """Truncate a string and append '…' if it exceeds max_chars."""

@@ -45,6 +45,17 @@ from ui.theme_manager import (
     SUCCESS_COLOR, ERROR_COLOR,
 )
 
+
+def _dim_accent_conv(hex_color: str, factor: float = 0.85) -> str:
+    """Return a darkened/dimmed variant of a hex color for hover states."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r = max(0, int(int(h[0:2], 16) * factor))
+    g = max(0, int(int(h[2:4], 16) * factor))
+    b = max(0, int(int(h[4:6], 16) * factor))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
 _OUTPUT_FORMATS = ["mp3", "m4a", "flac", "opus", "wav"]
 _BITRATES       = ["320k", "256k", "192k", "128k", "96k"]
 _INPUT_EXTS     = {".mp3", ".m4a", ".flac", ".opus", ".wav", ".ogg", ".aac",
@@ -157,6 +168,49 @@ class _FileRow(QFrame):
         self.file_path = file_path
         self._build()
 
+        from ui.theme_manager import ThemeManager as _TM
+        _tm = _TM.instance()
+        if _tm is not None:
+            _tm.theme_changed.connect(self._restyle)
+
+    def _restyle(self) -> None:
+        c = get_colors()
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 8px;
+            }}
+        """)
+        if hasattr(self, "_name_lbl"):
+            self._name_lbl.setStyleSheet(
+                f"color: {c.text_primary}; background: transparent; font-size: 12px;"
+            )
+        if hasattr(self, "_dir_lbl"):
+            self._dir_lbl.setStyleSheet(
+                f"color: {c.text_tertiary}; background: transparent;"
+            )
+        if hasattr(self, "_bar"):
+            self._bar.setStyleSheet(f"""
+                QProgressBar {{
+                    background: {c.border};
+                    border: none;
+                    border-radius: 3px;
+                }}
+                QProgressBar::chunk {{
+                    background: {ACCENT_COLOR};
+                    border-radius: 3px;
+                }}
+            """)
+        if hasattr(self, "_rm_btn"):
+            self._rm_btn.setStyleSheet(f"""
+                ToolButton {{
+                    color: {c.text_tertiary}; background: transparent; border: none;
+                    font-size: 11px;
+                }}
+                ToolButton:hover {{ color: {ERROR_COLOR}; }}
+            """)
+
     def _build(self) -> None:
         c = get_colors()
         self.setFixedHeight(52)
@@ -182,12 +236,12 @@ class _FileRow(QFrame):
         text_col = QVBoxLayout()
         text_col.setSpacing(1)
         p = Path(self.file_path)
-        name_lbl = BodyLabel(p.name[:60])
-        name_lbl.setStyleSheet(f"color: {c.text_primary}; background: transparent; font-size: 12px;")
-        dir_lbl  = CaptionLabel(str(p.parent)[:70])
-        dir_lbl.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
-        text_col.addWidget(name_lbl)
-        text_col.addWidget(dir_lbl)
+        self._name_lbl = BodyLabel(p.name[:60])
+        self._name_lbl.setStyleSheet(f"color: {c.text_primary}; background: transparent; font-size: 12px;")
+        self._dir_lbl  = CaptionLabel(str(p.parent)[:70])
+        self._dir_lbl.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
+        text_col.addWidget(self._name_lbl)
+        text_col.addWidget(self._dir_lbl)
         row.addLayout(text_col, stretch=1)
 
         # Progress bar (hidden until conversion starts)
@@ -217,18 +271,18 @@ class _FileRow(QFrame):
         row.addWidget(self._status_lbl)
 
         # Remove button
-        rm_btn = ToolButton()
-        rm_btn.setText("✕")
-        rm_btn.setFixedSize(24, 24)
-        rm_btn.setStyleSheet(f"""
+        self._rm_btn = ToolButton()
+        self._rm_btn.setText("✕")
+        self._rm_btn.setFixedSize(24, 24)
+        self._rm_btn.setStyleSheet(f"""
             ToolButton {{
                 color: {c.text_tertiary}; background: transparent; border: none;
                 font-size: 11px;
             }}
             ToolButton:hover {{ color: {ERROR_COLOR}; }}
         """)
-        rm_btn.clicked.connect(lambda: self.remove_requested.emit(self.file_path))
-        row.addWidget(rm_btn)
+        self._rm_btn.clicked.connect(lambda: self.remove_requested.emit(self.file_path))
+        row.addWidget(self._rm_btn)
 
     def set_converting(self) -> None:
         self._bar.setVisible(True)
@@ -415,7 +469,7 @@ class ConverterPanel(QWidget):
                 font-size: 14px;
                 font-weight: 700;
             }}
-            PushButton:hover {{ background: #c47d0e; }}
+            PushButton:hover {{ background: {_dim_accent_conv(ACCENT_COLOR)}; }}
             PushButton:disabled {{ background: {c.border}; color: {c.text_tertiary}; }}
         """)
 

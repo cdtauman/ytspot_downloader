@@ -65,6 +65,18 @@ from ui.theme_manager import (
 
 logger = logging.getLogger(__name__)
 
+
+def _md_dim_hex(hex_color: str, factor: float = 0.85) -> str:
+    """Return a darkened/dimmed variant of a hex color for hover states."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r = max(0, int(int(h[0:2], 16) * factor))
+    g = max(0, int(int(h[2:4], 16) * factor))
+    b = max(0, int(int(h[4:6], 16) * factor))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 # Inspector page indices
 _PAGE_EMPTY  = 0
 _PAGE_FOLDER = 1
@@ -166,7 +178,35 @@ class _ExplorerFileListView(QTableView):
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
 
+        # Make the empty area follow the theme by default
+        bg = QColor(get_colors().bg)
+        pal = self.viewport().palette()
+        pal.setColor(QPalette.Base, bg)
+        pal.setColor(QPalette.Window, bg)
+        self.viewport().setPalette(pal)
+        self.viewport().setAutoFillBackground(True)
+
+        # Listen for theme changes and refresh
+        from ui.theme_manager import ThemeManager as _TM
+        _tm = _TM.instance()
+        if _tm is not None:
+            _tm.theme_changed.connect(self._refresh_viewport_palette)
+
+    def _refresh_viewport_palette(self) -> None:
+        bg = QColor(get_colors().bg)
+        pal = self.viewport().palette()
+        pal.setColor(QPalette.Base, bg)
+        pal.setColor(QPalette.Window, bg)
+        self.viewport().setPalette(pal)
+        self.viewport().update()
+
     def paintEvent(self, event) -> None:
+        # Fill the entire viewport with the theme background first, so any
+        # empty area (no rows yet, area below last row, etc.) follows the theme
+        # instead of falling back to a hardcoded base color.
+        painter = QPainter(self.viewport())
+        painter.fillRect(self.viewport().rect(), QColor(get_colors().bg))
+        painter.end()
         super().paintEvent(event)
 
     def drawRow(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
@@ -418,7 +458,7 @@ class _AutoArrangeSettingsDialog(QDialog):
         layout.addWidget(hdr)
 
         note = QLabel("(אלבום משם תיקייה תמיד פעיל)")
-        note.setStyleSheet("color: #888; font-size: 11px;")
+        note.setStyleSheet(f"color: {get_colors().text_secondary}; font-size: 11px;")
         layout.addWidget(note)
         layout.addSpacing(4)
 
@@ -442,7 +482,7 @@ class _AutoArrangeSettingsDialog(QDialog):
             
             info_btn = QPushButton("ℹ️")
             info_btn.setFixedSize(20, 20)
-            info_btn.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 14px; } QPushButton:hover { color: #88aaff; }")
+            info_btn.setStyleSheet(f"QPushButton {{ border: none; background: transparent; font-size: 14px; color: {get_colors().text_secondary}; }} QPushButton:hover {{ color: {ACCENT_COLOR}; }}")
             info_btn.setToolTip(desc)
             info_btn.clicked.connect(lambda _, l=label, d=desc: self._show_info(l, d))
             row.addWidget(info_btn)
@@ -566,12 +606,16 @@ class _CleanSettingsDialog(QDialog):
         self.accept()
 
 
-_BTN_STYLE = (
-    "QPushButton { background: #2a2d3a; color: #d0d0e0; border: 1px solid #444460;"
-    "  border-radius: 4px; padding: 3px 5px; text-align: left; font-size: 10px; }"
-    "QPushButton:hover { background: #3a3d50; border-color: #6060a0; }"
-    "QPushButton:pressed { background: #1a1d28; }"
-)
+def _btn_style() -> str:
+    """Standard op-button style (theme-aware, called fresh each time)."""
+    c = get_colors()
+    return (
+        f"QPushButton {{ background: {c.surface}; color: {c.text_primary};"
+        f"  border: 1px solid {c.border};"
+        f"  border-radius: 4px; padding: 3px 5px; text-align: left; font-size: 10px; }}"
+        f"QPushButton:hover {{ background: {c.surface2}; border-color: {ACCENT_COLOR}; }}"
+        f"QPushButton:pressed {{ background: {c.border}; }}"
+    )
 
 
 class _ExplorerTreeWidget(QTreeWidget):
@@ -730,21 +774,127 @@ class MetadataEditorPanel(QWidget):
 
         root_layout.addWidget(self._build_toolbar())
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setFixedHeight(1)
-        sep.setStyleSheet("background: #2e2e35; border: none;")
-        root_layout.addWidget(sep)
+        self._toolbar_sep = QFrame()
+        self._toolbar_sep.setFrameShape(QFrame.Shape.HLine)
+        self._toolbar_sep.setFixedHeight(1)
+        self._toolbar_sep.setStyleSheet(f"background: {get_colors().border}; border: none;")
+        root_layout.addWidget(self._toolbar_sep)
 
         root_layout.addWidget(self._build_body(), stretch=1)
+
+        from ui.theme_manager import ThemeManager as _TM
+        _tm = _TM.instance()
+        if _tm is not None:
+            _tm.theme_changed.connect(self._apply_theme)
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        """Re-apply theme-dependent styles for the toolbar, tree, table, buttons."""
+        c = get_colors()
+        accent_dim = _md_dim_hex(ACCENT_COLOR)
+
+        # Toolbar
+        if hasattr(self, "_toolbar_bar"):
+            self._toolbar_bar.setStyleSheet(
+                f"QFrame {{ background: {c.surface}; border-bottom: 1px solid {c.border}; }}"
+            )
+        if hasattr(self, "_toolbar_sep"):
+            self._toolbar_sep.setStyleSheet(f"background: {c.border}; border: none;")
+        if hasattr(self, "_folder_lbl"):
+            self._folder_lbl.setStyleSheet(f"color: {c.text_secondary}; font-size: 12px;")
+        if hasattr(self, "_summary_lbl"):
+            self._summary_lbl.setStyleSheet(f"color: {c.text_secondary}; font-size: 11px;")
+
+        # "Sort automatic" primary button
+        if hasattr(self, "_auto_btn"):
+            self._auto_btn.setStyleSheet(
+                f"QPushButton {{"
+                f"  background: {ACCENT_COLOR}; color: #000; font-weight: bold;"
+                f"  border-radius: 6px; padding: 0 14px;"
+                f"}}"
+                f"QPushButton:hover {{ background: {accent_dim}; }}"
+                f"QPushButton:disabled {{ background: {c.surface2}; color: {c.text_tertiary}; }}"
+            )
+
+        # Gear button
+        if hasattr(self, "_auto_cfg_btn"):
+            self._auto_cfg_btn.setStyleSheet(
+                f"QPushButton {{ background: {c.surface2}; color: {c.text_primary};"
+                f"  border: 1px solid {c.border}; border-radius: 4px; font-size: 14px; }}"
+                f"QPushButton:hover {{ background: {c.border}; }}"
+            )
+
+        # Splitter handle
+        if hasattr(self, "_body_splitter"):
+            self._body_splitter.setStyleSheet(
+                f"QSplitter::handle {{ background: {c.border}; }}"
+                f"QSplitter::handle:hover {{ background: {ACCENT_COLOR}; }}"
+                f"QSplitter::handle:pressed {{ background: {accent_dim}; }}"
+            )
+
+        # Tree widget
+        if hasattr(self, "_tree"):
+            self._tree.setStyleSheet(
+                f"QTreeWidget {{ border: none; background: {c.bg}; color: {c.text_primary}; }}"
+                f"QTreeWidget::viewport {{ background: {c.bg}; }}"
+                f"QTreeWidget::item {{ padding: 3px 2px; }}"
+                f"QTreeWidget::item:selected {{ background: {ACCENT_COLOR}33; color: {c.text_primary}; }}"
+                f"QTreeWidget::item:hover {{ background: {c.surface2}; }}"
+            )
+            tree_pal = self._tree.viewport().palette()
+            tree_pal.setColor(QPalette.Base, QColor(c.bg))
+            tree_pal.setColor(QPalette.Window, QColor(c.bg))
+            self._tree.viewport().setPalette(tree_pal)
+            self._tree.viewport().setAutoFillBackground(True)
+
+        # Zoom controls
+        zoom_btn_qss = (
+            f"QPushButton {{ background: {c.surface2}; color: {c.text_primary};"
+            f"  border: 1px solid {c.border}; border-radius: 3px;"
+            f"  font-weight: bold; font-size: 14px; }}"
+            f"QPushButton:hover {{ background: {c.border}; }}"
+        )
+        if hasattr(self, "_zoom_minus_btn"):
+            self._zoom_minus_btn.setStyleSheet(zoom_btn_qss)
+        if hasattr(self, "_zoom_plus_btn"):
+            self._zoom_plus_btn.setStyleSheet(zoom_btn_qss)
+        if hasattr(self, "_zoom_val_lbl"):
+            self._zoom_val_lbl.setStyleSheet(
+                f"QLineEdit {{ background: {c.surface}; color: {c.text_primary};"
+                f"  border: 1px solid {c.border}; border-radius: 3px;"
+                f"  font-size: 11px; padding: 0px 2px; }}"
+            )
+        if hasattr(self, "_zoom_lbl"):
+            self._zoom_lbl.setStyleSheet(
+                f"font-size: 13px; color: {c.text_secondary}; margin-left: 4px;"
+            )
+        if hasattr(self, "_table_info_lbl"):
+            self._table_info_lbl.setStyleSheet(
+                f"color: {c.text_secondary}; font-size: 11px;"
+            )
+
+        # Re-apply zoom (rebuilds the table stylesheet with current theme colors)
+        if hasattr(self, "_zoom_level") and hasattr(self, "_table"):
+            try:
+                self._set_zoom(self._zoom_level)
+            except Exception:
+                pass
+
+        # Also explicitly paint the table viewport so the empty area follows theme
+        if hasattr(self, "_table"):
+            tc = get_colors()
+            self._table.viewport().setStyleSheet(f"background: {tc.bg};")
+            pal = self._table.viewport().palette()
+            pal.setColor(QPalette.Base, QColor(tc.bg))
+            pal.setColor(QPalette.Window, QColor(tc.bg))
+            self._table.viewport().setPalette(pal)
+            self._table.viewport().setAutoFillBackground(True)
+            self._table.viewport().update()
 
     def _build_toolbar(self) -> QFrame:
         bar = QFrame()
         bar.setFixedHeight(56)
-        bar.setStyleSheet(
-            f"QFrame {{ background: {get_colors().surface}; "
-            f"border-bottom: 1px solid {get_colors().border}; }}"
-        )
+        self._toolbar_bar = bar
 
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 6, 12, 6)
@@ -756,7 +906,6 @@ class MetadataEditorPanel(QWidget):
         layout.addWidget(self._browse_btn)
 
         self._folder_lbl = QLabel("לא נבחרה תיקייה")
-        self._folder_lbl.setStyleSheet(f"color: {get_colors().text_secondary}; font-size: 12px;")
         self._folder_lbl.setMaximumWidth(260)
         layout.addWidget(self._folder_lbl)
 
@@ -770,14 +919,6 @@ class MetadataEditorPanel(QWidget):
         auto_wrap.setSpacing(2)
         self._auto_btn = QPushButton("🪄 סדר אוטומטי")
         self._auto_btn.setFixedHeight(34)
-        self._auto_btn.setStyleSheet(
-            f"QPushButton {{"
-            f"  background: {ACCENT_COLOR}; color: #000; font-weight: bold;"
-            f"  border-radius: 6px; padding: 0 14px;"
-            f"}}"
-            f"QPushButton:hover {{ background: #e09400; }}"
-            f"QPushButton:disabled {{ background: #555; color: #888; }}"
-        )
         self._auto_btn.setEnabled(False)
         self._auto_btn.clicked.connect(self._on_auto_arrange)
         auto_wrap.addWidget(self._auto_btn)
@@ -785,11 +926,6 @@ class MetadataEditorPanel(QWidget):
         self._auto_cfg_btn = QPushButton("⚙")
         self._auto_cfg_btn.setFixedSize(28, 34)
         self._auto_cfg_btn.setToolTip("הגדר מה סדר אוטומטי יבצע")
-        self._auto_cfg_btn.setStyleSheet(
-            "QPushButton { background: #3a3a4a; color: #ccc; border: 1px solid #555;"
-            "  border-radius: 4px; font-size: 14px; }"
-            "QPushButton:hover { background: #4a4a5a; }"
-        )
         self._auto_cfg_btn.clicked.connect(self._on_auto_arrange_settings)
         auto_wrap.addWidget(self._auto_cfg_btn)
         layout.addLayout(auto_wrap)
@@ -816,7 +952,6 @@ class MetadataEditorPanel(QWidget):
         layout.addStretch()
 
         self._summary_lbl = QLabel("לא נסרקה תיקייה")
-        self._summary_lbl.setStyleSheet(f"color: {get_colors().text_secondary}; font-size: 11px;")
         layout.addWidget(self._summary_lbl)
 
         return bar
@@ -825,11 +960,7 @@ class MetadataEditorPanel(QWidget):
         splitter = QSplitter(Qt.Horizontal)
         splitter.setChildrenCollapsible(True)
         splitter.setHandleWidth(5)
-        splitter.setStyleSheet(
-            "QSplitter::handle { background: #3a3a50; }"
-            "QSplitter::handle:hover { background: #6060a0; }"
-            "QSplitter::handle:pressed { background: #8080c0; }"
-        )
+        self._body_splitter = splitter
 
         # ── Left: folder/file tree ────────────────────────────────────────────
         tree_frame = QFrame()
@@ -851,12 +982,6 @@ class MetadataEditorPanel(QWidget):
         self._tree.item_moved.connect(self._on_tree_item_moved)
         self._tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self._tree.customContextMenuRequested.connect(self._on_tree_context_menu)
-        self._tree.setStyleSheet(
-            "QTreeWidget { border: none; background: transparent; }"
-            "QTreeWidget::item { padding: 3px 2px; }"
-            "QTreeWidget::item:selected { background: #2a3a5a; color: #ffffff; }"
-            "QTreeWidget::item:hover { background: #1e2a40; }"
-        )
         tree_layout.addWidget(self._tree)
 
         splitter.addWidget(tree_frame)
@@ -872,34 +997,22 @@ class MetadataEditorPanel(QWidget):
         tbl_head.setContentsMargins(0, 0, 0, 0)
         
         # Zoom controls
-        zoom_lbl = QLabel("🔍")
-        zoom_lbl.setStyleSheet("font-size: 13px; color: #aaa; margin-left: 4px;")
-        tbl_head.addWidget(zoom_lbl)
-        
+        self._zoom_lbl = QLabel("🔍")
+        tbl_head.addWidget(self._zoom_lbl)
+
         self._zoom_minus_btn = QPushButton("-")
         self._zoom_minus_btn.setFixedSize(26, 26)
-        self._zoom_minus_btn.setStyleSheet(
-            "QPushButton { background: #2b2b3a; color: #fff; border: 1px solid #555; border-radius: 3px; font-weight: bold; font-size: 14px; }"
-            "QPushButton:hover { background: #3a3a4a; }"
-        )
         self._zoom_minus_btn.clicked.connect(self._on_zoom_minus)
         tbl_head.addWidget(self._zoom_minus_btn)
-        
+
         self._zoom_val_lbl = QLineEdit("100%")
         self._zoom_val_lbl.setFixedSize(50, 26)
         self._zoom_val_lbl.setAlignment(Qt.AlignCenter)
-        self._zoom_val_lbl.setStyleSheet(
-            "QLineEdit { background: #1a1a24; color: #fff; border: 1px solid #555; border-radius: 3px; font-size: 11px; padding: 0px 2px; }"
-        )
         self._zoom_val_lbl.editingFinished.connect(self._on_zoom_custom)
         tbl_head.addWidget(self._zoom_val_lbl)
-        
+
         self._zoom_plus_btn = QPushButton("+")
         self._zoom_plus_btn.setFixedSize(26, 26)
-        self._zoom_plus_btn.setStyleSheet(
-            "QPushButton { background: #2b2b3a; color: #fff; border: 1px solid #555; border-radius: 3px; font-weight: bold; font-size: 14px; }"
-            "QPushButton:hover { background: #3a3a4a; }"
-        )
         self._zoom_plus_btn.clicked.connect(self._on_zoom_plus)
         tbl_head.addWidget(self._zoom_plus_btn)
         
@@ -907,7 +1020,6 @@ class MetadataEditorPanel(QWidget):
         tbl_head.addStretch()
 
         self._table_info_lbl = QLabel("")
-        self._table_info_lbl.setStyleSheet(f"color: {get_colors().text_secondary}; font-size: 11px;")
         tbl_head.addWidget(self._table_info_lbl)
         table_layout.addLayout(tbl_head)
 
@@ -1049,7 +1161,7 @@ class MetadataEditorPanel(QWidget):
         _btn_style = (
             f"QPushButton {{ background: {ACCENT_COLOR}; color: #000; font-weight: bold;"
             f"  border-radius: 4px; padding: 3px 6px; font-size: 10px; }}"
-            f"QPushButton:hover {{ background: #e09400; }}"
+            f"QPushButton:hover {{ background: {_md_dim_hex(ACCENT_COLOR)}; }}"
         )
 
         grp_artist = QGroupBox("החל אמן")
@@ -1123,7 +1235,7 @@ class MetadataEditorPanel(QWidget):
         btn_apply_fields.setStyleSheet(
             f"QPushButton {{ background: {ACCENT_COLOR}; color: #000; "
             f"font-weight: bold; border-radius: 5px; padding: 4px 8px; }}"
-            f"QPushButton:hover {{ background: #e09400; }}"
+            f"QPushButton:hover {{ background: {_md_dim_hex(ACCENT_COLOR)}; }}"
         )
         btn_apply_fields.clicked.connect(self._on_insp_apply_fields)
         fields_layout.addWidget(btn_apply_fields)
@@ -1137,7 +1249,7 @@ class MetadataEditorPanel(QWidget):
         rename_note.setStyleSheet(f"color: {get_colors().text_secondary}; font-size: 11px;")
         rename_layout.addWidget(rename_note)
         btn_rename = QPushButton("📝 שנה שם קובץ לפי כותרת")
-        btn_rename.setStyleSheet(_BTN_STYLE)
+        btn_rename.setStyleSheet(_btn_style())
         btn_rename.clicked.connect(
             lambda: self.rename_from_title.emit(self._get_selected_tracks())
         )
@@ -1182,7 +1294,7 @@ class MetadataEditorPanel(QWidget):
             row_layout.setSpacing(4)
             row_layout.setContentsMargins(0, 0, 0, 0)
             btn = QPushButton(label)
-            btn.setStyleSheet(_BTN_STYLE)
+            btn.setStyleSheet(_btn_style())
             if key in op_handlers:
                 btn.clicked.connect(op_handlers[key])
             row_layout.addWidget(btn, stretch=1)
@@ -1190,14 +1302,14 @@ class MetadataEditorPanel(QWidget):
             if key in ("strip_junk", "clean_filename"):
                 cfg_btn = QPushButton("⚙️")
                 cfg_btn.setFixedSize(24, 24)
-                cfg_btn.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 14px; } QPushButton:hover { color: #88aaff; }")
+                cfg_btn.setStyleSheet(f"QPushButton {{ border: none; background: transparent; font-size: 14px; color: {get_colors().text_secondary}; }} QPushButton:hover {{ color: {ACCENT_COLOR}; }}")
                 cfg_btn.setToolTip("הגדרות ניקוי")
                 cfg_btn.clicked.connect(self._on_clean_settings)
                 row_layout.addWidget(cfg_btn)
             
             info_btn = QPushButton("ℹ️")
             info_btn.setFixedSize(24, 24)
-            info_btn.setStyleSheet("QPushButton { border: none; background: transparent; font-size: 14px; } QPushButton:hover { color: #88aaff; }")
+            info_btn.setStyleSheet(f"QPushButton {{ border: none; background: transparent; font-size: 14px; color: {get_colors().text_secondary}; }} QPushButton:hover {{ color: {ACCENT_COLOR}; }}")
             info_btn.setToolTip(desc)
             info_btn.clicked.connect(lambda _, l=label, d=desc: self._show_info(l, d))
             row_layout.addWidget(info_btn)
@@ -1740,16 +1852,16 @@ class MetadataEditorPanel(QWidget):
         
         table_colors = get_colors()
         self._table.setStyleSheet(
-            f"QTableView {{ background: #0d0d12; color: {table_colors.text_primary};"
+            f"QTableView {{ background: {table_colors.bg}; color: {table_colors.text_primary};"
             f"  border: 1px solid {table_colors.border};"
             f"  selection-background-color: transparent; selection-color: {table_colors.text_primary};"
             f"  font-size: {font_size}pt; }}"
             "QTableView::item { background: transparent; border: none; }"
-            f"QHeaderView::section {{ background: #101018; color: {table_colors.text_primary};"
+            f"QHeaderView::section {{ background: {table_colors.surface}; color: {table_colors.text_primary};"
             f"  border: none; border-left: 1px solid {table_colors.border};"
             f"  border-bottom: 1px solid {table_colors.border}; padding: {int(4 * factor)}px {int(8 * factor)}px;"
             f"  font-size: {font_size}pt; font-weight: bold; }}"
-            f"QTableCornerButton::section {{ background: #101018; border: 1px solid {table_colors.border}; }}"
+            f"QTableCornerButton::section {{ background: {table_colors.surface}; border: 1px solid {table_colors.border}; }}"
         )
 
         font = self._table.font()

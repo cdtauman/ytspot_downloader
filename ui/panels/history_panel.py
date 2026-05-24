@@ -35,17 +35,9 @@ from config import AppConfig
 from core.history_db import DownloadRecord, HistoryDB
 from ui.components.history_row import HistoryRow
 from ui.i18n import t
-from ui.theme_manager import ACCENT_COLOR
+from ui.theme_manager import ACCENT_COLOR, ThemeManager, get_colors
 
-
-# ── Design tokens ──────────────────────────────────────────────────────────────
-_BG      = "#111114"
-_SURFACE = "#1c1c21"
-_BORDER  = "#313139"
-_TEXT    = "#f2f2f5"
-_TEXT_2  = "#94949e"
-_TEXT_3  = "#5a5a66"
-_ERROR   = "#f87171"
+_ERROR = "#f87171"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -85,6 +77,11 @@ class HistoryPanel(QWidget):
         self._search_timer.timeout.connect(self._apply_filter)
 
         self._build()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
+
         self.reload()
 
     # ── Public API ─────────────────────────────────────────────────────────────
@@ -110,19 +107,15 @@ class HistoryPanel(QWidget):
 
     def _build(self) -> None:
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setStyleSheet(f"background: {_BG};")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
         # ── Header ────────────────────────────────────────────────────────────
-        header = QFrame()
-        header.setFixedHeight(52)
-        header.setStyleSheet(
-            f"background: {_SURFACE}; border-bottom: 1px solid {_BORDER};"
-        )
-        h_row = QHBoxLayout(header)
+        self._header_frame = QFrame()
+        self._header_frame.setFixedHeight(52)
+        h_row = QHBoxLayout(self._header_frame)
         h_row.setContentsMargins(12, 0, 12, 0)
         h_row.setSpacing(8)
 
@@ -130,50 +123,30 @@ class HistoryPanel(QWidget):
         self._search_box.setPlaceholderText(t("search_history_placeholder"))
         self._search_box.setFixedHeight(34)
         self._search_box.setMinimumWidth(260)
-        self._search_box.setStyleSheet(f"""
-            SearchLineEdit {{
-                background: {_BG};
-                border: 1px solid {_BORDER};
-                border-radius: 8px;
-                color: {_TEXT};
-                font-size: 12px;
-            }}
-            SearchLineEdit:focus {{ border-color: {ACCENT_COLOR}; }}
-        """)
         self._search_box.textChanged.connect(self._on_search_changed)
         h_row.addWidget(self._search_box)
         h_row.addStretch()
 
         self._count_lbl = CaptionLabel(t("records_count", n=0, plural="s"))
-        self._count_lbl.setStyleSheet(
-            f"color: {_TEXT_3}; background: transparent;"
-        )
         h_row.addWidget(self._count_lbl)
         h_row.addSpacing(8)
 
-        export_btn = PushButton(t("export_csv"))
-        export_btn.setFixedHeight(30)
-        export_btn.setStyleSheet(self._btn_style())
-        export_btn.clicked.connect(self._on_export_csv)
-        h_row.addWidget(export_btn)
+        self._export_btn = PushButton(t("export_csv"))
+        self._export_btn.setFixedHeight(30)
+        self._export_btn.clicked.connect(self._on_export_csv)
+        h_row.addWidget(self._export_btn)
 
-        clear_btn = PushButton(t("clear_history"))
-        clear_btn.setFixedHeight(30)
-        clear_btn.setStyleSheet(
-            self._btn_style(hover_color=_ERROR)
-        )
-        clear_btn.clicked.connect(self._on_clear_history)
-        h_row.addWidget(clear_btn)
+        self._clear_btn = PushButton(t("clear_history"))
+        self._clear_btn.setFixedHeight(30)
+        self._clear_btn.clicked.connect(self._on_clear_history)
+        h_row.addWidget(self._clear_btn)
 
-        root.addWidget(header)
+        root.addWidget(self._header_frame)
 
         # ── Column headers ────────────────────────────────────────────────────
-        col_header = QFrame()
-        col_header.setFixedHeight(28)
-        col_header.setStyleSheet(
-            f"background: {_SURFACE}; border-bottom: 1px solid {_BORDER};"
-        )
-        c_row = QHBoxLayout(col_header)
+        self._col_header = QFrame()
+        self._col_header.setFixedHeight(28)
+        c_row = QHBoxLayout(self._col_header)
         c_row.setContentsMargins(10, 0, 10, 0)
         c_row.setSpacing(0)
 
@@ -183,45 +156,27 @@ class HistoryPanel(QWidget):
             ("col_platform", 80), ("col_type", 64), ("col_duration", 70),
             ("col_size", 80), ("col_actions", 110),
         ]
-        for i, (key, width) in enumerate(col_labels):
+        self._col_labels: list[QLabel] = []
+        for key, width in col_labels:
             lbl = QLabel(t(key))
-            lbl.setStyleSheet(
-                f"color: {_TEXT_3}; font-size: 10px; background: transparent;"
-            )
             if width:
                 lbl.setFixedWidth(width)
             else:
                 lbl.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             lbl.setAlignment(Qt.AlignmentFlag.AlignVCenter)
             c_row.addWidget(lbl)
+            self._col_labels.append(lbl)
 
-        root.addWidget(col_header)
+        root.addWidget(self._col_header)
 
         # ── Scroll area ───────────────────────────────────────────────────────
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setStyleSheet(f"""
-            QScrollArea {{ background: {_BG}; border: none; }}
-            QScrollBar:vertical {{
-                background: {_BG};
-                width: 6px;
-                border-radius: 3px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: {_BORDER};
-                border-radius: 3px;
-                min-height: 24px;
-            }}
-            QScrollBar::handle:vertical:hover {{ background: #3e3e47; }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {{ height: 0; }}
-        """)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        rows_container = QWidget()
-        rows_container.setStyleSheet(f"background: {_BG};")
-        self._rows_layout = QVBoxLayout(rows_container)
+        self._rows_container = QWidget()
+        self._rows_layout = QVBoxLayout(self._rows_container)
         self._rows_layout.setContentsMargins(4, 4, 4, 12)
         self._rows_layout.setSpacing(3)
         self._rows_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -229,8 +184,10 @@ class HistoryPanel(QWidget):
         self._empty_widget = self._build_empty_state()
         self._rows_layout.addWidget(self._empty_widget)
 
-        scroll.setWidget(rows_container)
-        root.addWidget(scroll, stretch=1)
+        self._scroll.setWidget(self._rows_container)
+        root.addWidget(self._scroll, stretch=1)
+
+        self._apply_theme()
 
     def _build_empty_state(self) -> QWidget:
         w = QWidget()
@@ -242,11 +199,65 @@ class HistoryPanel(QWidget):
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setStyleSheet("font-size: 52px; background: transparent;")
         v.addWidget(icon)
-        hint = BodyLabel(t("history_empty_hint"))
-        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet(f"color: {_TEXT_3}; background: transparent;")
-        v.addWidget(hint)
+        self._empty_hint = BodyLabel(t("history_empty_hint"))
+        self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        v.addWidget(self._empty_hint)
         return w
+
+    # ── Theme ──────────────────────────────────────────────────────────────────
+
+    def _apply_theme(self) -> None:
+        c = get_colors()
+
+        self.setStyleSheet(f"background: {c.bg};")
+
+        self._header_frame.setStyleSheet(
+            f"background: {c.surface}; border-bottom: 1px solid {c.border};"
+        )
+
+        self._search_box.setStyleSheet(f"""
+            SearchLineEdit {{
+                background: {c.bg};
+                border: 1px solid {c.border};
+                border-radius: 8px;
+                color: {c.text_primary};
+                font-size: 12px;
+            }}
+            SearchLineEdit:focus {{ border-color: {ACCENT_COLOR}; }}
+        """)
+
+        self._count_lbl.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
+
+        self._export_btn.setStyleSheet(self._btn_style(c))
+        self._clear_btn.setStyleSheet(self._btn_style(c, hover_color=_ERROR))
+
+        self._col_header.setStyleSheet(
+            f"background: {c.surface}; border-bottom: 1px solid {c.border};"
+        )
+        for lbl in self._col_labels:
+            lbl.setStyleSheet(f"color: {c.text_tertiary}; font-size: 10px; background: transparent;")
+
+        self._scroll.setStyleSheet(f"""
+            QScrollArea {{ background: {c.bg}; border: none; }}
+            QScrollBar:vertical {{
+                background: {c.bg};
+                width: 6px;
+                border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {c.border};
+                border-radius: 3px;
+                min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {c.surface2}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+
+        self._rows_container.setStyleSheet(f"background: {c.bg};")
+
+        if hasattr(self, "_empty_hint"):
+            self._empty_hint.setStyleSheet(f"color: {c.text_tertiary}; background: transparent;")
 
     # ── Populate / filter ──────────────────────────────────────────────────────
 
@@ -347,13 +358,13 @@ class HistoryPanel(QWidget):
         self._count_lbl.setText(t("records_count", n=n, plural=("s" if n != 1 else "")))
 
     @staticmethod
-    def _btn_style(hover_color: str = ACCENT_COLOR) -> str:
+    def _btn_style(c, hover_color: str = ACCENT_COLOR) -> str:
         return f"""
             PushButton {{
                 background: transparent;
-                border: 1px solid {_BORDER};
+                border: 1px solid {c.border};
                 border-radius: 6px;
-                color: {_TEXT_2};
+                color: {c.text_secondary};
                 font-size: 11px;
                 padding: 0 10px;
             }}

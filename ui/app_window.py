@@ -74,9 +74,20 @@ from ui.components.offline_banner import OfflineBanner
 
 # ── Theme / i18n ───────────────────────────────────────────────────────────────
 from ui.i18n         import t, set_language
-from ui.theme_manager import ThemeManager, ACCENT_COLOR
+from ui.theme_manager import ThemeManager, ACCENT_COLOR, get_colors
 
 logger = logging.getLogger(__name__)
+
+
+def _dim_hex(hex_color: str, factor: float = 0.85) -> str:
+    """Return a darkened/dimmed variant of a hex color for hover states."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r = max(0, int(int(h[0:2], 16) * factor))
+    g = max(0, int(int(h[2:4], 16) * factor))
+    b = max(0, int(int(h[4:6], 16) * factor))
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 
 # ── High-contrast QSS for accessibility mode ──────────────────────────────────
@@ -108,32 +119,46 @@ class _DownloadBar(QFrame):
         from qfluentwidgets import PrimaryPushButton
 
         self.setFixedHeight(58)
-        self.setStyleSheet("background: #18181b; border-top: 1px solid #2e2e35;")
 
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 8, 16, 8)
 
         self._count_lbl = QLabel(t("no_tracks_selected"))
-        self._count_lbl.setStyleSheet(
-            "color: #9090a0; font-size: 12px; background: transparent;"
-        )
         row.addWidget(self._count_lbl)
         row.addStretch()
 
         self._dl_btn = PrimaryPushButton(t("download_selected"))
         self._dl_btn.setFixedSize(190, 38)
         self._dl_btn.setEnabled(False)
+        self._dl_btn.clicked.connect(self.download_clicked)
+        row.addWidget(self._dl_btn)
+
+        self._apply_theme()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
+
+    def _apply_theme(self) -> None:
+        c = get_colors()
+        self.setStyleSheet(
+            f"_DownloadBar {{ background: {c.surface}; border-top: 1px solid {c.border}; }}"
+        )
+        self._count_lbl.setStyleSheet(
+            f"color: {c.text_secondary}; font-size: 12px; background: transparent;"
+        )
         self._dl_btn.setStyleSheet(f"""
             PrimaryPushButton {{
                 background-color: {ACCENT_COLOR};
                 color: #000000; border: none; border-radius: 6px;
                 font-size: 13px; font-weight: bold;
             }}
-            PrimaryPushButton:hover {{ background-color: #e09418; }}
-            PrimaryPushButton:disabled {{ background-color: #5a3e0e; color: #888888; }}
+            PrimaryPushButton:hover {{ background-color: {_dim_hex(ACCENT_COLOR)}; }}
+            PrimaryPushButton:disabled {{
+                background-color: {c.surface2};
+                color: {c.text_tertiary};
+            }}
         """)
-        self._dl_btn.clicked.connect(self.download_clicked)
-        row.addWidget(self._dl_btn)
 
     def set_count(self, selected: int, total: int) -> None:
         if total == 0:
@@ -240,11 +265,11 @@ class AppWindow(FluentWindow):
         vl.addWidget(self._url_bar)
         vl.addWidget(self._options_bar)
 
-        div = QFrame()
-        div.setFrameShape(QFrame.Shape.HLine)
-        div.setFixedHeight(1)
-        div.setStyleSheet("background: #2e2e35; border: none;")
-        vl.addWidget(div)
+        self._queue_divider = QFrame()
+        self._queue_divider.setFrameShape(QFrame.Shape.HLine)
+        self._queue_divider.setFixedHeight(1)
+        self._queue_divider.setStyleSheet(f"background: {get_colors().border}; border: none;")
+        vl.addWidget(self._queue_divider)
 
         vl.addWidget(self._queue_panel, stretch=1)
         vl.addWidget(self._dl_bar)
@@ -275,9 +300,17 @@ class AppWindow(FluentWindow):
         self.setMinimumSize(980, 680)
         self.resize(1100, 760)
         self._theme.apply(self._cfg.theme)
+        self._theme.theme_changed.connect(self._apply_window_theme)
         self.navigationInterface.setExpandWidth(200)
         if self._cfg.accessibility_mode:
             self._apply_accessibility(True)
+
+    def _apply_window_theme(self) -> None:
+        """Re-style any chrome owned directly by AppWindow on theme change."""
+        if hasattr(self, "_queue_divider"):
+            self._queue_divider.setStyleSheet(
+                f"background: {get_colors().border}; border: none;"
+            )
 
     def _register_navigation(self) -> None:
         self.addSubInterface(

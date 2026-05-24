@@ -57,6 +57,17 @@ from PySide6.QtWidgets import (
 from ui.theme_manager import ACCENT_COLOR, get_colors
 
 
+def _dim_accent(hex_color: str, factor: float = 0.85) -> str:
+    """Return a darkened/dimmed variant of a hex color for hover states."""
+    h = hex_color.lstrip("#")
+    if len(h) != 6:
+        return hex_color
+    r = max(0, int(int(h[0:2], 16) * factor))
+    g = max(0, int(int(h[2:4], 16) * factor))
+    b = max(0, int(int(h[4:6], 16) * factor))
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _fmt_size(n_bytes: int) -> str:
@@ -370,7 +381,7 @@ class DuplicateFilesDialog(QDialog):
             f"  background: {ACCENT_COLOR}; color: #000; font-weight: bold;"
             f"  border: none; border-radius: 6px; padding: 0 14px;"
             f"}}"
-            f"QPushButton:hover {{ background: #e09400; }}"
+            f"QPushButton:hover {{ background: {_dim_accent(ACCENT_COLOR)}; }}"
             f"QPushButton:disabled {{"
             f"  background: {c.surface2}; color: {c.text_tertiary};"
             f"}}"

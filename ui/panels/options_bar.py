@@ -28,7 +28,7 @@ from qfluentwidgets import (
 )
 
 from config import AppConfig
-from ui.theme_manager import ACCENT_COLOR
+from ui.theme_manager import ACCENT_COLOR, ThemeManager, get_colors
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -42,16 +42,6 @@ VIDEO_QUALITY_OPTIONS: list[str] = [
     "Best", "2160p (4K)", "1440p (2K)", "1080p", "720p", "480p", "Worst",
 ]
 AUDIO_FORMAT_OPTIONS: list[str] = ["mp3", "m4a", "flac", "opus"]
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Design tokens
-# ──────────────────────────────────────────────────────────────────────────────
-
-_BG      = "#18181b"
-_BORDER  = "#2e2e35"
-_TEXT    = "#f0f0f0"
-_TEXT_2  = "#9090a0"
-_TEXT_3  = "#55555f"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -75,6 +65,10 @@ class OptionsBar(QFrame):
         self._config = config
         self._build()
         self.apply_config(config)
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -132,110 +126,73 @@ class OptionsBar(QFrame):
     def _build(self) -> None:
         self.setFixedHeight(52)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setStyleSheet(
-            f"background: {_BG}; border-top: 1px solid {_BORDER};"
-            f" border-bottom: 1px solid {_BORDER};"
-        )
 
         row = QHBoxLayout(self)
         row.setContentsMargins(12, 6, 12, 6)
         row.setSpacing(6)
 
-        lbl_style = (
-            f"color: {_TEXT_2}; font-size: 11px; background: transparent;"
-        )
-        combo_style = f"""
-            ComboBox {{
-                background: #0e0e0f;
-                border: 1px solid {_BORDER};
-                border-radius: 5px;
-                color: {_TEXT};
-                font-size: 12px;
-                padding: 0 6px;
-                min-height: 30px;
-            }}
-            ComboBox:hover {{ border-color: {ACCENT_COLOR}; }}
-        """
-
         # ── Format ────────────────────────────────────────────────────────────
-        row.addWidget(self._lbl("Format:", lbl_style))
+        self._lbl_format = QLabel("Format:")
+        row.addWidget(self._lbl_format)
         self._fmt_combo = ComboBox()
         self._fmt_combo.addItems(["mp3", "mp4"])
         self._fmt_combo.setFixedWidth(74)
-        self._fmt_combo.setStyleSheet(combo_style)
         self._fmt_combo.currentTextChanged.connect(self._on_format_change)
         row.addWidget(self._fmt_combo)
 
-        row.addWidget(self._sep())
+        self._sep1 = self._make_sep()
+        row.addWidget(self._sep1)
 
         # ── Quality ───────────────────────────────────────────────────────────
-        row.addWidget(self._lbl("Quality:", lbl_style))
+        self._lbl_quality = QLabel("Quality:")
+        row.addWidget(self._lbl_quality)
         self._quality_combo = ComboBox()
         self._quality_combo.addItems(AUDIO_QUALITY_OPTIONS)
         self._quality_combo.setFixedWidth(140)
-        self._quality_combo.setStyleSheet(combo_style)
         self._quality_combo.currentTextChanged.connect(
             lambda _: self.options_changed.emit()
         )
         row.addWidget(self._quality_combo)
 
-        row.addWidget(self._sep())
+        self._sep2 = self._make_sep()
+        row.addWidget(self._sep2)
 
         # ── Codec ─────────────────────────────────────────────────────────────
-        row.addWidget(self._lbl("Codec:", lbl_style))
+        self._lbl_codec = QLabel("Codec:")
+        row.addWidget(self._lbl_codec)
         self._codec_combo = ComboBox()
         self._codec_combo.addItems(AUDIO_FORMAT_OPTIONS)
         self._codec_combo.setFixedWidth(78)
-        self._codec_combo.setStyleSheet(combo_style)
         self._codec_combo.currentTextChanged.connect(
             lambda _: self.options_changed.emit()
         )
         row.addWidget(self._codec_combo)
 
-        row.addWidget(self._sep())
+        self._sep3 = self._make_sep()
+        row.addWidget(self._sep3)
 
         # ── Output directory ──────────────────────────────────────────────────
-        row.addWidget(self._lbl("Save to:", lbl_style))
+        self._lbl_save = QLabel("Save to:")
+        row.addWidget(self._lbl_save)
         self._dir_entry = LineEdit()
         self._dir_entry.setMinimumWidth(200)
         self._dir_entry.setFixedHeight(30)
-        self._dir_entry.setStyleSheet(f"""
-            LineEdit {{
-                background: #0e0e0f;
-                border: 1px solid {_BORDER};
-                border-radius: 5px;
-                color: {_TEXT};
-                font-size: 12px;
-            }}
-            LineEdit:focus {{ border-color: {ACCENT_COLOR}; }}
-        """)
         self._dir_entry.textChanged.connect(lambda _: self.options_changed.emit())
-        # Persist edits to config when the user commits the change (Enter or
-        # focus-out). textChanged alone fires on every keystroke and would
-        # write a half-typed path; editingFinished gives us the final value.
         self._dir_entry.editingFinished.connect(self._on_dir_committed)
         row.addWidget(self._dir_entry, stretch=1)
 
-        browse_btn = ToolButton()
-        browse_btn.setText("📁")
-        browse_btn.setFixedSize(30, 30)
-        browse_btn.setStyleSheet(f"""
-            ToolButton {{
-                background: #0e0e0f;
-                border: 1px solid {_BORDER};
-                border-radius: 5px;
-                font-size: 14px;
-                color: {_TEXT};
-            }}
-            ToolButton:hover {{ border-color: {ACCENT_COLOR}; }}
-        """)
-        browse_btn.clicked.connect(self._on_browse)
-        row.addWidget(browse_btn)
+        self._browse_btn = ToolButton()
+        self._browse_btn.setText("📁")
+        self._browse_btn.setFixedSize(30, 30)
+        self._browse_btn.clicked.connect(self._on_browse)
+        row.addWidget(self._browse_btn)
 
-        row.addWidget(self._sep())
+        self._sep4 = self._make_sep()
+        row.addWidget(self._sep4)
 
         # ── Clipboard monitor toggle ──────────────────────────────────────────
-        row.addWidget(self._lbl("Clipboard:", lbl_style))
+        self._lbl_clip = QLabel("Clipboard:")
+        row.addWidget(self._lbl_clip)
         self._clip_switch = SwitchButton()
         self._clip_switch.setOnText("ON")
         self._clip_switch.setOffText("OFF")
@@ -243,21 +200,78 @@ class OptionsBar(QFrame):
         self._clip_switch.checkedChanged.connect(self._on_clip_toggle)
         row.addWidget(self._clip_switch)
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+        self._seps = [self._sep1, self._sep2, self._sep3, self._sep4]
+        self._labels = [self._lbl_format, self._lbl_quality, self._lbl_codec,
+                        self._lbl_save, self._lbl_clip]
+        self._combos = [self._fmt_combo, self._quality_combo, self._codec_combo]
+
+        self._apply_theme()
 
     @staticmethod
-    def _lbl(text: str, style: str) -> QLabel:
-        l = QLabel(text)
-        l.setStyleSheet(style)
-        return l
-
-    @staticmethod
-    def _sep() -> QFrame:
+    def _make_sep() -> QFrame:
         f = QFrame()
         f.setFrameShape(QFrame.Shape.VLine)
         f.setFixedWidth(1)
-        f.setStyleSheet(f"background: {_BORDER}; border: none;")
         return f
+
+    # ── Theme ──────────────────────────────────────────────────────────────────
+
+    def _apply_theme(self) -> None:
+        c = get_colors()
+
+        self.setStyleSheet(
+            f"background: {c.bg}; border-top: 1px solid {c.border};"
+            f" border-bottom: 1px solid {c.border};"
+        )
+
+        lbl_style = f"color: {c.text_secondary}; font-size: 11px; background: transparent;"
+        for lbl in self._labels:
+            lbl.setStyleSheet(lbl_style)
+
+        combo_style = f"""
+            ComboBox {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 5px;
+                color: {c.text_primary};
+                font-size: 12px;
+                padding: 0 6px;
+                min-height: 30px;
+            }}
+            ComboBox:hover {{ border-color: {ACCENT_COLOR}; }}
+        """
+        for combo in self._combos:
+            combo.setStyleSheet(combo_style)
+
+        dir_style = f"""
+            LineEdit {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 5px;
+                color: {c.text_primary};
+                font-size: 12px;
+            }}
+            LineEdit:focus {{ border-color: {ACCENT_COLOR}; }}
+        """
+        self._dir_entry.setStyleSheet(dir_style)
+
+        browse_style = f"""
+            ToolButton {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 5px;
+                font-size: 14px;
+                color: {c.text_primary};
+            }}
+            ToolButton:hover {{ border-color: {ACCENT_COLOR}; }}
+        """
+        self._browse_btn.setStyleSheet(browse_style)
+
+        sep_style = f"background: {c.border}; border: none;"
+        for sep in self._seps:
+            sep.setStyleSheet(sep_style)
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _update_quality_options(self, fmt: str) -> None:
         self._quality_combo.blockSignals(True)

@@ -298,6 +298,48 @@ QSlider::handle:horizontal {{
     margin: -5px 0; border-radius: 7px;
 }}
 QSlider::sub-page:horizontal {{ background: {accent}; border-radius: 2px; }}
+
+/* ── qfluentwidgets SettingCard overrides (dark) ──────────────────────── */
+SettingCard, PushSettingCard, SwitchSettingCard, ComboBoxSettingCard,
+HyperlinkCard, ExpandSettingCard, RangeSettingCard, OptionsSettingCard,
+ColorSettingCard, FolderListSettingCard, CustomColorSettingCard {{
+    background-color: #16161f;
+    border: 1px solid #252533;
+    border-radius: 8px;
+}}
+SettingCard:hover, PushSettingCard:hover, SwitchSettingCard:hover,
+ComboBoxSettingCard:hover, HyperlinkCard:hover, ExpandSettingCard:hover {{
+    background-color: #1e1e2a;
+}}
+SettingCardGroup {{
+    background-color: transparent;
+    border: none;
+}}
+SettingCardGroup > QLabel {{
+    color: #eeeef5;
+    font-weight: 700;
+    font-size: 15px;
+    background: transparent;
+}}
+SettingCard > QLabel, PushSettingCard > QLabel, SwitchSettingCard > QLabel,
+ComboBoxSettingCard > QLabel, HyperlinkCard > QLabel,
+ExpandSettingCard > QLabel, RangeSettingCard > QLabel {{
+    color: #eeeef5;
+    background: transparent;
+}}
+SettingCard #titleLabel, PushSettingCard #titleLabel, SwitchSettingCard #titleLabel,
+ComboBoxSettingCard #titleLabel, HyperlinkCard #titleLabel,
+ExpandSettingCard #titleLabel, RangeSettingCard #titleLabel {{
+    color: #eeeef5;
+    background: transparent;
+    font-weight: 600;
+}}
+SettingCard #contentLabel, PushSettingCard #contentLabel, SwitchSettingCard #contentLabel,
+ComboBoxSettingCard #contentLabel, HyperlinkCard #contentLabel,
+ExpandSettingCard #contentLabel, RangeSettingCard #contentLabel {{
+    color: #8888a8;
+    background: transparent;
+}}
 """
 
 
@@ -631,6 +673,49 @@ QPushButton[flat="true"] {{
 }}
 QPushButton[flat="true"]:hover {{
     background: #f0eeff;
+}}
+
+/* ── qfluentwidgets SettingCard overrides (light) ─────────────────────── */
+SettingCard, PushSettingCard, SwitchSettingCard, ComboBoxSettingCard,
+HyperlinkCard, ExpandSettingCard, RangeSettingCard, OptionsSettingCard,
+ColorSettingCard, FolderListSettingCard, CustomColorSettingCard {{
+    background-color: #ffffff;
+    border: 1px solid #e2ddf8;
+    border-radius: 8px;
+}}
+SettingCard:hover, PushSettingCard:hover, SwitchSettingCard:hover,
+ComboBoxSettingCard:hover, HyperlinkCard:hover, ExpandSettingCard:hover {{
+    background-color: #faf9ff;
+    border-color: #c8c0f0;
+}}
+SettingCardGroup {{
+    background-color: transparent;
+    border: none;
+}}
+SettingCardGroup > QLabel {{
+    color: #1a1830;
+    font-weight: 700;
+    font-size: 15px;
+    background: transparent;
+}}
+SettingCard > QLabel, PushSettingCard > QLabel, SwitchSettingCard > QLabel,
+ComboBoxSettingCard > QLabel, HyperlinkCard > QLabel,
+ExpandSettingCard > QLabel, RangeSettingCard > QLabel {{
+    color: #1a1830;
+    background: transparent;
+}}
+SettingCard #titleLabel, PushSettingCard #titleLabel, SwitchSettingCard #titleLabel,
+ComboBoxSettingCard #titleLabel, HyperlinkCard #titleLabel,
+ExpandSettingCard #titleLabel, RangeSettingCard #titleLabel {{
+    color: #1a1830;
+    background: transparent;
+    font-weight: 600;
+}}
+SettingCard #contentLabel, PushSettingCard #contentLabel, SwitchSettingCard #contentLabel,
+ComboBoxSettingCard #contentLabel, HyperlinkCard #contentLabel,
+ExpandSettingCard #contentLabel, RangeSettingCard #contentLabel {{
+    color: #6b65a0;
+    background: transparent;
 }}
 """
 

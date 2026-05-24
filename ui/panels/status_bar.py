@@ -23,17 +23,9 @@ from PySide6.QtWidgets import (
 from qfluentwidgets import IndeterminateProgressBar, ProgressBar, ToolButton
 
 from ui.i18n import t
-from ui.theme_manager import ACCENT_COLOR
+from ui.theme_manager import ACCENT_COLOR, ThemeManager, get_colors
 
-
-# ── Design tokens ──────────────────────────────────────────────────────────────
-_BG      = "#111114"
-_SURFACE = "#1c1c21"
-_BORDER  = "#313139"
-_TEXT    = "#f2f2f5"
-_TEXT_2  = "#94949e"
-_TEXT_3  = "#5a5a66"
-_ERROR   = "#f87171"
+_ERROR = "#f87171"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -55,6 +47,10 @@ class StatusBar(QFrame):
         super().__init__(parent)
         self._indeterminate = False
         self._build()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -108,35 +104,19 @@ class StatusBar(QFrame):
     def _build(self) -> None:
         self.setFixedHeight(60)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setStyleSheet(
-            f"background: {_SURFACE}; border-top: 1px solid {_BORDER};"
-        )
 
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 4, 12, 4)
         root.setSpacing(3)
 
         # ── Progress bar row ──────────────────────────────────────────────────
-        # Determinate bar (normal downloads)
         self._det_bar = ProgressBar()
         self._det_bar.setFixedHeight(4)
         self._det_bar.setRange(0, 100)
         self._det_bar.setValue(0)
         self._det_bar.setTextVisible(False)
-        self._det_bar.setStyleSheet(f"""
-            ProgressBar {{
-                background: {_BORDER};
-                border: none;
-                border-radius: 2px;
-            }}
-            ProgressBar::chunk {{
-                background: {ACCENT_COLOR};
-                border-radius: 2px;
-            }}
-        """)
         root.addWidget(self._det_bar)
 
-        # Indeterminate bar (metadata fetching)
         self._ind_bar = IndeterminateProgressBar()
         self._ind_bar.setFixedHeight(4)
         self._ind_bar.setVisible(False)
@@ -147,9 +127,6 @@ class StatusBar(QFrame):
         bottom_row.setSpacing(6)
 
         self._status_lbl = QLabel(t("ready"))
-        self._status_lbl.setStyleSheet(
-            f"color: {_TEXT_2}; font-size: 12px; background: transparent;"
-        )
         self._status_lbl.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
@@ -158,30 +135,61 @@ class StatusBar(QFrame):
         self._speed_lbl = QLabel("")
         self._speed_lbl.setFixedWidth(90)
         self._speed_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._speed_lbl.setStyleSheet(
-            f"color: {_TEXT_3}; font-size: 11px; background: transparent;"
-        )
         bottom_row.addWidget(self._speed_lbl)
 
         self._eta_lbl = QLabel("")
         self._eta_lbl.setFixedWidth(72)
         self._eta_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._eta_lbl.setStyleSheet(
-            f"color: {_TEXT_3}; font-size: 11px; background: transparent;"
-        )
         bottom_row.addWidget(self._eta_lbl)
 
-        # Cancel button (hidden until an operation is running)
         self._cancel_btn = ToolButton()
         self._cancel_btn.setText(t("cancel"))
         self._cancel_btn.setFixedSize(70, 26)
         self._cancel_btn.setVisible(False)
+        self._cancel_btn.clicked.connect(self.cancel_requested)
+        bottom_row.addWidget(self._cancel_btn)
+
+        root.addLayout(bottom_row)
+
+        self._apply_theme()
+
+    # ── Theme ──────────────────────────────────────────────────────────────────
+
+    def _apply_theme(self) -> None:
+        c = get_colors()
+
+        self.setStyleSheet(
+            f"background: {c.surface}; border-top: 1px solid {c.border};"
+        )
+
+        self._det_bar.setStyleSheet(f"""
+            ProgressBar {{
+                background: {c.border};
+                border: none;
+                border-radius: 2px;
+            }}
+            ProgressBar::chunk {{
+                background: {ACCENT_COLOR};
+                border-radius: 2px;
+            }}
+        """)
+
+        self._status_lbl.setStyleSheet(
+            f"color: {c.text_secondary}; font-size: 12px; background: transparent;"
+        )
+        self._speed_lbl.setStyleSheet(
+            f"color: {c.text_tertiary}; font-size: 11px; background: transparent;"
+        )
+        self._eta_lbl.setStyleSheet(
+            f"color: {c.text_tertiary}; font-size: 11px; background: transparent;"
+        )
+
         self._cancel_btn.setStyleSheet(f"""
             ToolButton {{
                 background: transparent;
-                border: 1px solid {_BORDER};
+                border: 1px solid {c.border};
                 border-radius: 6px;
-                color: {_TEXT_2};
+                color: {c.text_secondary};
                 font-size: 11px;
             }}
             ToolButton:hover {{
@@ -189,10 +197,6 @@ class StatusBar(QFrame):
                 color: {_ERROR};
             }}
         """)
-        self._cancel_btn.clicked.connect(self.cancel_requested)
-        bottom_row.addWidget(self._cancel_btn)
-
-        root.addLayout(bottom_row)
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 

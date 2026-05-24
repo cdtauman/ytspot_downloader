@@ -26,6 +26,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QFileDialog, QFrame, QHBoxLayout, QLabel, QScrollArea,
     QSizePolicy, QVBoxLayout, QWidget,
@@ -41,15 +42,7 @@ from qfluentwidgets import (
 from config import AppConfig
 from core.update_checker import CURRENT_VERSION
 from ui.i18n import t
-from ui.theme_manager import ACCENT_COLOR, ACCENT_PALETTE, ThemeManager
-
-
-# ── Design tokens ──────────────────────────────────────────────────────────────
-_BG      = "#111114"
-_SURFACE = "#1c1c21"
-_BORDER  = "#313139"
-_TEXT    = "#f2f2f5"
-_TEXT_2  = "#94949e"
+from ui.theme_manager import ACCENT_COLOR, ACCENT_PALETTE, ThemeManager, get_colors
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -87,6 +80,10 @@ class SettingsPanel(QScrollArea):
         self._theme = theme
         self._build()
 
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._apply_theme)
+
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def refresh(self) -> None:
@@ -120,21 +117,10 @@ class SettingsPanel(QScrollArea):
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setStyleSheet(f"""
-            QScrollArea {{ background: {_BG}; border: none; }}
-            QScrollBar:vertical {{
-                background: {_BG}; width: 6px; border-radius: 3px;
-            }}
-            QScrollBar::handle:vertical {{
-                background: {_BORDER}; border-radius: 3px; min-height: 24px;
-            }}
-            QScrollBar::handle:vertical:hover {{ background: #3e3e47; }}
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {{ height: 0; }}
-        """)
 
-        content = QWidget()
-        content.setStyleSheet(f"background: {_BG};")
+        self._scroll_content = QWidget()
+        content = self._scroll_content
+        self._apply_theme()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(36, 28, 36, 40)
         layout.setSpacing(20)
@@ -578,6 +564,109 @@ class SettingsPanel(QScrollArea):
 
         self.setWidget(content)
 
+        # After all cards are built and parented, apply theme once more so the
+        # force-restyler can actually find them via findChildren.
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        c = get_colors()
+        self.setStyleSheet(f"""
+            QScrollArea {{ background: {c.bg}; border: none; }}
+            QScrollBar:vertical {{
+                background: {c.bg}; width: 6px; border-radius: 3px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {c.border}; border-radius: 3px; min-height: 24px;
+            }}
+            QScrollBar::handle:vertical:hover {{ background: {c.surface2}; }}
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {{ height: 0; }}
+        """)
+        if hasattr(self, "_scroll_content"):
+            self._scroll_content.setStyleSheet(f"background: {c.bg};")
+
+        # ── Aggressive walk: force every qfluentwidgets card to refresh ────
+        # qfluentwidgets SettingCard.paintEvent reads isDarkTheme() at paint
+        # time, but on a live theme switch the cached pixel buffer may not
+        # invalidate. We also override the card stylesheet inline so it shows
+        # the correct surface/border colors regardless of which QSS layer wins.
+        self._force_restyle_fluent_cards(c)
+
+    def _force_restyle_fluent_cards(self, c) -> None:
+        """Walk all descendants and force-style every SettingCard variant."""
+        from qfluentwidgets import (
+            SettingCard as _SC,
+            SettingCardGroup as _SCG,
+        )
+
+        # Custom card class names (also QFrame-based, our own classes)
+        custom_card_names = {
+            "_AccentPickerCard",
+            "_SpinnerSettingCard",
+            "_TextSettingCard",
+            "_LanguageSettingCard",
+        }
+
+        card_qss = (
+            f"background-color: {c.surface};"
+            f" border: 1px solid {c.border};"
+            f" border-radius: 8px;"
+        )
+
+        # 1. Force-style every qfluentwidgets SettingCard descendant
+        for card in self.findChildren(_SC):
+            # Set per-widget stylesheet (this wins over app-level QSS for the
+            # widget AND its direct visible surface). qfluentwidgets' own
+            # paintEvent still runs over this but with isDarkTheme() correctly
+            # returning False in Light, it paints transparent-ish white,
+            # which composites correctly over our explicit light surface.
+            card.setStyleSheet(
+                f"SettingCard, PushSettingCard, SwitchSettingCard,"
+                f" ComboBoxSettingCard, HyperlinkCard, ExpandSettingCard,"
+                f" RangeSettingCard, OptionsSettingCard, ColorSettingCard,"
+                f" FolderListSettingCard, CustomColorSettingCard {{"
+                f"  {card_qss}"
+                f"}}"
+                f" QLabel {{ background: transparent; color: {c.text_primary}; }}"
+                f" QLabel#contentLabel {{ color: {c.text_secondary}; }}"
+            )
+            # Update palette as a belt-and-braces measure
+            pal = card.palette()
+            pal.setColor(QPalette.Window, QColor(c.surface))
+            pal.setColor(QPalette.Base, QColor(c.surface))
+            pal.setColor(QPalette.WindowText, QColor(c.text_primary))
+            pal.setColor(QPalette.Text, QColor(c.text_primary))
+            card.setPalette(pal)
+            card.update()
+            card.repaint()
+
+        # 2. Force-style every SettingCardGroup title
+        for grp in self.findChildren(_SCG):
+            if hasattr(grp, "titleLabel") and grp.titleLabel is not None:
+                grp.titleLabel.setStyleSheet(
+                    f"color: {c.text_primary}; background: transparent;"
+                    f" font-weight: 700; font-size: 15px; border: none;"
+                )
+
+        # 3. Force-style our custom cards (they have their own _restyle, but
+        #    safety: also walk by class name in case _restyle was missed)
+        for child in self.findChildren(QFrame):
+            cls_name = type(child).__name__
+            if cls_name in custom_card_names:
+                if hasattr(child, "_restyle"):
+                    try:
+                        child._restyle()
+                    except Exception:
+                        pass
+                child.update()
+                child.repaint()
+
+        # 4. Force a full visual refresh of the entire scroll content so
+        #    cached pixel buffers from the previous theme are discarded.
+        if hasattr(self, "_scroll_content"):
+            self._scroll_content.update()
+            self._scroll_content.repaint()
+
     # ── Handlers ───────────────────────────────────────────────────────────────
 
     def _on_theme_click(self) -> None:
@@ -637,29 +726,39 @@ class _AccentPickerCard(QFrame):
         super().__init__(parent)
         self._current = current_accent
         self._build()
+        self._restyle()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._restyle)
 
     def _build(self) -> None:
         self.setFixedHeight(64)
-        self.setStyleSheet(f"""
-            _AccentPickerCard {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 8px;
-            }}
-        """)
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(10)
 
-        lbl = QLabel("Accent Color")
-        lbl.setStyleSheet(f"color: {_TEXT}; font-size: 13px; background: transparent;")
-        row.addWidget(lbl)
+        self._title_lbl = QLabel("Accent Color")
+        row.addWidget(self._title_lbl)
         row.addStretch()
 
         for name, hex_color in ACCENT_PALETTE.items():
             btn = _SwatchButton(name, hex_color, selected=(hex_color == self._current))
             btn.clicked.connect(lambda _checked, h=hex_color: self._on_swatch(h))
             row.addWidget(btn)
+
+    def _restyle(self) -> None:
+        c = get_colors()
+        self.setStyleSheet(f"""
+            _AccentPickerCard {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 8px;
+            }}
+        """)
+        self._title_lbl.setStyleSheet(
+            f"color: {c.text_primary}; font-size: 13px; background: transparent;"
+        )
 
     def _on_swatch(self, hex_color: str) -> None:
         self._current = hex_color
@@ -711,18 +810,16 @@ class _SpinnerSettingCard(QFrame):
         self._min_val = min_val
         self._max_val = max_val
         self._build(icon, title, content)
+        self._restyle()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._restyle)
 
     def _build(self, icon, title: str, content: str) -> None:
         from qfluentwidgets import IconWidget, SpinBox
 
         self.setFixedHeight(76)
-        self.setStyleSheet(f"""
-            _SpinnerSettingCard {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 8px;
-            }}
-        """)
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(12)
@@ -734,13 +831,11 @@ class _SpinnerSettingCard(QFrame):
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
 
-        title_lbl = QLabel(title)
-        title_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 13px; background: transparent;")
-        sub_lbl = QLabel(content)
-        sub_lbl.setWordWrap(True)
-        sub_lbl.setStyleSheet(f"color: {_TEXT_2}; font-size: 11px; background: transparent;")
-        text_col.addWidget(title_lbl)
-        text_col.addWidget(sub_lbl)
+        self._title_lbl = QLabel(title)
+        self._sub_lbl = QLabel(content)
+        self._sub_lbl.setWordWrap(True)
+        text_col.addWidget(self._title_lbl)
+        text_col.addWidget(self._sub_lbl)
         row.addLayout(text_col, stretch=1)
 
         self._spin_box = SpinBox(self)
@@ -749,6 +844,22 @@ class _SpinnerSettingCard(QFrame):
         self._spin_box.setFixedWidth(120)
         self._spin_box.valueChanged.connect(self._on_spin_changed)
         row.addWidget(self._spin_box)
+
+    def _restyle(self) -> None:
+        c = get_colors()
+        self.setStyleSheet(f"""
+            _SpinnerSettingCard {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 8px;
+            }}
+        """)
+        self._title_lbl.setStyleSheet(
+            f"color: {c.text_primary}; font-size: 13px; background: transparent;"
+        )
+        self._sub_lbl.setStyleSheet(
+            f"color: {c.text_secondary}; font-size: 11px; background: transparent;"
+        )
 
     def _on_spin_changed(self, value: int) -> None:
         if value != self._value:
@@ -775,19 +886,17 @@ class _TextSettingCard(QFrame):
         super().__init__(parent)
         self._value = value
         self._build(icon, title, content)
+        self._restyle()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._restyle)
 
     def _build(self, icon, title: str, content: str) -> None:
         from PySide6.QtWidgets import QLineEdit
         from qfluentwidgets import IconWidget, LineEdit
 
         self.setFixedHeight(76)
-        self.setStyleSheet(f"""
-            _TextSettingCard {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 8px;
-            }}
-        """)
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(12)
@@ -798,12 +907,10 @@ class _TextSettingCard(QFrame):
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
-        title_lbl = QLabel(title)
-        title_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 13px; background: transparent;")
-        sub_lbl = QLabel(content)
-        sub_lbl.setStyleSheet(f"color: {_TEXT_2}; font-size: 11px; background: transparent;")
-        text_col.addWidget(title_lbl)
-        text_col.addWidget(sub_lbl)
+        self._title_lbl = QLabel(title)
+        self._sub_lbl = QLabel(content)
+        text_col.addWidget(self._title_lbl)
+        text_col.addWidget(self._sub_lbl)
         row.addLayout(text_col, stretch=1)
 
         self._edit = LineEdit(self)
@@ -811,6 +918,22 @@ class _TextSettingCard(QFrame):
         self._edit.setFixedWidth(260)
         self._edit.editingFinished.connect(self._on_editing_finished)
         row.addWidget(self._edit)
+
+    def _restyle(self) -> None:
+        c = get_colors()
+        self.setStyleSheet(f"""
+            _TextSettingCard {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 8px;
+            }}
+        """)
+        self._title_lbl.setStyleSheet(
+            f"color: {c.text_primary}; font-size: 13px; background: transparent;"
+        )
+        self._sub_lbl.setStyleSheet(
+            f"color: {c.text_secondary}; font-size: 11px; background: transparent;"
+        )
 
     def _on_editing_finished(self) -> None:
         v = self._edit.text().strip()
@@ -840,19 +963,17 @@ class _LanguageSettingCard(QFrame):
         self._value   = value
         self._options = list(options)
         self._build(icon, title, content)
+        self._restyle()
+
+        tm = ThemeManager.instance()
+        if tm is not None:
+            tm.theme_changed.connect(self._restyle)
 
     def _build(self, icon, title: str, content: str) -> None:
         from PySide6.QtWidgets import QComboBox
         from qfluentwidgets import IconWidget
 
         self.setFixedHeight(76)
-        self.setStyleSheet(f"""
-            _LanguageSettingCard {{
-                background: {_SURFACE};
-                border: 1px solid {_BORDER};
-                border-radius: 8px;
-            }}
-        """)
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(12)
@@ -863,12 +984,10 @@ class _LanguageSettingCard(QFrame):
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
-        title_lbl = QLabel(title)
-        title_lbl.setStyleSheet(f"color: {_TEXT}; font-size: 13px; background: transparent;")
-        sub_lbl = QLabel(content)
-        sub_lbl.setStyleSheet(f"color: {_TEXT_2}; font-size: 11px; background: transparent;")
-        text_col.addWidget(title_lbl)
-        text_col.addWidget(sub_lbl)
+        self._title_lbl = QLabel(title)
+        self._sub_lbl = QLabel(content)
+        text_col.addWidget(self._title_lbl)
+        text_col.addWidget(self._sub_lbl)
         row.addLayout(text_col, stretch=1)
 
         self._combo = QComboBox(self)
@@ -877,6 +996,22 @@ class _LanguageSettingCard(QFrame):
         self.setValue(self._value)
         self._combo.currentIndexChanged.connect(self._on_index_changed)
         row.addWidget(self._combo)
+
+    def _restyle(self) -> None:
+        c = get_colors()
+        self.setStyleSheet(f"""
+            _LanguageSettingCard {{
+                background: {c.surface};
+                border: 1px solid {c.border};
+                border-radius: 8px;
+            }}
+        """)
+        self._title_lbl.setStyleSheet(
+            f"color: {c.text_primary}; font-size: 13px; background: transparent;"
+        )
+        self._sub_lbl.setStyleSheet(
+            f"color: {c.text_secondary}; font-size: 11px; background: transparent;"
+        )
 
     def _on_index_changed(self, index: int) -> None:
         code = self._combo.itemData(index)
