@@ -10,6 +10,8 @@ install (e.g. headless CI or a user who skipped the post-install
 ``scripts/install_playwright.ps1``). Each entry point calls
 ``require_playwright_or_raise`` first and surfaces a clean error.
 """
+from __future__ import annotations
+
 from typing import Callable, Optional, Dict, List, Tuple, TYPE_CHECKING
 import logging
 import re

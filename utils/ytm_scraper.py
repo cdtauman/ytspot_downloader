@@ -325,12 +325,12 @@ def fetch_ytm_artist_releases(artist_url: str) -> List[Dict]:
             full_items = _drain_shelf(see_all_id, see_all_params, artist_name, s_type, visitor_data)
             if full_items:
                 _add_items(full_items)
-                print(f"[YTM]    → See-All gave {len(full_items)} items")
+                print(f"[YTM]    -> See-All gave {len(full_items)} items")
             else:
                 _add_items(immediate)
-                print(f"[YTM]    → See-All gave 0 items, falling back to {len(immediate)} carousel items")
+                print(f"[YTM]    -> See-All gave 0 items, falling back to {len(immediate)} carousel items")
         else:
-            print(f"[YTM]    → No See-All (using {len(immediate)} carousel items)")
+            print(f"[YTM]    -> No See-All (using {len(immediate)} carousel items)")
 
     # ── Step 3: Removed bonus playlists per user request ──────────
 

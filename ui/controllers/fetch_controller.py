@@ -143,7 +143,13 @@ class FetchController(QObject):
         self.cancel_visible.emit(False)
         self.fetch_finished.emit(result)
 
-    def _on_fetch_error(self, msg: str) -> None:
+    def _on_fetch_error(self, err: object) -> None:
         self.fetching_changed.emit(False)
         self.cancel_visible.emit(False)
+        from error_handler import ErrorInfo
+        if isinstance(err, ErrorInfo):
+            msg = err.raw or err.detail
+        else:
+            msg = str(err)
         self.fetch_error.emit(msg)
+

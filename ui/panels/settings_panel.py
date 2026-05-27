@@ -655,7 +655,7 @@ class SettingsPanel(QScrollArea):
         card.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
 
         # 1. Defensively set horizontal layout direction and margins
-        h_layout = getattr(card, "hBoxLayout", None)
+        h_layout = getattr(card, "hBoxLayout", None) or (card.layout() if isinstance(card.layout(), QHBoxLayout) else None)
         if h_layout is not None:
             try:
                 if rtl:
@@ -671,7 +671,7 @@ class SettingsPanel(QScrollArea):
         icon_label = getattr(card, "iconLabel", None)
         if icon_label is not None:
             try:
-                align_icon = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                align_icon = (Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 if h_layout is not None:
                     h_layout.setAlignment(icon_label, align_icon)
             except Exception:
@@ -681,44 +681,43 @@ class SettingsPanel(QScrollArea):
         v_layout = getattr(card, "vBoxLayout", None)
         if v_layout is not None:
             try:
-                align_v = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                align_v = (Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
                 v_layout.setAlignment(align_v)
+
+                # Defensively align children inside the v_layout so they align right/left
+                title_label = getattr(card, "titleLabel", None)
+                if title_label is not None:
+                    v_layout.setAlignment(title_label, align_v)
+                content_label = getattr(card, "contentLabel", None)
+                if content_label is not None:
+                    v_layout.setAlignment(content_label, align_v)
+
+                # Support custom card fallback attributes
+                title_lbl_custom = getattr(card, "_title_lbl", None)
+                if title_lbl_custom is not None:
+                    v_layout.setAlignment(title_lbl_custom, align_v)
+                sub_lbl_custom = getattr(card, "_sub_lbl", None)
+                if sub_lbl_custom is not None:
+                    v_layout.setAlignment(sub_lbl_custom, align_v)
             except Exception:
                 pass
 
-        # 4. Defensively set alignment of labels
-        title_label = getattr(card, "titleLabel", None)
-        if title_label is not None:
-            try:
-                align_text = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                title_label.setAlignment(align_text)
-            except Exception:
-                pass
-
-        content_label = getattr(card, "contentLabel", None)
-        if content_label is not None:
-            try:
-                align_text = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                content_label.setAlignment(align_text)
-            except Exception:
-                pass
-
-        # Support custom card fallback attributes
-        title_lbl_custom = getattr(card, "_title_lbl", None)
-        if title_lbl_custom is not None:
-            try:
-                align_text = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                title_lbl_custom.setAlignment(align_text)
-            except Exception:
-                pass
-
-        sub_lbl_custom = getattr(card, "_sub_lbl", None)
-        if sub_lbl_custom is not None:
-            try:
-                align_text = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                sub_lbl_custom.setAlignment(align_text)
-            except Exception:
-                pass
+        # 4. Defensively set layout direction and alignment of labels
+        align_text = (Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if rtl else (Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        
+        labels_to_adjust = [
+            getattr(card, "titleLabel", None),
+            getattr(card, "contentLabel", None),
+            getattr(card, "_title_lbl", None),
+            getattr(card, "_sub_lbl", None)
+        ]
+        for lbl in labels_to_adjust:
+            if lbl is not None:
+                try:
+                    lbl.setLayoutDirection(Qt.LayoutDirection.RightToLeft if rtl else Qt.LayoutDirection.LeftToRight)
+                    lbl.setAlignment(align_text)
+                except Exception:
+                    pass
 
         # Defensively set child QComboBox layout directions to RTL if needed
         from PySide6.QtWidgets import QComboBox
@@ -742,6 +741,17 @@ class SettingsPanel(QScrollArea):
         for cls in custom_classes:
             for card in self.findChildren(cls):
                 self._apply_card_alignment(card, is_hebrew)
+
+        # 3. Walk and adjust SettingCardGroup titles
+        from qfluentwidgets import SettingCardGroup
+        for grp in self.findChildren(SettingCardGroup):
+            if hasattr(grp, "titleLabel") and grp.titleLabel is not None:
+                try:
+                    grp.titleLabel.setLayoutDirection(Qt.LayoutDirection.RightToLeft if is_hebrew else Qt.LayoutDirection.LeftToRight)
+                    align_text = (Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter) if is_hebrew else (Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+                    grp.titleLabel.setAlignment(align_text)
+                except Exception:
+                    pass
 
     # ── Handlers ───────────────────────────────────────────────────────────────
 

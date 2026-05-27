@@ -16,6 +16,12 @@ from __future__ import annotations
 
 import sys
 import os
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
 import logging
 
 # ── Logging MUST be initialised before any other project import ───────────

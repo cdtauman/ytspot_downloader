@@ -428,7 +428,7 @@ QToolTip {{
 }}
 
 /* ── Cards / Frames ───────────────────────────────────────────────────── */
-QFrame {{
+.QFrame {{
     background-color: #ffffff;
     border: 1px solid #e2ddf8;
     border-radius: 12px;
