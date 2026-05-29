@@ -538,6 +538,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # ── Tag Editor: status / progress / errors ─────────────────────────────
         "meta_choose_music_folder": "Choose Music Folder",
+        "meta_delete_to_trash_title": "Move to Recycle Bin",
+        "meta_delete_to_trash_body": "{n} file(s) will be moved to the Recycle Bin. Continue?",
+        "meta_delete_to_trash_confirm": "Move to Recycle Bin",
         "meta_scanning": "Scanning…",
         "meta_searching_duplicates": "Searching for duplicates…",
         "meta_searching_duplicates_progress": "Searching for duplicates… {done}/{total}  ({eta})",
@@ -654,6 +657,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "mt_status_done":        "✓ Done",
         "mt_status_error":       "✗ Error",
         "mt_status_unsupported": "Unsupported",
+        "mt_more_columns_title": "More Columns",
+        "mt_search_columns":     "Search columns…",
+        "mt_size_all_to_fit":    "Size all columns to fit",
+        "mt_more_columns":       "More…",
 
         # ── Metadata controller status messages ────────────────────────────────
         "md_scanning_folder": "Scanning: {folder}…",
@@ -1207,6 +1214,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # ── Tag Editor: status / progress / errors ─────────────────────────────
         "meta_choose_music_folder": "בחר תיקיית מוזיקה",
+        "meta_delete_to_trash_title": "העברה לסל המחזור",
+        "meta_delete_to_trash_body": "{n} קבצים יועברו לסל המחזור. להמשיך?",
+        "meta_delete_to_trash_confirm": "העבר לסל המחזור",
         "meta_scanning": "סורק…",
         "meta_searching_duplicates": "מחפש כפילויות…",
         "meta_searching_duplicates_progress": "מחפש כפילויות… {done}/{total}  ({eta})",
@@ -1323,6 +1333,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "mt_status_done":        "✓ הושלם",
         "mt_status_error":       "✗ שגיאה",
         "mt_status_unsupported": "לא נתמך",
+        "mt_more_columns_title": "עוד עמודות",
+        "mt_search_columns":     "חפש עמודות…",
+        "mt_size_all_to_fit":    "התאם כל העמודות לתוכן",
+        "mt_more_columns":       "עוד…",
 
         # ── Metadata controller status messages ────────────────────────────────
         "md_scanning_folder": "סורק: {folder}…",

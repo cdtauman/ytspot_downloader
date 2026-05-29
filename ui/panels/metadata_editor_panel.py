@@ -18,8 +18,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QFileInfo, QModelIndex, QPoint, QRect, QSize, Qt, Signal, QItemSelection, QItemSelectionModel
-from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPalette, QPixmap
+from PySide6.QtCore import QFileInfo, QModelIndex, QPoint, QRect, QRectF, QSize, Qt, Signal, QItemSelection, QItemSelectionModel
+from PySide6.QtGui import QBrush, QColor, QFont, QIcon, QKeyEvent, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -34,11 +34,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QRubberBand,
     QInputDialog,
     QScrollArea,
     QSplitter,
     QStackedWidget,
+    QProxyStyle,
     QStyledItemDelegate,
     QStyle,
     QStyleOptionViewItem,
@@ -57,7 +57,7 @@ from ui.models.metadata_table_model import (
     COL_TRACK_CUR, COL_TRACK_NEW, COL_STATUS,
     COL_FILENAME_NEW, COL_GENRE_CUR, COL_GENRE_NEW,
     COL_COMMENT_CUR, COL_COMMENT_NEW,
-    COLUMN_COUNT, _HEADERS, MetadataTableModel,
+    COLUMN_COUNT, MetadataTableModel, _HEADER_KEYS,
 )
 from ui.theme_manager import (
     ACCENT_COLOR,
@@ -107,15 +107,49 @@ _DEFAULT_AUTO_OPS: frozenset[str] = frozenset({
     "title_strip", "track_num", "normalize_spaces",
 })
 
+_DEFAULT_COL_WIDTHS: dict[int, int] = {
+    COL_CHECK:        28,  # _ExplorerFileListView._SIDE_EMPTY_GUTTER
+    COL_FILENAME:     260,
+    COL_TITLE_CUR:    130,
+    COL_TITLE_NEW:    130,
+    COL_ARTIST_CUR:   110,
+    COL_ARTIST_NEW:   110,
+    COL_ALBUM_CUR:    120,
+    COL_ALBUM_NEW:    120,
+    COL_TRACK_CUR:    55,
+    COL_TRACK_NEW:    55,
+    COL_STATUS:       80,
+    COL_FILENAME_NEW: 220,
+    COL_GENRE_CUR:    100,
+    COL_GENRE_NEW:    100,
+    COL_COMMENT_CUR:  150,
+    COL_COMMENT_NEW:  150,
+}
+
 
 class _ExplorerFileListDelegate(QStyledItemDelegate):
     """
     Draw only the item contents.  Row backgrounds are painted by
     _ExplorerFileListView so selected rows stay one continuous strip.
+
+    The filename columns (COL_FILENAME / COL_FILENAME_NEW) get a 16×16
+    file-type icon painted to the left of the text, matching Win11
+    Explorer Details View. The icon is resolved through the optional
+    ``panel`` reference (which exposes ``_track_icon(path)``); when not
+    provided, the columns render text only.
     """
-    _PADDING_X = 8
+    _PADDING_X = 12        # Win11 horizontal cell inset
+    _ICON_SIZE = 16
+    _ICON_TEXT_GAP = 8
+
+    def __init__(self, parent=None, panel=None) -> None:
+        super().__init__(parent)
+        self._panel = panel
 
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
+        if index.column() == COL_CHECK:
+            return  # Draw absolutely nothing in the gutter column
+
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
 
@@ -123,21 +157,8 @@ class _ExplorerFileListDelegate(QStyledItemDelegate):
 
         painter.save()
 
-        table = self.parent()
-        if hasattr(table, "_should_paint_row_background") and table._should_paint_row_background(index):
-            table._paint_explorer_row_background(painter, cell_rect, index.row())
-
-        if index.column() == COL_CHECK and hasattr(table, "_explorer_palette"):
-            colors = table._explorer_palette()
-            painter.fillRect(cell_rect, colors["base"])
-            painter.setPen(colors["separator"])
-            if table.layoutDirection() == Qt.RightToLeft:
-                painter.drawLine(cell_rect.left(), cell_rect.top(), cell_rect.left(), cell_rect.bottom())
-            else:
-                painter.drawLine(cell_rect.right(), cell_rect.top(), cell_rect.right(), cell_rect.bottom())
-            painter.fillRect(cell_rect.left(), cell_rect.bottom(), cell_rect.width(), 1, colors["separator"])
-            painter.restore()
-            return
+        # Row background (hover/selection capsule) is painted once by drawRow —
+        # do NOT repaint it here or the border clips to this cell's rect only.
 
         if not (opt.state & QStyle.State_Selected) and opt.backgroundBrush.style() != Qt.NoBrush:
             painter.fillRect(cell_rect.adjusted(0, 1, 0, -1), opt.backgroundBrush)
@@ -148,55 +169,490 @@ class _ExplorerFileListDelegate(QStyledItemDelegate):
         text_color = QColor(get_colors().text_primary)
         opt.palette.setColor(QPalette.Text, text_color)
         opt.palette.setColor(QPalette.HighlightedText, text_color)
-        opt.rect = cell_rect.adjusted(self._PADDING_X, 1, -self._PADDING_X, -1)
 
+        text_rect = cell_rect.adjusted(self._PADDING_X, 1, -self._PADDING_X, -1)
+        opt.rect = text_rect
         style = opt.widget.style() if opt.widget else QApplication.style()
         style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
-        if hasattr(table, "_explorer_palette"):
-            painter.fillRect(cell_rect.left(), cell_rect.bottom(), cell_rect.width(), 1, table._explorer_palette()["separator"])
         painter.restore()
 
 
-class _LtrPathDelegate(QStyledItemDelegate):
-    """Force LTR + left alignment + middle elide on cells holding file paths.
+class _FilenameDelegate(QStyledItemDelegate):
+    """Delegate for the filename columns (COL_FILENAME and COL_FILENAME_NEW).
 
-    Used on the filename columns of the center metadata table so that paths
-    read correctly L→R even when the table inherits RTL from the app.
-    Hebrew column headers stay translated and right-aligned (RTL-natural).
+    Enforces LTR direction, left alignment and middle elision so file paths
+    read correctly even when the app runs RTL. Also draws:
+      • a 16-px file-type icon on the leading edge
+      • a Win11-style circular checkbox indicator when show_checkbox=True,
+        visible only on hover or selection so it stays hidden at rest.
     """
+
+    _CB_SIZE   = 16   # checkbox circle diameter, px
+    _CB_INSET  = 8    # leading padding before the circle
+    _CB_GAP    = 6    # gap between circle right-edge and icon/text
+    _ICON_SIZE = 16
+    _ICON_GAP  = 6
+    _PAD_X     = 12   # trailing cell padding
+
+    def __init__(self, parent=None, panel=None, show_checkbox: bool = False) -> None:
+        super().__init__(parent)
+        self._panel         = panel
+        self._show_checkbox = show_checkbox
+
+    # ── geometry helpers ──────────────────────────────────────────────────────
+
+    @property
+    def _checkbox_width(self) -> int:
+        return (self._CB_INSET + self._CB_SIZE + self._CB_GAP) if self._show_checkbox else 0
+
+    def checkbox_hit_rect(self, cell_rect: QRect) -> QRect:
+        """Return the checkbox hit area within cell_rect.
+
+        In RTL mode the checkbox sits on the RIGHT (trailing) edge so it
+        appears at the screen-right of the Name column, matching Win11."""
+        if not self._show_checkbox:
+            return QRect()
+        if QApplication.layoutDirection() == Qt.RightToLeft:
+            return QRect(
+                cell_rect.right() - 28 - self._checkbox_width,
+                cell_rect.top(),
+                self._checkbox_width,
+                cell_rect.height(),
+            )
+        return QRect(cell_rect.left() + 8, cell_rect.top(),
+                     self._checkbox_width, cell_rect.height())
+
+    # ── QStyledItemDelegate interface ─────────────────────────────────────────
 
     def initStyleOption(self, option, index) -> None:
         super().initStyleOption(option, index)
-        option.direction = Qt.LayoutDirection.LeftToRight
-        option.displayAlignment = (
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-        option.textElideMode = Qt.TextElideMode.ElideMiddle
+        if QApplication.layoutDirection() == Qt.RightToLeft:
+            option.direction       = Qt.LayoutDirection.RightToLeft
+            option.displayAlignment = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter
+        else:
+            option.direction       = Qt.LayoutDirection.LeftToRight
+            option.displayAlignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter
+        option.textElideMode   = Qt.TextElideMode.ElideMiddle
+
+    def paint(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+
+        cell_rect = QRect(option.rect)
+        painter.save()
+
+        # Suppress Qt's default selection fill — the view's drawRow handles it.
+        opt.state &= ~QStyle.State_Selected
+        opt.state &= ~QStyle.State_HasFocus
+        opt.backgroundBrush = QBrush(Qt.NoBrush)
+
+        text_color = QColor(get_colors().text_primary)
+        opt.palette.setColor(QPalette.Text, text_color)
+        opt.palette.setColor(QPalette.HighlightedText, text_color)
+
+        # Model-level background (error / changed-highlight brush).
+        if option.backgroundBrush.style() != Qt.NoBrush:
+            painter.fillRect(cell_rect.adjusted(0, 1, 0, -1), option.backgroundBrush)
+
+        table = self.parent()
+        row   = index.row()
+
+        # ── Should we show the checkbox? ──────────────────────────────────────
+        show_cb   = False
+        is_checked = False
+        if self._show_checkbox and self._panel is not None and table is not None:
+            try:
+                model      = self._panel._model
+                vis        = model._visible
+                if 0 <= row < len(vis):
+                    sel_model  = table.selectionModel()
+                    is_selected = bool(sel_model and sel_model.isRowSelected(row, QModelIndex()))
+                    is_checked = is_selected
+                    is_hover    = (hasattr(table, '_hovered_row') and table._hovered_row == row)
+                    show_cb     = is_selected or is_hover
+            except Exception:
+                pass
+
+        # ── Resolve file icon ─────────────────────────────────────────────────
+        icon = None
+        if self._panel is not None:
+            try:
+                model = self._panel._model
+                vis   = model._visible
+                if 0 <= row < len(vis):
+                    icon = self._panel._track_icon(model._tracks[vis[row]])
+            except Exception:
+                pass
+
+        # ── Layout ─────────────────────────────────────────────────────────────
+        # Win11 RTL order (right→left on screen):
+        #   [CB_INSET][circle][CB_GAP] | [icon][icon_gap] | [text extends left]
+        # Win11 LTR order (left→right on screen):
+        #   [CB_INSET][circle][CB_GAP] | [icon][icon_gap] | [text extends right]
+        # ──────────────────────────────────────────────────────────────────────
+        is_rtl = QApplication.layoutDirection() == Qt.RightToLeft
+        iy = cell_rect.top() + (cell_rect.height() - self._ICON_SIZE) // 2
+        margin_x = 28 if (is_rtl and self._show_checkbox) else 8
+
+        if is_rtl:
+            # ── RTL path ──────────────────────────────────────────────────────
+            # Checkbox on the RIGHT (leading edge in RTL)
+            if self._show_checkbox:
+                cb_zone = QRect(
+                    cell_rect.right() - margin_x - self._checkbox_width,
+                    cell_rect.top(), self._checkbox_width, cell_rect.height(),
+                )
+                if show_cb:
+                    self._draw_checkbox(painter, cb_zone, is_checked)
+
+            # Icon immediately left of the checkbox (or right edge if no checkbox)
+            icon_right = (
+                cell_rect.right() - margin_x - self._checkbox_width - self._PAD_X
+                if self._show_checkbox
+                else cell_rect.right() - margin_x - self._PAD_X
+            )
+            icon_left = icon_right - self._ICON_SIZE
+            if icon is not None and not icon.isNull():
+                icon.paint(painter, QRect(icon_left, iy, self._ICON_SIZE, self._ICON_SIZE))
+                text_right = icon_left - self._ICON_GAP
+            else:
+                text_right = icon_right
+
+            text_rect = QRect(
+                cell_rect.left() + self._PAD_X,
+                cell_rect.top() + 1,
+                max(0, text_right - cell_rect.left() - self._PAD_X),
+                cell_rect.height() - 2,
+            )
+        else:
+            # ── LTR path ──────────────────────────────────────────────────────
+            x = cell_rect.left() + margin_x
+
+            # Checkbox on the LEFT (leading edge in LTR)
+            if self._show_checkbox:
+                cb_zone = QRect(x, cell_rect.top(), self._checkbox_width, cell_rect.height())
+                if show_cb:
+                    self._draw_checkbox(painter, cb_zone, is_checked)
+                x += self._checkbox_width
+
+            # Icon immediately after checkbox (or left pad if no checkbox)
+            if icon is not None and not icon.isNull():
+                ix = x + self._PAD_X
+                icon.paint(painter, QRect(ix, iy, self._ICON_SIZE, self._ICON_SIZE))
+                x = ix + self._ICON_SIZE + self._ICON_GAP
+            else:
+                x += self._PAD_X
+
+            text_rect = QRect(
+                x, cell_rect.top() + 1,
+                max(0, cell_rect.right() - self._PAD_X - x),
+                cell_rect.height() - 2,
+            )
+
+        opt.rect = text_rect
+        style = opt.widget.style() if opt.widget else QApplication.style()
+        style.drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+
+        painter.restore()
+
+    # ── Inline rename: exclude extension from initial selection ───────────────
+
+    def createEditor(self, parent, option, index) -> QWidget:
+        editor = super().createEditor(parent, option, index)
+        return editor
+
+    def setEditorData(self, editor, index) -> None:
+        super().setEditorData(editor, index)
+        from PySide6.QtWidgets import QLineEdit
+        if isinstance(editor, QLineEdit):
+            text = editor.text()
+            # Select everything except the file extension so renaming is natural.
+            dot = text.rfind(".")
+            if dot > 0:
+                editor.setSelection(0, dot)
+            else:
+                editor.selectAll()
+
+    # ── Private ───────────────────────────────────────────────────────────────
+
+    def _draw_checkbox(self, painter: QPainter, zone: QRect, is_checked: bool) -> None:
+        """Draw a Win11-style circular checkbox centered in zone."""
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        # In RTL the inset is on the right end of the zone; in LTR on the left.
+        if QApplication.layoutDirection() == Qt.RightToLeft:
+            cx = zone.right() - self._CB_INSET - self._CB_SIZE // 2
+        else:
+            cx = zone.left() + self._CB_INSET + self._CB_SIZE // 2
+        cy = zone.top() + zone.height() // 2
+        r  = self._CB_SIZE // 2
+
+        if is_checked:
+            painter.setBrush(QBrush(QColor(ACCENT_COLOR)))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(cx - r, cy - r, self._CB_SIZE, self._CB_SIZE)
+            # Checkmark
+            pen = QPen(QColor("#ffffff"), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawLine(cx - 4, cy + 1, cx - 1, cy + 4)
+            painter.drawLine(cx - 1, cy + 4, cx + 5, cy - 3)
+        else:
+            border = QColor(get_colors().text_secondary)
+            border.setAlpha(150)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(border, 1.5))
+            painter.drawEllipse(cx - r + 1, cy - r + 1, self._CB_SIZE - 2, self._CB_SIZE - 2)
+
+        painter.restore()
+
+
+
+class _MetadataHeaderView(QHeaderView):
+    """Custom horizontal header that draws a Win11-style circular 'Select All' checkbox
+    in the filename column, perfectly aligned with the row checkboxes."""
+    
+    toggled = Signal(bool)
+
+    def __init__(self, table, panel):
+        super().__init__(Qt.Orientation.Horizontal, table)
+        self._table = table
+        self._panel = panel
+        self._is_checked = False
+        self.setMouseTracking(True)
+        if QApplication.layoutDirection() == Qt.RightToLeft:
+            self.setDefaultAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter)
+        else:
+            self.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter)
+
+    def setChecked(self, checked: bool):
+        if self._is_checked != checked:
+            self._is_checked = checked
+            self.viewport().update()
+
+    def _get_cb_rect(self, logicalIndex, rect):
+        from ui.models.metadata_table_model import COL_FILENAME
+        if logicalIndex != COL_FILENAME:
+            return QRect()
+            
+        is_rtl = QApplication.layoutDirection() == Qt.RightToLeft
+        margin_x = 28 if is_rtl else 8
+        CB_SIZE = 16
+        CB_INSET = 8
+        cb_width = CB_SIZE + CB_INSET + 6
+        
+        if is_rtl:
+            return QRect(rect.right() - margin_x - cb_width, rect.top(), cb_width, rect.height())
+        else:
+            return QRect(rect.left() + margin_x, rect.top(), cb_width, rect.height())
+
+    def _draw_resize_grip(self, painter: QPainter, rect: QRect, logicalIndex: int) -> None:
+        """Draw the subtle Windows-like separator that marks resize handles."""
+        if self.isSectionHidden(logicalIndex) or rect.width() <= 0:
+            return
+
+        is_rtl = self.isRightToLeft()
+        colors = get_colors()
+        line = QColor(colors.border)
+        line.setAlpha(185)
+        
+        x = rect.left() if is_rtl else rect.right()
+        top = rect.top() + 7
+        bottom = rect.bottom() - 7
+        if bottom <= top:
+            return
+
+        painter.save()
+        painter.setClipping(False)
+        painter.setPen(QPen(line, 1))
+        painter.drawLine(x, top, x, bottom)
+        painter.restore()
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+
+        painter = QPainter(self.viewport())
+        try:
+            for logical in range(self.count()):
+                if self.isSectionHidden(logical):
+                    continue
+                x = self.sectionViewportPosition(logical)
+                rect = QRect(x, 0, self.sectionSize(logical), self.height())
+                if rect.intersects(self.viewport().rect()):
+                    self._draw_resize_grip(painter, rect, logical)
+        finally:
+            painter.end()
+
+    def paintSection(self, painter, rect, logicalIndex):
+        super().paintSection(painter, rect, logicalIndex)
+        
+        cb_rect = self._get_cb_rect(logicalIndex, rect)
+        if not cb_rect.isValid():
+            return
+        
+        from ui.theme_manager import get_colors, ACCENT_COLOR
+        colors = get_colors()
+        is_rtl = self.isRightToLeft()
+
+        # --- Step 1: Clear the text/overlap area with normal header background ---
+        bg_main = QColor(colors.bg)
+        painter.save()
+        painter.setClipping(False)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(bg_main)
+        if is_rtl:
+            clear_rect = QRect(cb_rect.left() - 2, rect.top(),
+                               rect.right() - cb_rect.left() + 2, rect.height())
+        else:
+            clear_rect = QRect(rect.left(), rect.top(),
+                               cb_rect.right() - rect.left() + 2, rect.height())
+        painter.drawRect(clear_rect)
+        painter.restore()
+
+        # --- Step 2: Draw the gray square background only around the circle ---
+        bg_square = QColor(colors.surface2)
+        painter.save()
+        painter.setClipping(False)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(bg_square)
+        gray_rect = QRect(cb_rect.left() - 2, rect.top(), cb_rect.width() + 4, rect.height())
+        painter.drawRect(gray_rect)
+        painter.restore()
+
+        # --- Step 3: Redraw the header text in the safe area (left of circle) ---
+        header_text = self.model().headerData(logicalIndex, Qt.Horizontal, Qt.DisplayRole) or ""
+        if header_text:
+            painter.save()
+            painter.setClipping(False)
+            painter.setFont(self.font())
+            painter.setPen(QColor(colors.text_secondary))
+            PADDING = 8
+            if is_rtl:
+                text_rect = QRect(rect.left() + PADDING, rect.top(),
+                                  cb_rect.left() - rect.left() - PADDING * 2, rect.height())
+                # AlignAbsolute forces physical-right regardless of RTL layout direction
+                align = (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignAbsolute
+                         | Qt.AlignmentFlag.AlignVCenter)
+            else:
+                text_rect = QRect(cb_rect.right() + PADDING, rect.top(),
+                                  rect.right() - cb_rect.right() - PADDING * 2, rect.height())
+                align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            if text_rect.width() > 0:
+                fm = painter.fontMetrics()
+                elided = fm.elidedText(header_text, Qt.ElideRight, text_rect.width())
+                painter.drawText(text_rect, align, elided)
+            painter.restore()
+
+        # --- Step 4: Draw the circle on top ---
+        painter.save()
+        painter.setClipping(False)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        
+        CB_SIZE = 16
+        CB_INSET = 8
+        if is_rtl:
+            cx = cb_rect.right() - CB_INSET - CB_SIZE // 2
+        else:
+            cx = cb_rect.left() + CB_INSET + CB_SIZE // 2
+        cy = cb_rect.top() + cb_rect.height() // 2
+        r = CB_SIZE // 2
+        
+        if self._is_checked:
+            painter.setBrush(QBrush(QColor(ACCENT_COLOR)))
+            painter.setPen(Qt.NoPen)
+            painter.drawEllipse(cx - r, cy - r, CB_SIZE, CB_SIZE)
+            pen = QPen(QColor("#ffffff"), 2.0, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawLine(cx - 4, cy + 1, cx - 1, cy + 4)
+            painter.drawLine(cx - 1, cy + 4, cx + 5, cy - 3)
+        else:
+            border = QColor(colors.text_secondary)
+            border.setAlpha(150)
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(border, 1.5))
+            painter.drawEllipse(cx - r + 1, cy - r + 1, CB_SIZE - 2, CB_SIZE - 2)
+            
+        painter.restore()
+
+    def mousePressEvent(self, e):
+        logicalIndex = self.logicalIndexAt(e.position().toPoint().x())
+        if logicalIndex >= 0:
+            x = self.sectionViewportPosition(logicalIndex)
+            w = self.sectionSize(logicalIndex)
+            rect = QRect(x, 0, w, self.height())
+            
+            cb_rect = self._get_cb_rect(logicalIndex, rect)
+            hit_rect = cb_rect.adjusted(-4, -4, 4, 4)
+            
+            if hit_rect.contains(e.position().toPoint()):
+                self.setChecked(not self._is_checked)
+                self.toggled.emit(self._is_checked)
+                return
+                
+        super().mousePressEvent(e)
+
+
+class _ExplorerTableStyle(QProxyStyle):
+    """QProxyStyle applied to the table view.
+
+    Qt's default QAbstractItemView.drawRow() calls
+    QStyle.PE_PanelItemViewRow which draws a FLAT selection rectangle on top
+    of our capsule.  This proxy intercepts that primitive and suppresses it so
+    _ExplorerFileListView.drawRow() is the sole painter of row backgrounds.
+
+    It also clears State_Selected from CE_ItemViewItem calls so that
+    qfluentwidgets (and any other style engine) cannot add per-cell selection
+    borders or blue left-edge indicators on top of our capsule fill.
+    """
+
+    def drawPrimitive(self, element, option, painter, widget=None):
+        if element in (QStyle.PE_PanelItemViewRow, QStyle.PE_PanelItemViewItem):
+            return   # drawRow capsule is sole row-background painter
+        super().drawPrimitive(element, option, painter, widget)
+
+    def drawControl(self, element, option, painter, widget=None):
+        if (element == QStyle.CE_ItemViewItem
+                and isinstance(option, QStyleOptionViewItem)
+                and (option.state & QStyle.State_Selected)):
+            opt = QStyleOptionViewItem(option)
+            opt.state &= ~QStyle.State_Selected
+            opt.state &= ~QStyle.State_HasFocus
+            super().drawControl(element, opt, painter, widget)
+            return
+        super().drawControl(element, option, painter, widget)
 
 
 class _ExplorerFileListView(QTableView):
     """QTableView with Explorer-like empty-area deselect and rubber-band rows."""
 
     _SIDE_EMPTY_GUTTER = 28
-    _RUBBER_STYLE = (
-        "QRubberBand {"
-        "  background-color: rgba(0, 120, 215, 35);"
-        "  border: 1px solid rgba(0, 120, 215, 140);"
-        "}"
-    )
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, panel=None, parent=None) -> None:
         super().__init__(parent)
+        self._panel = panel
         self._rubber_origin = QPoint()
         self._rubber_active = False
         self._rubber_dragging = False
         self._rubber_modifiers = Qt.NoModifier
         self._rubber_base_selection = QItemSelection()
+        self._pending_cb_row = -1   # row whose checkbox toggle is deferred to mouse-release
         self._hovered_row = -1
-        self._rubber_band = QRubberBand(QRubberBand.Rectangle, self.viewport())
-        self._rubber_band.setStyleSheet(self._RUBBER_STYLE)
+        # Rubber-band geometry tracked as a plain QRect; drawn directly in
+        # paintEvent so SourceOver alpha works without WA_TranslucentBackground.
+        self._rubber_rect = QRect()
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
+
+        # Win11 Details View row geometry — 40 px tall, no grid.
+        vh = self.verticalHeader()
+        vh.setDefaultSectionSize(40)
+        vh.setMinimumSectionSize(40)
+
+        # Win11-style inset: small margins around the content area so the row
+        # capsule visually floats inside the panel (left/right/bottom gutter).
+        self.setViewportMargins(4, 0, 4, 4)
 
         # Make the empty area follow the theme by default
         bg = QColor(get_colors().bg)
@@ -221,27 +677,106 @@ class _ExplorerFileListView(QTableView):
         self.viewport().update()
 
     def paintEvent(self, event) -> None:
-        # Fill the entire viewport with the theme background first, so any
-        # empty area (no rows yet, area below last row, etc.) follows the theme
-        # instead of falling back to a hardcoded base color.
+        # Fill the entire viewport with the theme background first
         painter = QPainter(self.viewport())
         painter.fillRect(self.viewport().rect(), QColor(get_colors().bg))
+        
+        # Draw custom selection/hover row backgrounds before drawing cells on top
+        model = self.model()
+        if model is not None:
+            for row in range(model.rowCount()):
+                row_y = self.rowViewportPosition(row)
+                row_h = self.rowHeight(row)
+                # Only paint visible rows
+                if row_y + row_h < 0 or row_y > self.viewport().height():
+                    continue
+                row_rect = QRect(0, row_y, self.viewport().width(), row_h)
+                self._paint_explorer_row_background(painter, row_rect, row)
+                self._paint_explorer_row_separator(painter, row_rect)
         painter.end()
-        super().paintEvent(event)
 
-    def drawRow(self, painter: QPainter, option: QStyleOptionViewItem, index) -> None:
-        self._paint_explorer_row_background(painter, option.rect, index.row())
-        super().drawRow(painter, option, index)
-        self._paint_explorer_row_separator(painter, option.rect)
+        # Temporarily make QPalette.Base transparent so super().paintEvent won't clear our drawing
+        pal = self.viewport().palette()
+        old_base = pal.brush(QPalette.Base)
+        pal.setColor(QPalette.Base, Qt.transparent)
+        self.viewport().setPalette(pal)
+
+        try:
+            # Let Qt draw the cells/grid on top (transparent background)
+            super().paintEvent(event)
+        finally:
+            # Restore the palette
+            pal.setBrush(QPalette.Base, old_base)
+            self.viewport().setPalette(pal)
+
+        # Draw rubber-band AFTER all cells
+        if self._rubber_dragging and not self._rubber_rect.isEmpty():
+            painter = QPainter(self.viewport())
+            painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+            painter.fillRect(self._rubber_rect, QColor(0, 120, 215, 40))
+            painter.setPen(QPen(QColor(0, 120, 215, 180), 1))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(self._rubber_rect.adjusted(0, 0, -1, -1))
+            painter.end()
 
     def mousePressEvent(self, event) -> None:
-        if event.button() == Qt.LeftButton and self._is_empty_viewport_area(self._event_pos(event)):
-            self._begin_empty_area_interaction(self._event_pos(event), event.modifiers())
-            event.accept()
-            return
+        pos = self._event_pos(event)
 
-        self._cancel_rubber_band()
+        if event.button() == Qt.LeftButton:
+            # ── Checkbox hit-test in COL_FILENAME ────────────────────────────
+            # Toggle is DEFERRED to mouseReleaseEvent so that dragging from the
+            # checkbox zone can still start a rubber-band selection.
+            idx = self.indexAt(pos)
+            if idx.isValid() and idx.column() == COL_FILENAME:
+                delegate = self.itemDelegateForColumn(COL_FILENAME)
+                if hasattr(delegate, "checkbox_hit_rect"):
+                    cell_rect = self.visualRect(idx)
+                    if delegate.checkbox_hit_rect(cell_rect).contains(pos):
+                        self._pending_cb_row = idx.row()
+                        self._rubber_origin = pos
+                        self._rubber_active = True
+                        self._rubber_dragging = False
+                        self._rubber_modifiers = event.modifiers()
+                        self._rubber_rect = QRect()
+                        selection_model = self.selectionModel()
+                        self._rubber_base_selection = (
+                            selection_model.selection()
+                            if selection_model is not None else QItemSelection()
+                        )
+                        self._empty_area_pressed = False
+                        event.accept()
+                        return
+
+            # ── Rubber-band tracking: start on any left-button press ─────────
+            self._rubber_origin = pos
+            self._rubber_active = True
+            self._rubber_dragging = False
+            self._rubber_modifiers = event.modifiers()
+            self._rubber_rect = QRect()
+
+            if self._is_empty_viewport_area(pos):
+                # Empty area: record base, deselect, handle internally
+                selection_model = self.selectionModel()
+                self._rubber_base_selection = (
+                    selection_model.selection() if selection_model is not None else QItemSelection()
+                )
+                self.clearSelection()
+                self.setCurrentIndex(QModelIndex())
+                self._empty_area_pressed = True
+                event.accept()
+                return
+        else:
+            self._cancel_rubber_band()
+            self._empty_area_pressed = False
+
+        self._empty_area_pressed = False
         super().mousePressEvent(event)
+        # After Qt selects the clicked row, snapshot it as the rubber band baseline
+        if event.button() == Qt.LeftButton and self._rubber_active:
+            selection_model = self.selectionModel()
+            self._rubber_base_selection = (
+                selection_model.selection() if selection_model is not None else QItemSelection()
+            )
 
     def mouseMoveEvent(self, event) -> None:
         if self._rubber_active and event.buttons() & Qt.LeftButton:
@@ -254,15 +789,64 @@ class _ExplorerFileListView(QTableView):
 
     def mouseReleaseEvent(self, event) -> None:
         if event.button() == Qt.LeftButton and self._rubber_active:
+            was_dragging = self._rubber_dragging
+            pending_row = self._pending_cb_row
+            empty_pressed = getattr(self, "_empty_area_pressed", False)
+            self._empty_area_pressed = False
             self._finish_empty_area_interaction(self._event_pos(event))
-            event.accept()
-            return
+
+            # Fire deferred checkbox toggle (only when no rubber-band drag occurred)
+            if not was_dragging and pending_row >= 0:
+                row = pending_row
+                selection_model = self.selectionModel()
+                if selection_model is not None:
+                    model = self.model()
+                    last_col = model.columnCount() - 1
+                    row_selection = QItemSelection(model.index(row, 0), model.index(row, last_col))
+                    selection_model.select(row_selection, QItemSelectionModel.Toggle | QItemSelectionModel.Rows)
+                self.viewport().update()
+                event.accept()
+                return
+
+            if empty_pressed or was_dragging:
+                event.accept()
+                return
 
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        pos = self._event_pos(event)
+        if self._is_empty_viewport_area(pos):
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
 
     def leaveEvent(self, event) -> None:
         self._update_hover_row(QPoint(-1, -1))
         super().leaveEvent(event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        # Win11 Explorer: Delete (and Shift+Delete) sends selection to the
+        # Recycle Bin via the panel's confirm-then-trash flow. The panel
+        # owns the dialog + the controller signal — the view just collects
+        # paths from the current selection.
+        if (
+            event.key() == Qt.Key_Delete
+            and event.modifiers() in (Qt.NoModifier, Qt.ShiftModifier)
+            and self._panel is not None
+        ):
+            model = self._panel._model
+            rows = self.selectionModel().selectedRows()
+            paths: list[Path] = []
+            for idx in rows:
+                r = idx.row()
+                if 0 <= r < len(model._visible):
+                    paths.append(model._tracks[model._visible[r]].path)
+            if paths:
+                self._panel._request_delete_files(paths)
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     @staticmethod
     def _event_pos(event) -> QPoint:
@@ -273,7 +857,10 @@ class _ExplorerFileListView(QTableView):
     def _cancel_rubber_band(self) -> None:
         self._rubber_active = False
         self._rubber_dragging = False
-        self._rubber_band.hide()
+        self._pending_cb_row = -1
+        if not self._rubber_rect.isEmpty():
+            self._rubber_rect = QRect()
+            self.viewport().update()
 
     def _begin_empty_area_interaction(self, pos: QPoint, modifiers) -> None:
         self._rubber_origin = pos
@@ -287,9 +874,7 @@ class _ExplorerFileListView(QTableView):
 
         self.clearSelection()
         self.setCurrentIndex(QModelIndex())
-
-        self._rubber_band.setGeometry(QRect(self._rubber_origin, QSize()))
-        self._rubber_band.hide()
+        self._rubber_rect = QRect()
 
     def _update_empty_area_drag(self, pos: QPoint) -> None:
         if (
@@ -298,57 +883,106 @@ class _ExplorerFileListView(QTableView):
         ):
             self._rubber_dragging = True
             self._scroll_for_rubber(pos)
-            self._rubber_band.setGeometry(QRect(self._rubber_origin, pos).normalized())
-            self._rubber_band.show()
+            self._rubber_rect = QRect(self._rubber_origin, pos).normalized()
+            self.viewport().update()
             self._select_rows_in_rubber_band()
 
     def _finish_empty_area_interaction(self, pos: QPoint) -> None:
         if self._rubber_dragging:
-            self._rubber_band.setGeometry(QRect(self._rubber_origin, pos).normalized())
+            self._rubber_rect = QRect(self._rubber_origin, pos).normalized()
             self._select_rows_in_rubber_band()
         self._cancel_rubber_band()
 
     def _explorer_palette(self) -> dict[str, QColor]:
+        """Win11 Details-View palette in Microsoft system-accent blue.
+
+        Keys ``base`` / ``row_alt`` track the theme background (used by the
+        COL_CHECK gutter strip). ``separator`` is transparent — Win11 has
+        no inter-row separator lines. ``hover_border`` is transparent too —
+        Win11 hover has fill only, no outline.
+        """
         colors = get_colors()
         is_dark = QColor(colors.bg).lightness() < 128
+        bg = QColor(colors.bg)
+        transparent = QColor(0, 0, 0, 0)
+        # Win11 accent blue: #0078D4 = rgb(0, 120, 212)
+        accent = QColor(0, 120, 212)
         if is_dark:
+            # Selected fill at ~50 % opacity over dark bg gives clearly visible blue.
+            sel_fill    = QColor(accent); sel_fill.setAlpha(60)
+            sel_fill_ia = QColor(accent); sel_fill_ia.setAlpha(35)   # inactive
+            sel_border    = QColor(accent); sel_border.setAlpha(220)
+            sel_border_ia = QColor(accent); sel_border_ia.setAlpha(90)
+            hover_fill = QColor(255, 255, 255, 18)
             return {
-                "base": QColor("#0d0d12"),
-                "row_alt": QColor("#111118"),
-                "hover": QColor("#172b3e"),
-                "hover_border": QColor("#25577c"),
-                "selected": QColor("#123d62"),
-                "selected_inactive": QColor("#242a34"),
-                "selected_border": QColor("#2f88c9"),
-                "selected_inactive_border": QColor("#3a4658"),
-                "separator": QColor("#20202b"),
+                "base": bg, "row_alt": bg,
+                "hover": hover_fill, "hover_border": transparent,
+                "selected": sel_fill, "selected_inactive": sel_fill_ia,
+                "selected_border": sel_border,
+                "selected_inactive_border": sel_border_ia,
+                "separator": transparent,
             }
+        # Light mode
+        sel_fill    = QColor(accent); sel_fill.setAlpha(60)
+        sel_fill_ia = QColor(accent); sel_fill_ia.setAlpha(35)   # inactive
+        sel_border    = QColor(0, 84, 153, 180)
+        sel_border_ia = QColor(0, 84, 153, 90)
+        hover_fill = QColor(0, 0, 0, 12)
         return {
-            "base": QColor("#ffffff"),
-            "row_alt": QColor("#ffffff"),
-            "hover": QColor("#e5f3ff"),
-            "hover_border": QColor("#cce8ff"),
-            "selected": QColor("#cce8ff"),
-            "selected_inactive": QColor("#e6e6e6"),
-            "selected_border": QColor("#99d1ff"),
-            "selected_inactive_border": QColor("#d0d0d0"),
-            "separator": QColor("#f1f1f1"),
+            "base": bg, "row_alt": bg,
+            "hover": hover_fill, "hover_border": transparent,
+            "selected": sel_fill, "selected_inactive": sel_fill_ia,
+            "selected_border": sel_border,
+            "selected_inactive_border": sel_border_ia,
+            "separator": transparent,
         }
 
     def _content_row_rect(self, row_rect: QRect, row: int) -> QRect:
-        rect = QRect(0, row_rect.top(), self.viewport().width(), row_rect.height())
         model = self.model()
-        if model is not None and 0 <= row < model.rowCount() and not self.isColumnHidden(COL_CHECK):
-            gutter_rect = self.visualRect(model.index(row, COL_CHECK))
-            if gutter_rect.isValid():
-                if self.layoutDirection() == Qt.RightToLeft:
-                    rect.setRight(max(0, gutter_rect.left() - 1))
-                else:
-                    rect.setLeft(min(self.viewport().width(), gutter_rect.right() + 1))
+        if model is None or not (0 <= row < model.rowCount()):
+            return QRect(8, row_rect.top(), max(0, self.viewport().width() - 16), row_rect.height())
+
+        left: int | None = None
+        right: int | None = None
+        for logical in range(model.columnCount()):
+            if logical == COL_CHECK or self.isColumnHidden(logical):
+                continue
+            width = self.columnWidth(logical)
+            if width <= 0:
+                continue
+            x = self.columnViewportPosition(logical)
+            left = x if left is None else min(left, x)
+            right = x + width - 1 if right is None else max(right, x + width - 1)
+
+        if left is None or right is None:
+            return QRect()
+
+        rect = QRect(left, row_rect.top(), right - left + 1, row_rect.height())
+        rect.adjust(8, 0, -8, 0)
+        
+        is_rtl = QApplication.layoutDirection() == Qt.RightToLeft
+        x_check = self.columnViewportPosition(COL_CHECK)
+        w_check = self.columnWidth(COL_CHECK)
+        
+        if is_rtl:
+            # In RTL, the check column is on the left.
+            # The capsule's left edge must not overlap the check column's right edge.
+            gutter_limit = x_check + w_check
+            if rect.left() < gutter_limit:
+                rect.setLeft(gutter_limit)
+        else:
+            # In LTR, the check column is on the right.
+            # The capsule's right edge must not overlap the check column's left edge.
+            gutter_limit = x_check - 1
+            if rect.right() > gutter_limit:
+                rect.setRight(max(rect.left(), gutter_limit))
         return rect
 
     def _empty_side_rect(self) -> QRect:
-        return QRect()
+        if QApplication.layoutDirection() == Qt.LayoutDirection.RightToLeft:
+            return QRect(0, 0, self._SIDE_EMPTY_GUTTER, self.viewport().height())
+        return QRect(self.viewport().width() - self._SIDE_EMPTY_GUTTER, 0,
+                     self._SIDE_EMPTY_GUTTER, self.viewport().height())
 
     def _should_paint_row_background(self, index) -> bool:
         header = self.horizontalHeader()
@@ -361,40 +995,86 @@ class _ExplorerFileListView(QTableView):
                 return index.column() == logical
         return False
 
+    # Win11 Details View capsule geometry — inset from row edges, rounded.
+    _CAPSULE_INSET_X = 4
+    _CAPSULE_INSET_Y = 2
+    _CAPSULE_RADIUS  = 4
+
     def _paint_explorer_row_background(self, painter: QPainter, row_rect: QRect, row: int) -> None:
         colors = self._explorer_palette()
         selection_model = self.selectionModel()
-        is_selected = bool(selection_model and selection_model.isRowSelected(row, QModelIndex()))
-        fill_rect = self._content_row_rect(row_rect, row).adjusted(0, 1, 0, -1)
+        is_selected = bool(
+            selection_model and selection_model.rowIntersectsSelection(row, QModelIndex())
+        )
+        is_hover = (row == self._hovered_row)
+        if not (is_selected or is_hover):
+            return
+
+        if is_selected:
+            fill_key   = "selected"       if self.hasFocus() else "selected_inactive"
+            border_key = "selected_border" if self.hasFocus() else "selected_inactive_border"
+        else:
+            fill_key   = "hover"
+            border_key = "hover_border"
+
+        capsule = self._content_row_rect(row_rect, row).adjusted(
+            self._CAPSULE_INSET_X,  self._CAPSULE_INSET_Y,
+            -self._CAPSULE_INSET_X, -self._CAPSULE_INSET_Y,
+        )
+        if capsule.width() <= 0 or capsule.height() <= 0:
+            return
 
         painter.save()
-        painter.setClipRect(QRect(0, row_rect.top(), self.viewport().width(), row_rect.height()), Qt.ReplaceClip)
-        if is_selected:
-            key = "selected" if self.hasFocus() else "selected_inactive"
-            border_key = "selected_border" if self.hasFocus() else "selected_inactive_border"
-            painter.fillRect(fill_rect, colors[key])
-            painter.setPen(colors[border_key])
-            painter.drawRect(fill_rect.adjusted(0, 0, -1, -1))
-        elif row == self._hovered_row:
-            painter.fillRect(fill_rect, colors["hover"])
-            painter.setPen(colors["hover_border"])
-            painter.drawRect(fill_rect.adjusted(0, 0, -1, -1))
+        painter.setClipRect(
+            QRect(0, row_rect.top(), self.viewport().width(), row_rect.height()),
+            Qt.ReplaceClip,
+        )
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        border = colors[border_key]
+        if border.alpha() > 0:
+            painter.setPen(QPen(border, 1))
+        else:
+            painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(colors[fill_key]))
+        painter.drawRoundedRect(
+            QRectF(capsule),
+            self._CAPSULE_RADIUS, self._CAPSULE_RADIUS,
+        )
         painter.restore()
 
     def _paint_explorer_row_separator(self, painter: QPainter, row_rect: QRect) -> None:
-        painter.save()
-        painter.setClipRect(QRect(0, row_rect.top(), self.viewport().width(), row_rect.height()), Qt.ReplaceClip)
-        painter.fillRect(0, row_rect.bottom(), self.viewport().width(), 1, self._explorer_palette()["separator"])
-        painter.restore()
+        # Win11 Details View has no inter-row separator lines.
+        return
 
     def _is_empty_viewport_area(self, pos: QPoint) -> bool:
         if not self.viewport().rect().contains(pos):
             return True
+
+        is_rtl = QApplication.layoutDirection() == Qt.RightToLeft
+
+        # Check side empty gutter based on layout direction
+        if is_rtl:
+            # In RTL, the left side of the viewport (0 to 28) is the empty gutter.
+            if pos.x() < self._SIDE_EMPTY_GUTTER:
+                return True
+        else:
+            # In LTR, the right side of the viewport (width - 28 to width) is the empty gutter.
+            if pos.x() >= self.viewport().width() - self._SIDE_EMPTY_GUTTER:
+                return True
+
         idx = self.indexAt(pos)
-        if idx.isValid() and idx.column() == COL_CHECK:
-            return True
         if not idx.isValid():
             return True
+
+        # Check specific column margins
+        if idx.column() == COL_CHECK:
+            return True
+
+        # In RTL, the Name column (COL_FILENAME) is visual index 0 (far right) and has a 28px empty margin on its right side.
+        if is_rtl and idx.column() == COL_FILENAME:
+            cell_rect = self.visualRect(idx)
+            if cell_rect.isValid() and pos.x() >= cell_rect.right() - self._SIDE_EMPTY_GUTTER:
+                return True
 
         model = self.model()
         if model is None or model.rowCount() == 0:
@@ -429,7 +1109,7 @@ class _ExplorerFileListView(QTableView):
         if model is None or selection_model is None:
             return
 
-        rubber_rect = self._rubber_band.geometry().normalized()
+        rubber_rect = self._rubber_rect.normalized()
         rubber_selection = QItemSelection()
         last_col = model.columnCount() - 1
         if last_col < 0:
@@ -459,6 +1139,84 @@ class _ExplorerFileListView(QTableView):
                 final_selection,
                 QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
             )
+
+
+class _MoreColumnsDialog(QDialog):
+    """Scrollable, searchable list of all table columns — mirrors Windows
+    Explorer's 'Choose details…' dialog that appears from 'More…' in the
+    column header context menu."""
+
+    def __init__(self, table_view: QTableView, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(t("mt_more_columns_title"))
+        self.resize(360, 460)
+        self._table = table_view
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(8)
+
+        # Search bar
+        self._search = QLineEdit()
+        self._search.setPlaceholderText(t("mt_search_columns"))
+        self._search.textChanged.connect(self._on_search)
+        layout.addWidget(self._search)
+
+        # Scrollable column list
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
+        content = QWidget()
+        self._list_layout = QVBoxLayout(content)
+        self._list_layout.setSpacing(4)
+        self._list_layout.setContentsMargins(4, 4, 4, 4)
+
+        # Always-visible columns that can't be hidden
+        ALWAYS_VISIBLE = {COL_FILENAME}
+        # Columns never offered in any menu
+        NO_MENU = {COL_CHECK}
+
+        self._rows: list[tuple[int, str, QCheckBox]] = []
+        for col in range(COLUMN_COUNT):
+            if col in NO_MENU:
+                continue
+            key = _HEADER_KEYS[col] if col < len(_HEADER_KEYS) else ""
+            label = t(key) if key else ""
+            if not label:
+                continue
+            cb = QCheckBox(label)
+            cb.setChecked(not table_view.isColumnHidden(col))
+            if col in ALWAYS_VISIBLE:
+                cb.setEnabled(False)
+            self._rows.append((col, label, cb))
+            self._list_layout.addWidget(cb)
+
+        self._list_layout.addStretch()
+        scroll.setWidget(content)
+        layout.addWidget(scroll, stretch=1)
+
+        # OK / Cancel
+        btns = QHBoxLayout()
+        btns.addStretch()
+        cancel_btn = QPushButton(t("meta_cancel"))
+        cancel_btn.clicked.connect(self.reject)
+        ok_btn = QPushButton(t("meta_ok"))
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(self._accept)
+        btns.addWidget(cancel_btn)
+        btns.addWidget(ok_btn)
+        layout.addLayout(btns)
+
+    def _on_search(self, text: str) -> None:
+        needle = text.casefold()
+        for _, label, cb in self._rows:
+            cb.setVisible(not needle or needle in label.casefold())
+
+    def _accept(self) -> None:
+        for col, _, cb in self._rows:
+            self._table.setColumnHidden(col, not cb.isChecked())
+        self.accept()
 
 
 class _AutoArrangeSettingsDialog(QDialog):
@@ -761,6 +1519,7 @@ class MetadataEditorPanel(QWidget):
     # Duplicate file detector signals
     find_duplicates_requested   = Signal(object, bool)  # (Path, recursive)
     delete_duplicates_requested = Signal(list)           # list[Path]
+    delete_files_requested      = Signal(list)           # list[Path] (Delete key)
 
     def __init__(self, config: Optional[AppConfig] = None, parent=None) -> None:
         super().__init__(parent)
@@ -784,6 +1543,7 @@ class MetadataEditorPanel(QWidget):
         self._folder_items:       dict[Path, QTreeWidgetItem] = {}
         self._file_items:         dict[Path, QTreeWidgetItem] = {}
         self._ignore_tree_changes = False
+        self._ignore_header_resize = True
 
         self._build()
 
@@ -1045,14 +1805,23 @@ class MetadataEditorPanel(QWidget):
         tbl_head.addWidget(self._table_info_lbl)
         table_layout.addLayout(tbl_head)
 
-        self._table = _ExplorerFileListView()
+        self._table = _ExplorerFileListView(panel=self)
+        # Suppress Qt's built-in row selection fill so our drawRow capsule
+        # is the sole selection visual (no qfluentwidgets per-cell borders).
+        # setStyle() does NOT transfer ownership — store in instance var so
+        # Python GC doesn't destroy the object and leave Qt with a dangling ptr.
+        self._explorer_table_style = _ExplorerTableStyle(self._table.style())
+        self._table.setStyle(self._explorer_table_style)
         self._table.setModel(self._model)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        # EditKeyPressed = F2 on Windows (Qt platform edit key) — matches
+        # Win11 Explorer rename behavior.
         self._table.setEditTriggers(
             QAbstractItemView.DoubleClicked |
             QAbstractItemView.SelectedClicked |
-            QAbstractItemView.AnyKeyPressed
+            QAbstractItemView.AnyKeyPressed  |
+            QAbstractItemView.EditKeyPressed
         )
         self._table.setAlternatingRowColors(False)
         self._table.verticalHeader().setVisible(False)
@@ -1061,54 +1830,86 @@ class MetadataEditorPanel(QWidget):
         # Layout direction inherits from the app (RTL for Hebrew, LTR for
         # English). The filename columns get a per-column LTR delegate below
         # so file paths read correctly in either mode.
-        table_colors = get_colors()
-        self._table.setItemDelegate(_ExplorerFileListDelegate(self._table))
-        # Per-column LTR delegate keeps file paths readable even when the
-        # surrounding table inherits RTL under Hebrew.
-        _ltr_path_delegate = _LtrPathDelegate(self._table)
-        self._table.setItemDelegateForColumn(COL_FILENAME, _ltr_path_delegate)
-        self._table.setItemDelegateForColumn(COL_FILENAME_NEW, _ltr_path_delegate)
+        self._table.setItemDelegate(
+            _ExplorerFileListDelegate(self._table, panel=self)
+        )
+        # Filename columns get their own delegate: LTR, ElideMiddle, icon, checkbox.
+        self._table.setItemDelegateForColumn(
+            COL_FILENAME,
+            _FilenameDelegate(self._table, panel=self, show_checkbox=True),
+        )
+        self._table.setItemDelegateForColumn(
+            COL_FILENAME_NEW,
+            _FilenameDelegate(self._table, panel=self, show_checkbox=False),
+        )
 
-        hdr = self._table.horizontalHeader()
+        hdr = _MetadataHeaderView(self._table, self)
+        self._table.setHorizontalHeader(hdr)
         hdr.setSectionResizeMode(QHeaderView.Interactive)
         hdr.setStretchLastSection(False)
         hdr.setContextMenuPolicy(Qt.CustomContextMenu)
         hdr.customContextMenuRequested.connect(self._on_header_context_menu)
+        hdr.toggled.connect(self._on_select_all_toggled)
 
-        self._table.setColumnHidden(COL_CHECK,       False)
-        self._table.setColumnHidden(COL_FILENAME_NEW, False)
-        self._table.setColumnHidden(COL_GENRE_CUR,    True)
-        self._table.setColumnHidden(COL_GENRE_NEW,    True)
-        self._table.setColumnHidden(COL_COMMENT_CUR,  True)
-        self._table.setColumnHidden(COL_COMMENT_NEW,  True)
+        # Restore or set default column visibility
+        default_hidden = {COL_GENRE_CUR, COL_GENRE_NEW, COL_COMMENT_CUR, COL_COMMENT_NEW}
+        saved_visibility = None
+        if self._cfg:
+            saved_visibility = self._cfg.tag_editor_column_visibility
+        for col in range(COLUMN_COUNT):
+            if col == COL_CHECK or col == COL_FILENAME:
+                self._table.setColumnHidden(col, False)
+            elif saved_visibility is not None:
+                self._table.setColumnHidden(col, col in saved_visibility)
+            else:
+                self._table.setColumnHidden(col, col in default_hidden)
 
-        self._table.setColumnWidth(COL_CHECK,       _ExplorerFileListView._SIDE_EMPTY_GUTTER)
-        self._table.setColumnWidth(COL_FILENAME,   180)
-        self._table.setColumnWidth(COL_TITLE_CUR,  130)
-        self._table.setColumnWidth(COL_TITLE_NEW,  130)
-        self._table.setColumnWidth(COL_ARTIST_CUR, 110)
-        self._table.setColumnWidth(COL_ARTIST_NEW, 110)
-        self._table.setColumnWidth(COL_ALBUM_CUR,  120)
-        self._table.setColumnWidth(COL_ALBUM_NEW,  120)
-        self._table.setColumnWidth(COL_TRACK_CUR,   55)
-        self._table.setColumnWidth(COL_TRACK_NEW,   55)
-        self._table.setColumnWidth(COL_STATUS,       80)
-        self._table.setColumnWidth(COL_FILENAME_NEW, 180)
-        self._table.setColumnWidth(COL_GENRE_CUR,   100)
-        self._table.setColumnWidth(COL_GENRE_NEW,   100)
-        self._table.setColumnWidth(COL_COMMENT_CUR, 150)
-        self._table.setColumnWidth(COL_COMMENT_NEW, 150)
-
-        # Allow drag reordering; STATUS is pinned at the last visual slot
-        # (= far LEFT in RTL rendering). Connect before the initial moveSection
-        # so the lock is active from the start.
+        # Allow drag reordering. Restore order from config or apply default.
         hdr.setSectionsMovable(True)
-        hdr.sectionMoved.connect(self._on_section_moved)
         hdr.setSectionResizeMode(COL_CHECK, QHeaderView.Fixed)
-        hdr.moveSection(hdr.visualIndex(COL_CHECK), 0)
-        hdr.moveSection(hdr.visualIndex(COL_STATUS), COLUMN_COUNT - 1)
-        # Move new filename right next to original filename
-        hdr.moveSection(hdr.visualIndex(COL_FILENAME_NEW), hdr.visualIndex(COL_FILENAME) + 1)
+
+        saved_order = None
+        if self._cfg:
+            saved_order = self._cfg.tag_editor_column_order
+
+        hdr.blockSignals(True)
+        try:
+            if saved_order and len(saved_order) == COLUMN_COUNT:
+                for visual_idx, logical_idx in enumerate(saved_order):
+                    current_visual = hdr.visualIndex(logical_idx)
+                    if current_visual != visual_idx:
+                        hdr.moveSection(current_visual, visual_idx)
+            else:
+                # Move new filename right next to original filename
+                hdr.moveSection(hdr.visualIndex(COL_FILENAME_NEW), hdr.visualIndex(COL_FILENAME) + 1)
+                hdr.moveSection(hdr.visualIndex(COL_CHECK), COLUMN_COUNT - 1)
+        finally:
+            hdr.blockSignals(False)
+
+        hdr.sectionMoved.connect(self._on_section_moved)
+
+        # Win11 Explorer header-click-to-sort.
+        self._table.setSortingEnabled(True)
+        hdr.setSectionsClickable(True)
+
+        saved_sort_col = -1
+        saved_sort_order = Qt.SortOrder.AscendingOrder
+        if self._cfg:
+            saved_sort_col = self._cfg.tag_editor_sort_column
+            saved_sort_order_val = self._cfg.tag_editor_sort_order
+            saved_sort_order = Qt.SortOrder(saved_sort_order_val)
+
+        if saved_sort_col != -1:
+            hdr.blockSignals(True)
+            try:
+                self._table.sortByColumn(saved_sort_col, saved_sort_order)
+                hdr.setSortIndicatorShown(True)
+            finally:
+                hdr.blockSignals(False)
+        else:
+            hdr.setSortIndicatorShown(False)
+
+        hdr.sortIndicatorChanged.connect(self._on_sort_indicator_changed)
 
         self._table.selectionModel().selectionChanged.connect(self._on_table_selection_changed)
         self._model.dataChanged.connect(self._on_model_data_changed)
@@ -1154,6 +1955,10 @@ class MetadataEditorPanel(QWidget):
 
         # Set initial table zoom level
         self._set_zoom(self._zoom_level)
+
+        # Connect resize signal and disable the initial resize-ignoring flag
+        hdr.sectionResized.connect(self._on_section_resized)
+        self._ignore_header_resize = False
 
         return splitter
 
@@ -1358,6 +2163,28 @@ class MetadataEditorPanel(QWidget):
         msg.cancelButton.hide()
         msg.exec()
 
+    def _request_delete_files(self, paths: list[Path]) -> None:
+        """Single-confirm Recycle Bin send for selected table rows.
+
+        Called from `_ExplorerFileListView.keyPressEvent` on Delete. Emits
+        `delete_files_requested` only after the user confirms — the actual
+        send2trash + rescan is owned by `MetadataController.delete_files`.
+        """
+        if not paths:
+            return
+        from qfluentwidgets import MessageBox
+        msg = MessageBox(
+            t("meta_delete_to_trash_title"),
+            t("meta_delete_to_trash_body", n=len(paths)),
+            self.window(),
+        )
+        try:
+            msg.yesButton.setText(t("meta_delete_to_trash_confirm"))
+        except Exception:
+            pass
+        if msg.exec():
+            self.delete_files_requested.emit(list(paths))
+
     # ── Toolbar handlers ──────────────────────────────────────────────────────
 
     def _on_browse(self) -> None:
@@ -1451,6 +2278,13 @@ class MetadataEditorPanel(QWidget):
 
     def _on_table_selection_changed(self, selected: QItemSelection, _desel) -> None:
         rows = self._table.selectionModel().selectedRows()
+        
+        # Update the header 'Select All' checkbox
+        hdr = self._table.horizontalHeader()
+        if hasattr(hdr, 'setChecked'):
+            total = len(self._model._visible)
+            hdr.setChecked(len(rows) == total and total > 0)
+            
         if rows:
             tracks = []
             for idx in rows:
@@ -1466,6 +2300,13 @@ class MetadataEditorPanel(QWidget):
             self._inspector.setCurrentIndex(_PAGE_FOLDER)
         else:
             self._inspector.setCurrentIndex(_PAGE_EMPTY)
+
+
+    def _on_select_all_toggled(self, checked: bool) -> None:
+        if checked:
+            self._table.selectAll()
+        else:
+            self._table.clearSelection()
 
     def _on_model_data_changed(self, *_) -> None:
         self._update_summary()
@@ -1524,29 +2365,101 @@ class MetadataEditorPanel(QWidget):
                 self._cfg.save()
 
     def _on_section_moved(self, logical: int, old_visual: int, new_visual: int) -> None:
-        """Keep the blank gutter at the right edge and STATUS at the far left."""
+        """Keep Name pinned first and the fixed empty gutter pinned last."""
         hdr = self._table.horizontalHeader()
-        target = COLUMN_COUNT - 1
-        if hdr.visualIndex(COL_CHECK) != 0 or hdr.visualIndex(COL_STATUS) != target:
+
+        target_gutter_visual = COLUMN_COUNT - 1
+        if hdr.visualIndex(COL_CHECK) != target_gutter_visual:
             hdr.blockSignals(True)
             try:
-                if hdr.visualIndex(COL_CHECK) != 0:
-                    hdr.moveSection(hdr.visualIndex(COL_CHECK), 0)
-                hdr.moveSection(hdr.visualIndex(COL_STATUS), target)
+                hdr.moveSection(hdr.visualIndex(COL_CHECK), target_gutter_visual)
             finally:
                 hdr.blockSignals(False)
 
+        if logical == COL_FILENAME and new_visual != 0:
+            hdr.blockSignals(True)
+            try:
+                hdr.moveSection(hdr.visualIndex(COL_FILENAME), 0)
+            finally:
+                hdr.blockSignals(False)
+        elif new_visual == 0 and logical != COL_FILENAME:
+            hdr.blockSignals(True)
+            try:
+                hdr.moveSection(hdr.visualIndex(COL_FILENAME), 0)
+            finally:
+                hdr.blockSignals(False)
+
+        self._save_column_order()
+
+    def _save_column_order(self) -> None:
+        if self._cfg:
+            hdr = self._table.horizontalHeader()
+            order = []
+            for visual_idx in range(COLUMN_COUNT):
+                logical_idx = hdr.logicalIndex(visual_idx)
+                order.append(logical_idx)
+            self._cfg.tag_editor_column_order = order
+            self._cfg.save()
+
+    def _on_section_resized(self, logical: int, old_size: int, new_size: int) -> None:
+        if getattr(self, "_ignore_header_resize", False):
+            return
+        if logical == COL_CHECK:
+            return
+
+        factor = self._zoom_level / 100.0
+        if factor <= 0:
+            factor = 1.0
+
+        base_width = int(new_size / factor)
+        if self._cfg:
+            widths = dict(self._cfg.tag_editor_column_widths)
+            widths[str(logical)] = base_width
+            self._cfg.tag_editor_column_widths = widths
+            self._cfg.save()
+
+    def _on_sort_indicator_changed(self, column: int, order: Qt.SortOrder) -> None:
+        hdr = self._table.horizontalHeader()
+        hdr.setSortIndicatorShown(column != -1)
+        if self._cfg:
+            self._cfg.tag_editor_sort_column = column
+            order_val = order.value if hasattr(order, 'value') else int(order)
+            self._cfg.tag_editor_sort_order = int(order_val)
+            self._cfg.save()
+
+    def _save_column_visibility(self) -> None:
+        if self._cfg:
+            hidden_cols = []
+            for col in range(COLUMN_COUNT):
+                if self._table.isColumnHidden(col):
+                    hidden_cols.append(col)
+            self._cfg.tag_editor_column_visibility = hidden_cols
+            self._cfg.save()
+
+    def _set_column_hidden(self, col: int, hide: bool) -> None:
+        self._table.setColumnHidden(col, hide)
+        self._save_column_visibility()
+
     def _on_header_context_menu(self, pos) -> None:
         from PySide6.QtWidgets import QMenu
-        menu = QMenu(self)
-        # Not shown in menu at all (always hidden or locked with no toggle needed)
-        NO_MENU = {COL_CHECK, COL_STATUS}
-        # Shown in menu but grayed out (always visible, user cannot hide)
+
+        # Short "common" column list — mirrors the Windows Explorer header
+        # right-click menu (5-7 items, not the full attribute sheet).
+        COMMON_COLS = [
+            COL_FILENAME,      # Name  — always visible
+            COL_TITLE_NEW,     # Title (new)
+            COL_ARTIST_NEW,    # Artist (new)
+            COL_ALBUM_NEW,     # Album (new)
+            COL_TRACK_NEW,     # Track (new)
+            COL_FILENAME_NEW,  # Filename (new)
+            COL_STATUS,        # Status
+        ]
         ALWAYS_VISIBLE = {COL_FILENAME}
-        for col in range(COLUMN_COUNT):
-            if col in NO_MENU:
-                continue
-            lbl = _HEADERS[col] if col < len(_HEADERS) else str(col)
+
+        menu = QMenu(self)
+        for col in COMMON_COLS:
+            key = _HEADER_KEYS[col] if col < len(_HEADER_KEYS) else ""
+            lbl = t(key) if key else ""
             if not lbl:
                 continue
             action = menu.addAction(lbl)
@@ -1556,9 +2469,28 @@ class MetadataEditorPanel(QWidget):
                 action.setEnabled(False)
             else:
                 action.triggered.connect(
-                    lambda checked, c=col: self._table.setColumnHidden(c, not checked)
+                    lambda checked, c=col: self._set_column_hidden(c, not checked)
                 )
+
+        menu.addSeparator()
+        menu.addAction(t("mt_size_all_to_fit")).triggered.connect(
+            self._size_all_columns_to_fit
+        )
+        menu.addSeparator()
+        menu.addAction(t("mt_more_columns")).triggered.connect(self._on_more_columns)
+
         menu.exec(self._table.horizontalHeader().mapToGlobal(pos))
+
+    def _size_all_columns_to_fit(self) -> None:
+        """Resize every visible column to its content width (Win11 'Best fit')."""
+        for col in range(COLUMN_COUNT):
+            if not self._table.isColumnHidden(col):
+                self._table.resizeColumnToContents(col)
+
+    def _on_more_columns(self) -> None:
+        dlg = _MoreColumnsDialog(self._table, self)
+        if dlg.exec() == QDialog.Accepted:
+            self._save_column_visibility()
 
     # ── Public slots (wired by AppWindow) ─────────────────────────────────────
 
@@ -1886,17 +2818,24 @@ class MetadataEditorPanel(QWidget):
         factor = pct / 100.0
         
         table_colors = get_colors()
+        # Win11 Details View: flat header (no per-section vertical borders,
+        # no bold, muted color, single underline). Capsule paint handles
+        # selection — keep selection-background-color transparent so Qt
+        # doesn't overdraw it with a flat rectangle.
         self._table.setStyleSheet(
             f"QTableView {{ background: {table_colors.bg}; color: {table_colors.text_primary};"
             f"  border: 1px solid {table_colors.border};"
             f"  selection-background-color: transparent; selection-color: {table_colors.text_primary};"
             f"  font-size: {font_size}pt; }}"
             "QTableView::item { background: transparent; border: none; }"
-            f"QHeaderView::section {{ background: {table_colors.surface}; color: {table_colors.text_primary};"
-            f"  border: none; border-left: 1px solid {table_colors.border};"
-            f"  border-bottom: 1px solid {table_colors.border}; padding: {int(4 * factor)}px {int(8 * factor)}px;"
-            f"  font-size: {font_size}pt; font-weight: bold; }}"
-            f"QTableCornerButton::section {{ background: {table_colors.surface}; border: 1px solid {table_colors.border}; }}"
+            f"QHeaderView::section {{ background: {table_colors.bg};"
+            f"  color: {table_colors.text_secondary};"
+            f"  border: none;"
+            f"  padding: 0 12px; height: 32px;"
+            f"  font-size: {font_size}pt; font-weight: normal; }}"
+            f"QHeaderView::section:hover {{ color: {table_colors.text_primary}; }}"
+            f"QTableCornerButton::section {{ background: {table_colors.bg};"
+            f"  border: none; }}"
         )
 
         font = self._table.font()
@@ -1908,22 +2847,24 @@ class MetadataEditorPanel(QWidget):
         hdr_font.setPointSize(font_size)
         hdr.setFont(hdr_font)
         
-        self._table.setColumnWidth(COL_CHECK, int(_ExplorerFileListView._SIDE_EMPTY_GUTTER * factor))
-        self._table.setColumnWidth(COL_FILENAME, int(180 * factor))
-        self._table.setColumnWidth(COL_TITLE_CUR, int(130 * factor))
-        self._table.setColumnWidth(COL_TITLE_NEW, int(130 * factor))
-        self._table.setColumnWidth(COL_ARTIST_CUR, int(110 * factor))
-        self._table.setColumnWidth(COL_ARTIST_NEW, int(110 * factor))
-        self._table.setColumnWidth(COL_ALBUM_CUR, int(120 * factor))
-        self._table.setColumnWidth(COL_ALBUM_NEW, int(120 * factor))
-        self._table.setColumnWidth(COL_TRACK_CUR, int(55 * factor))
-        self._table.setColumnWidth(COL_TRACK_NEW, int(55 * factor))
-        self._table.setColumnWidth(COL_STATUS, int(80 * factor))
-        self._table.setColumnWidth(COL_FILENAME_NEW, int(180 * factor))
-        self._table.setColumnWidth(COL_GENRE_CUR, int(100 * factor))
-        self._table.setColumnWidth(COL_GENRE_NEW, int(100 * factor))
-        self._table.setColumnWidth(COL_COMMENT_CUR, int(150 * factor))
-        self._table.setColumnWidth(COL_COMMENT_NEW, int(150 * factor))
+        # Load saved widths
+        saved_widths = {}
+        if self._cfg:
+            try:
+                saved_widths = {int(k): v for k, v in self._cfg.tag_editor_column_widths.items()}
+            except Exception:
+                pass
+
+        self._ignore_header_resize = True
+        try:
+            for col in range(COLUMN_COUNT):
+                base_w = saved_widths.get(col, _DEFAULT_COL_WIDTHS.get(col, 100))
+                if col == COL_CHECK:
+                    self._table.setColumnWidth(col, _ExplorerFileListView._SIDE_EMPTY_GUTTER)
+                else:
+                    self._table.setColumnWidth(col, max(10, int(base_w * factor)))
+        finally:
+            self._ignore_header_resize = False
 
     def _on_tree_item_moved(self, src: Path, dest: Path) -> None:
         """Physically moves a file or folder on the disk, and updates UI."""

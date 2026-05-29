@@ -450,6 +450,7 @@ class AppWindow(FluentWindow):
         p.strip_filename_numbering.connect(c.strip_filename_numbering)
         p.find_duplicates_requested.connect(lambda f, r: c.find_duplicates(f, r))
         p.delete_duplicates_requested.connect(c.delete_duplicate_files)
+        p.delete_files_requested.connect(c.delete_files)
 
         # Controller → Panel
         c.track_discovered.connect(p.on_track_discovered)

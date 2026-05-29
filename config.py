@@ -126,6 +126,11 @@ _DEFAULTS: dict[str, Any] = {
     "magic_auto_ops":        ["title_strip", "track_num", "normalize_spaces"],
     "tag_editor_zoom":       100,
     "tag_editor_splitter_sizes": [],
+    "tag_editor_column_widths":     {},
+    "tag_editor_column_visibility": [],
+    "tag_editor_column_order":      [],
+    "tag_editor_sort_column":       -1,
+    "tag_editor_sort_order":        0,
 
     # ── Tag Cleaning Settings ─────────────────────────────────────────────────
     "tag_clean_title_remove_brackets":     True,
@@ -678,6 +683,49 @@ class AppConfig:
     @tag_editor_splitter_sizes.setter
     def tag_editor_splitter_sizes(self, value: list[int]) -> None:
         self._data["tag_editor_splitter_sizes"] = list(value)
+
+    @property
+    def tag_editor_column_widths(self) -> dict[str, int]:
+        val = self._data.get("tag_editor_column_widths", {})
+        return val if isinstance(val, dict) else {}
+
+    @tag_editor_column_widths.setter
+    def tag_editor_column_widths(self, value: dict[str, int]) -> None:
+        self._data["tag_editor_column_widths"] = dict(value)
+
+    @property
+    def tag_editor_column_visibility(self) -> list[int]:
+        val = self._data.get("tag_editor_column_visibility", [])
+        return val if isinstance(val, list) else []
+
+    @tag_editor_column_visibility.setter
+    def tag_editor_column_visibility(self, value: list[int]) -> None:
+        self._data["tag_editor_column_visibility"] = list(value)
+
+    @property
+    def tag_editor_column_order(self) -> list[int]:
+        val = self._data.get("tag_editor_column_order", [])
+        return val if isinstance(val, list) else []
+
+    @tag_editor_column_order.setter
+    def tag_editor_column_order(self, value: list[int]) -> None:
+        self._data["tag_editor_column_order"] = list(value)
+
+    @property
+    def tag_editor_sort_column(self) -> int:
+        return int(self._data.get("tag_editor_sort_column", -1))
+
+    @tag_editor_sort_column.setter
+    def tag_editor_sort_column(self, value: int) -> None:
+        self._data["tag_editor_sort_column"] = int(value)
+
+    @property
+    def tag_editor_sort_order(self) -> int:
+        return int(self._data.get("tag_editor_sort_order", 0))
+
+    @tag_editor_sort_order.setter
+    def tag_editor_sort_order(self, value: int) -> None:
+        self._data["tag_editor_sort_order"] = int(value)
 
     # ── Tag Cleaning Settings ─────────────────────────────────────────────────
 

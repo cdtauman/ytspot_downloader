@@ -16,6 +16,7 @@ from PySide6.QtCore import (
     Qt,
 )
 from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtWidgets import QApplication
 
 from core.metadata_models import AudioTrackItem, TrackStatus
 from ui.i18n import t
@@ -80,6 +81,38 @@ _ERROR_BRUSH  = QBrush(_ERROR_BG)
 _WARN_BRUSH   = QBrush(_WARN_BG)
 
 
+# Per-column sort key extractors. The model's sort() looks up the column
+# in this table; columns not listed (e.g. CHECK with no meaningful order)
+# are no-ops. Strings are case-folded so sorting is locale-friendly.
+def _safe_int(v) -> int:
+    try:
+        return int(v) if v is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+def _fold(s) -> str:
+    return s.casefold() if isinstance(s, str) else ""
+
+_SORT_KEYS = {
+    COL_CHECK:        lambda t: 0,
+    COL_FILENAME:     lambda t: _fold(getattr(t, "display_name", "") or t.path.name),
+    COL_FILENAME_NEW: lambda t: _fold(getattr(t, "proposed_filename", "") or ""),
+    COL_TITLE_CUR:    lambda t: _fold(t.original.title or ""),
+    COL_TITLE_NEW:    lambda t: _fold((t.proposed.title  if t.proposed.title  is not None else t.original.title)  or ""),
+    COL_ARTIST_CUR:   lambda t: _fold(t.original.artist or ""),
+    COL_ARTIST_NEW:   lambda t: _fold((t.proposed.artist if t.proposed.artist is not None else t.original.artist) or ""),
+    COL_ALBUM_CUR:    lambda t: _fold(t.original.album  or ""),
+    COL_ALBUM_NEW:    lambda t: _fold((t.proposed.album  if t.proposed.album  is not None else t.original.album)  or ""),
+    COL_TRACK_CUR:    lambda t: _safe_int(t.original.track_num),
+    COL_TRACK_NEW:    lambda t: _safe_int(t.proposed.track_num if t.proposed.track_num is not None else t.original.track_num),
+    COL_GENRE_CUR:    lambda t: _fold(t.original.genre   or ""),
+    COL_GENRE_NEW:    lambda t: _fold((t.proposed.genre   if t.proposed.genre   is not None else t.original.genre)   or ""),
+    COL_COMMENT_CUR:  lambda t: _fold(t.original.comment or ""),
+    COL_COMMENT_NEW:  lambda t: _fold((t.proposed.comment if t.proposed.comment is not None else t.original.comment) or ""),
+    COL_STATUS:       lambda t: str(t.status),
+}
+
+
 class MetadataTableModel(QAbstractTableModel):
     """
     Displays checked AudioTrackItem objects.
@@ -95,8 +128,10 @@ class MetadataTableModel(QAbstractTableModel):
         self._checked:     set[int] = set()          # indices into _tracks
         self._path_to_idx: dict[Path, int] = {}      # fast path → master-idx lookup
 
-        # Computed view: sorted(self._checked)
+        # Computed view: sorted(self._checked) + last applied sort order
         self._visible: list[int] = []
+        self._sort_column: int | None = None
+        self._sort_order: Qt.SortOrder = Qt.AscendingOrder
 
     # ── QAbstractTableModel interface ─────────────────────────────────────────
 
@@ -107,11 +142,19 @@ class MetadataTableModel(QAbstractTableModel):
         return COLUMN_COUNT
 
     def headerData(self, section: int, orientation: Qt.Orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            if section < len(_HEADER_KEYS):
-                key = _HEADER_KEYS[section]
-                return t(key) if key else ""
-            return ""
+        if orientation == Qt.Horizontal:
+            if role == Qt.DisplayRole:
+                if section < len(_HEADER_KEYS):
+                    key = _HEADER_KEYS[section]
+                    text = t(key) if key else ""
+                    return text
+                return ""
+            elif role == Qt.TextAlignmentRole:
+                if orientation == Qt.Orientation.Horizontal:
+                    if QApplication.layoutDirection() == Qt.RightToLeft:
+                        return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter
+                    else:
+                        return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter
         return None
 
     def data(self, index: QModelIndex, role=Qt.DisplayRole):
@@ -131,6 +174,13 @@ class MetadataTableModel(QAbstractTableModel):
         # ── CheckState ────────────────────────────────────────────────────────
         if role == Qt.CheckStateRole and col == COL_CHECK:
             return Qt.Checked if track_idx in self._checked else Qt.Unchecked
+
+        # ── TextAlignmentRole ─────────────────────────────────────────────────
+        if role == Qt.TextAlignmentRole:
+            if QApplication.layoutDirection() == Qt.RightToLeft:
+                return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter
+            else:
+                return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignAbsolute | Qt.AlignmentFlag.AlignVCenter
 
         # ── DisplayRole ───────────────────────────────────────────────────────
         if role == Qt.DisplayRole:
@@ -386,10 +436,39 @@ class MetadataTableModel(QAbstractTableModel):
         except ValueError:
             return -1
 
+    # ── Sorting (Win11 Explorer header-click-to-sort) ─────────────────────────
+
+    def sort(self, column: int, order: Qt.SortOrder = Qt.AscendingOrder) -> None:
+        """Sort visible rows by the given column.
+
+        Re-applied automatically inside ``_rebuild_visible`` so that scans,
+        edits, and check-state changes preserve the user's chosen order
+        (Qt's QTableView with ``setSortingEnabled(True)`` will also call
+        this whenever its header indicator changes).
+        """
+        keyfn = _SORT_KEYS.get(column)
+        if keyfn is None:
+            return
+        self.layoutAboutToBeChanged.emit()
+        self._sort_column = column
+        self._sort_order = order
+        self._visible.sort(
+            key=lambda master_idx: keyfn(self._tracks[master_idx]),
+            reverse=(order == Qt.DescendingOrder),
+        )
+        self.layoutChanged.emit()
+
     # ── Private ───────────────────────────────────────────────────────────────
 
     def _rebuild_visible(self) -> None:
         self._visible = sorted(self._checked)
+        if self._sort_column is not None:
+            keyfn = _SORT_KEYS.get(self._sort_column)
+            if keyfn is not None:
+                self._visible.sort(
+                    key=lambda master_idx: keyfn(self._tracks[master_idx]),
+                    reverse=(self._sort_order == Qt.DescendingOrder),
+                )
 
 
 def _status_label(status: str) -> str:

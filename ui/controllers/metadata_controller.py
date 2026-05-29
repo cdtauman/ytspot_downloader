@@ -488,6 +488,17 @@ class MetadataController(QObject):
         note = t("md_duplicates_deleted_errors_suffix", fail=fail) if fail else ""
         self.status_update.emit(t("md_duplicates_deleted", success=success, note=note))
 
+    def delete_files(self, paths: list) -> None:
+        """Recycle-Bin send for arbitrary user-selected tracks (Delete key).
+
+        Same disk-side behavior as `delete_duplicate_files` — both delegate
+        to send2trash with `unlink()` fallback. Re-uses the existing
+        `duplicate_delete_complete` signal so the panel's existing rescan
+        hook (`on_duplicate_delete_complete` → `_on_scan`) refreshes the
+        model and tree without extra wiring.
+        """
+        self.delete_duplicate_files(paths)
+
     def cancel_apply(self) -> None:
         if self._apply_worker and self._apply_worker.isRunning():
             self._apply_worker.cancel()
