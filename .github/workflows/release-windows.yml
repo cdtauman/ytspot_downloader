@@ -93,6 +93,7 @@ jobs:
           # Accept exit 0 (everything green) or 1 (some warnings). Anything
           # else means the EXE crashed.
           if ($LASTEXITCODE -gt 1) { throw "ytspot-cli.exe --doctor crashed (exit $LASTEXITCODE)" }
+          exit 0
 
       - name: Install Inno Setup
         shell: pwsh
