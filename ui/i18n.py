@@ -801,7 +801,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "appearance": "מראה",
         "theme": "ערכת נושא",
         "switch_theme": "החלף ערכת נושא",
-        "theme_tooltip": "מחזור בין: 🌙 כהה  →  ☀️ בהיר  →  ⚫ OLED",
+        "theme_tooltip": "מחזור בין: 🌙 כהה  ←  ☀️ בהיר  ←  ⚫ OLED",
         "language": "שפה",
         "select_language": "בחר שפת ממשק",
 
@@ -1123,7 +1123,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
 
         # ── Search result card ──────────────────────────────────────────────────
         "search_card_add_btn": "＋  הוסף",
-        "search_card_browse_btn": "עיון  →",
+        "search_card_browse_btn": "עיון  ←",
 
         # ── Tag Editor: dialogs / headers ───────────────────────────────────────
         "meta_auto_settings_title": "הגדרות סדר אוטומטי",

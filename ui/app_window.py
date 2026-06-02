@@ -308,6 +308,8 @@ class AppWindow(FluentWindow):
         self.navigationInterface.setExpandWidth(200)
         if self._cfg.accessibility_mode:
             self._apply_accessibility(True)
+        if self.layoutDirection() == Qt.LayoutDirection.RightToLeft:
+            self.navigationInterface.panel.returnButton.setIcon(FluentIcon.RIGHT_ARROW)
 
     def _apply_window_theme(self) -> None:
         """Re-style any chrome owned directly by AppWindow on theme change."""
@@ -1165,6 +1167,16 @@ class AppWindow(FluentWindow):
     def _save_state(self) -> None:
         self._cfg.window_state = self.saveGeometry().toHex().data().decode()
         self._cfg.save()
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Resize event
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self.layoutDirection() == Qt.LayoutDirection.RightToLeft:
+            self.titleBar.move(0, 0)
+            self.titleBar.resize(self.width() - 46, self.titleBar.height())
 
     # ──────────────────────────────────────────────────────────────────────────
     # Close event
