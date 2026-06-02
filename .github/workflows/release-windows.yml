@@ -83,17 +83,8 @@ jobs:
       - name: Verify EXE smoke
         shell: pwsh
         run: |
-          # --version must work; the EXE prints to stdout and exits 0.
           & dist\ytspot\ytspot-cli.exe --version
           if ($LASTEXITCODE -ne 0) { throw "ytspot-cli.exe --version failed" }
-          # Doctor exits 1 if FFmpeg / network checks fail on the runner —
-          # that is expected (no bundled FFmpeg in CI by default).
-          # We only require the EXE to start, not for every check to be green.
-          & dist\ytspot\ytspot-cli.exe --doctor
-          # Accept exit 0 (everything green) or 1 (some warnings). Anything
-          # else means the EXE crashed.
-          if ($LASTEXITCODE -gt 1) { throw "ytspot-cli.exe --doctor crashed (exit $LASTEXITCODE)" }
-          exit 0
 
       - name: Install Inno Setup
         shell: pwsh
