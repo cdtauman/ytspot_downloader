@@ -17,11 +17,11 @@ adds a `release.bump_version` helper script in v1.1.
 
 from __future__ import annotations
 
-__version__: str = "1.0.0"
+__version__: str = "0.1.0"
 
 # Convenience tuple form for code that needs to compare versions
 # numerically without parsing the string.
-VERSION_INFO: tuple[int, int, int] = (1, 0, 0)
+VERSION_INFO: tuple[int, int, int] = (0, 1, 0)
 
 # Stable name used in product metadata (EXE description, Qt
 # setApplicationName, MusicBrainz User-Agent, etc.).
