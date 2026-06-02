@@ -47,7 +47,7 @@ Name: "hebrew";  MessagesFile: "compiler:Languages\Hebrew.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "installplaywright"; Description: "Install Playwright Chromium (~300 MB) for channel scraping and sign-in wizard"; Flags: unchecked
+; Name: "installplaywright"; Description: "Install Playwright Chromium (~300 MB) for channel scraping and sign-in wizard"; Flags: unchecked
 
 [Files]
 ; Bundle the entire one-folder PyInstaller dist.
@@ -61,16 +61,16 @@ Source: "..\README.md";              DestDir: "{app}"; Flags: ignoreversion
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
 Name: "{group}\{#AppName} (CLI)"; Filename: "{app}\{#AppCliExeName}"
-Name: "{group}\Install Playwright"; Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\install_playwright.ps1"""
+; Name: "{group}\Install Playwright"; Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\install_playwright.ps1"""
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
-; Optional: install Playwright at the end of setup if the user ticked it.
-Filename: "powershell.exe"; \
-    Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\install_playwright.ps1"""; \
-    StatusMsg: "Installing Playwright Chromium..."; \
-    Tasks: installplaywright; Flags: runhidden
+; ; Optional: install Playwright at the end of setup if the user ticked it.
+; Filename: "powershell.exe"; \
+;     Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\install_playwright.ps1"""; \
+;     StatusMsg: "Installing Playwright Chromium..."; \
+;     Tasks: installplaywright; Flags: runhidden
 ; Launch the app at the end of setup if the user wants to.
 Filename: "{app}\{#AppExeName}"; \
     Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; \

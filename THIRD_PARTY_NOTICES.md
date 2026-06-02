@@ -74,8 +74,8 @@ by license.
 | python-dotenv | BSD-3-Clause | yes | |
 | certifi | MPL 2.0 | yes | File-level copyleft; satisfied by shipping unmodified. |
 | keyboard | MIT | yes | Optional — graceful fallback when missing. |
-| playwright | Apache 2.0 | yes | Python bindings only. Browser binaries are NOT bundled (~300 MB). User installs them via `scripts/install_playwright.ps1`. |
-| Playwright Chromium browsers | BSD-3-Clause (Chromium) + several others | no (installed separately) | When the user runs `playwright install chromium`, the browser is downloaded from Microsoft's CDN under Chromium's license. YTSpot does not redistribute it. |
+| playwright | Apache 2.0 | yes | Python bindings only. |
+| Playwright Chromium browsers | BSD-3-Clause (Chromium) + several others | yes | Chromium, FFmpeg, and WinLDD browser binaries are bundled directly with the application (~300-400 MB) for full offline capabilities. |
 
 ---
 

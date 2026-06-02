@@ -10,8 +10,8 @@ That script regenerates ``packaging/version_info.txt`` from
 ``version.py`` before invoking PyInstaller. Staged FFmpeg binaries in
 ``packaging/ffmpeg/`` are bundled when present.
 
-This spec deliberately does not bundle Playwright browsers (~300 MB).
-The user installs them once via ``scripts/install_playwright.ps1``.
+This spec bundles Playwright Chromium browser binaries (~400 MB) for full
+offline execution.
 """
 
 from __future__ import annotations
@@ -61,6 +61,17 @@ datas += collect_data_files('qfluentwidgets')
 datas += collect_data_files('ytmusicapi', includes=['locales/**/*'])
 # yt_dlp ships extractor data; collect_data_files handles it.
 datas += collect_data_files('yt_dlp')
+
+# Bundled Playwright Chromium browser & companion binaries (~300-400 MB).
+# LOCALAPPDATA is set on every Windows session including GitHub Actions runners.
+_local_app_data = os.environ.get('LOCALAPPDATA') or os.path.join(
+    os.environ.get('USERPROFILE', ''), 'AppData', 'Local'
+)
+ms_playwright_dir = Path(_local_app_data) / 'ms-playwright'
+if ms_playwright_dir.exists():
+    for p_dir in ms_playwright_dir.iterdir():
+        if p_dir.is_dir() and p_dir.name != '.links' and 'chromium_headless_shell' not in p_dir.name:
+            datas.append((str(p_dir), f"ms-playwright/{p_dir.name}"))
 # Distribution metadata for packages that read their own version via
 # importlib.metadata. Avoids ``PackageNotFoundError`` at runtime.
 for pkg in ('yt-dlp', 'mutagen', 'ytmusicapi', 'PySide6'):

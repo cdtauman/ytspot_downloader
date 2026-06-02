@@ -35,6 +35,12 @@ from __future__ import annotations
 import argparse
 import sys
 import os
+from pathlib import Path
+
+# If running as a bundled PyInstaller app, override PLAYWRIGHT_BROWSERS_PATH to use the bundled browser
+if getattr(sys, 'frozen', False):
+    os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(Path(sys._MEIPASS) / 'ms-playwright')
+
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8")

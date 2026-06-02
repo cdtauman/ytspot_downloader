@@ -4,12 +4,15 @@ name: Build Windows release
 #   * Manual dispatch from the Actions tab.
 #   * Tags matching v*.*.* (e.g. v1.0.0).
 # It does NOT run on every push or PR, so dev cycles are not blocked
-# by ~10-minute PyInstaller builds.
+# by long PyInstaller + Playwright builds.
 #
-# This workflow does NOT publish a GitHub Release automatically.
-# It uploads the EXE + ZIP + SHA-256 file as a workflow artifact;
-# the maintainer downloads and attaches them to a release manually,
-# after the manual smoke checklist in RELEASE_CHECKLIST.md passes.
+# On a tag push this workflow:
+#   1. Installs all Python deps + Playwright Chromium (bundled into EXE)
+#   2. Runs tests
+#   3. Builds a one-folder EXE with PyInstaller (Playwright included)
+#   4. Builds a Windows installer with Inno Setup
+#   5. Creates a portable ZIP + SHA-256 checksums
+#   6. Publishes a GitHub Release with the installer, ZIP and checksums attached.
 
 on:
   workflow_dispatch:
@@ -23,13 +26,13 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     name: PyInstaller + Inno Setup on windows-latest
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +48,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip pyinstaller
           python -m pip install -r requirements.txt
+
+      - name: Install Playwright & download Chromium
+        shell: pwsh
+        run: |
+          python -m pip install playwright
+          python -m playwright install chromium --with-deps
 
       - name: Read app version
         id: ver
@@ -69,7 +78,6 @@ jobs:
       - name: Build EXE with PyInstaller
         shell: pwsh
         run: |
-          # Skip the test re-run inside the build script; we already ran tests.
           python -m PyInstaller --noconfirm --clean packaging\ytspot.spec
 
       - name: Verify EXE smoke
@@ -79,13 +87,21 @@ jobs:
           & dist\ytspot\ytspot-cli.exe --version
           if ($LASTEXITCODE -ne 0) { throw "ytspot-cli.exe --version failed" }
           # Doctor exits 1 if FFmpeg / network checks fail on the runner —
-          # that is expected (no bundled FFmpeg in CI by default and
-          # the github runner has full network). We only require the EXE
-          # to start, not for every check to be green.
+          # that is expected (no bundled FFmpeg in CI by default).
+          # We only require the EXE to start, not for every check to be green.
           & dist\ytspot\ytspot-cli.exe --doctor
           # Accept exit 0 (everything green) or 1 (some warnings). Anything
           # else means the EXE crashed.
           if ($LASTEXITCODE -gt 1) { throw "ytspot-cli.exe --doctor crashed (exit $LASTEXITCODE)" }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' packaging\ytspot.iss
 
       - name: Create portable ZIP + checksums
         shell: pwsh
@@ -95,7 +111,7 @@ jobs:
           $zipPath = "dist\$zipName"
           Compress-Archive -Path "dist\ytspot\*" -DestinationPath $zipPath -Force
 
-          # SHA-256 for every dist/ytspot-* artefact (ZIP + future installer).
+          # SHA-256 for every dist/ytspot-* artefact (ZIP + installer).
           $hashes = @()
           foreach ($f in Get-ChildItem -Path dist -File -Filter 'ytspot-*') {
             $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
@@ -112,17 +128,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Upload portable ZIP + checksums
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ytspot-${{ steps.ver.outputs.version }}-windows-release
           path: |
             dist/ytspot-*-windows-portable.zip
+            dist/ytspot-*-windows-setup.exe
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 60
 
-      # Inno Setup is NOT installed by default on github runners. We
-      # leave the .iss file in the repo; the maintainer runs `iscc`
-      # locally on the downloaded portable artifact. Documented in
-      # RELEASE_CHECKLIST.md.
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/ytspot-*-windows-setup.exe
+            dist/ytspot-*-windows-portable.zip
+            dist/SHA256SUMS.txt
+          generate_release_notes: true
