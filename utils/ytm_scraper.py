@@ -1,9 +1,14 @@
 import requests
 import re
+import os
 from typing import List, Dict, Optional
+from dotenv import load_dotenv
 from utils.yt_dlp_opts import CHROME_USER_AGENT
 
-_API_URL = "https://music.youtube.com/youtubei/v1/browse?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30&prettyPrint=false"
+load_dotenv()
+
+_YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30")
+_API_URL = f"https://music.youtube.com/youtubei/v1/browse?key={_YOUTUBE_API_KEY}&prettyPrint=false"
 _CLIENT_CONTEXT = {
     "client": {
         "hl": "iw", "gl": "IL", "clientName": "WEB_REMIX",
