@@ -70,6 +70,17 @@ jobs:
         run: |
           python -m pytest tests/ -q --tb=line
 
+      - name: Download FFmpeg (LGPL) for bundling
+        shell: pwsh
+        run: |
+          $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip"
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg-lgpl.zip
+          Expand-Archive -Path ffmpeg-lgpl.zip -DestinationPath ffmpeg-tmp
+          New-Item -ItemType Directory -Force -Path packaging\ffmpeg | Out-Null
+          Get-ChildItem -Path ffmpeg-tmp -Recurse -Filter "ffmpeg.exe"  | Select-Object -First 1 | Copy-Item -Destination packaging\ffmpeg\ffmpeg.exe
+          Get-ChildItem -Path ffmpeg-tmp -Recurse -Filter "ffprobe.exe" | Select-Object -First 1 | Copy-Item -Destination packaging\ffmpeg\ffprobe.exe
+          Remove-Item -Recurse -Force ffmpeg-tmp, ffmpeg-lgpl.zip
+
       - name: Regenerate version_info.txt from version.py
         shell: pwsh
         run: |

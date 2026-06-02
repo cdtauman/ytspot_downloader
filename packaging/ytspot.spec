@@ -70,7 +70,7 @@ _local_app_data = os.environ.get('LOCALAPPDATA') or os.path.join(
 ms_playwright_dir = Path(_local_app_data) / 'ms-playwright'
 if ms_playwright_dir.exists():
     for p_dir in ms_playwright_dir.iterdir():
-        if p_dir.is_dir() and p_dir.name != '.links' and 'chromium_headless_shell' not in p_dir.name:
+        if p_dir.is_dir() and p_dir.name != '.links':
             datas.append((str(p_dir), f"ms-playwright/{p_dir.name}"))
 # Distribution metadata for packages that read their own version via
 # importlib.metadata. Avoids ``PackageNotFoundError`` at runtime.
