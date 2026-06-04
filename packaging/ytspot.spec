@@ -79,11 +79,14 @@ datas += collect_data_files('yt_dlp')
 # Windows: Chromium on Windows is a flat folder of DLLs/EXEs that
 # PyInstaller can handle without issues.
 #
-# macOS: Instead of bundling the nested .app (which PyInstaller cannot
-# re-codesign), we extract the chrome-mac directory and embed it by version
-# tag. Playwright will find it at runtime via PLAYWRIGHT_BROWSERS_PATH.
-# Main binary (ytspot, ytspot-cli) are signed ad-hoc; Chromium binaries
-# inside the bundle inherit the parent signature.
+# macOS: Chromium is NOT added here. PyInstaller 6.x scans every file in
+# datas for executable binaries and tries to codesign them. The nested
+# Google Chrome for Testing.app/Contents/Frameworks structure cannot be
+# re-codesigned with ad-hoc identity, causing a build failure.
+# Solution: copy ms-playwright into the .app manually AFTER PyInstaller
+# finishes (see the CI workflow step "Copy Chromium into bundle").
+# main.py / cli.py set PLAYWRIGHT_BROWSERS_PATH = _MEIPASS/ms-playwright
+# at startup so Playwright finds the browsers there.
 if IS_WIN:
     _local_app_data = os.environ.get('LOCALAPPDATA') or os.path.join(
         os.environ.get('USERPROFILE', ''), 'AppData', 'Local'
@@ -93,22 +96,6 @@ if IS_WIN:
         for p_dir in ms_playwright_dir.iterdir():
             if p_dir.is_dir() and p_dir.name != '.links':
                 datas.append((str(p_dir), f"ms-playwright/{p_dir.name}"))
-elif IS_MAC:
-    # On macOS, extract Chromium from ms-playwright and add the full
-    # chrome-mac directory (preserving Chromium.app/Contents/...).
-    # PyInstaller doesn't codesign datas, so we avoid re-signing issues.
-    ms_playwright_dir = Path.home() / 'Library' / 'Caches' / 'ms-playwright'
-    if ms_playwright_dir.exists():
-        for p_dir in ms_playwright_dir.iterdir():
-            if p_dir.is_dir() and p_dir.name.startswith('chromium-'):
-                # arm64: chrome-mac-arm64; x86_64: chrome-mac
-                for candidate in ('chrome-mac-arm64', 'chrome-mac'):
-                    chrome_mac_dir = p_dir / candidate
-                    if chrome_mac_dir.exists():
-                        version_tag = p_dir.name
-                        datas.append((str(chrome_mac_dir), f'{version_tag}/{candidate}'))
-                        break
-                break
 # Distribution metadata for packages that read their own version via
 # importlib.metadata. Avoids ``PackageNotFoundError`` at runtime.
 for pkg in ('yt-dlp', 'mutagen', 'ytmusicapi', 'PySide6'):

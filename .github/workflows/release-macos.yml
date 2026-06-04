@@ -91,6 +91,24 @@ jobs:
           python -m PyInstaller --noconfirm --clean packaging/ytspot.spec
           test -d dist/YTSpot.app || (echo "YTSpot.app missing" && exit 1)
 
+      - name: Copy Chromium into bundle (post-PyInstaller)
+        run: |
+          # PyInstaller cannot re-codesign Chromium's nested .app framework.
+          # So we copy ms-playwright into Contents/MacOS AFTER PyInstaller
+          # finishes — it never touches it, and we skip signing it below.
+          # main.py sets PLAYWRIGHT_BROWSERS_PATH = _MEIPASS/ms-playwright at runtime.
+          MEIPASS="dist/YTSpot.app/Contents/MacOS"
+          CACHE=~/Library/Caches/ms-playwright
+          mkdir -p "$MEIPASS/ms-playwright"
+          for dir in "$CACHE"/chromium-* "$CACHE"/chromium_headless_shell-* "$CACHE"/ffmpeg-*; do
+            [ -d "$dir" ] || continue
+            name=$(basename "$dir")
+            echo "Copying $name …"
+            cp -R "$dir" "$MEIPASS/ms-playwright/$name"
+          done
+          echo "ms-playwright contents:"
+          ls "$MEIPASS/ms-playwright/"
+
       - name: Ad-hoc codesign the bundle
         run: |
           # Sign only the main YTSpot binaries (ytspot, ytspot-cli).
