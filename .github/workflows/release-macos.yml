@@ -83,6 +83,8 @@ jobs:
           file packaging/ffmpeg/ffmpeg packaging/ffmpeg/ffprobe
 
       - name: Build .app with PyInstaller
+        env:
+          PYINSTALLER_SKIP_CODESIGN: "1"
         run: |
           python -m PyInstaller --noconfirm --clean packaging/ytspot.spec
           test -d dist/YTSpot.app || (echo "YTSpot.app missing" && exit 1)
