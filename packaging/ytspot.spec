@@ -76,17 +76,14 @@ datas += collect_data_files('ytmusicapi', includes=['locales/**/*'])
 datas += collect_data_files('yt_dlp')
 
 # Bundled Playwright Chromium browser (~300-400 MB).
-# Windows ONLY: Chromium on Windows is a flat folder of DLLs/EXEs that
-# PyInstaller can collect and codesign without issues.
+# Windows: Chromium on Windows is a flat folder of DLLs/EXEs that
+# PyInstaller can handle without issues.
 #
-# macOS: Chromium is a full nested .app bundle (Google Chrome for Testing.app)
-# inside our bundle. PyInstaller 6.x tries to re-codesign every collected
-# binary, which fails on nested .app bundles with
-# "bundle format unrecognized, invalid, or unsuitable".
-# Solution: don't embed Chromium in the macOS bundle. Instead, main.py/cli.py
-# on macOS will NOT override PLAYWRIGHT_BROWSERS_PATH, so Playwright falls back
-# to the user's ~/Library/Caches/ms-playwright. The macOS workflow installs
-# Chromium there with `playwright install chromium` so it's always present.
+# macOS: Instead of bundling the nested .app (which PyInstaller cannot
+# re-codesign), we extract the chrome-mac directory and embed it by version
+# tag. Playwright will find it at runtime via PLAYWRIGHT_BROWSERS_PATH.
+# Main binary (ytspot, ytspot-cli) are signed ad-hoc; Chromium binaries
+# inside the bundle inherit the parent signature.
 if IS_WIN:
     _local_app_data = os.environ.get('LOCALAPPDATA') or os.path.join(
         os.environ.get('USERPROFILE', ''), 'AppData', 'Local'
@@ -96,6 +93,20 @@ if IS_WIN:
         for p_dir in ms_playwright_dir.iterdir():
             if p_dir.is_dir() and p_dir.name != '.links':
                 datas.append((str(p_dir), f"ms-playwright/{p_dir.name}"))
+elif IS_MAC:
+    # On macOS, extract Chromium from ms-playwright and add the full
+    # chrome-mac directory (preserving Chromium.app/Contents/...).
+    # PyInstaller doesn't codesign datas, so we avoid re-signing issues.
+    ms_playwright_dir = Path.home() / 'Library' / 'Caches' / 'ms-playwright'
+    if ms_playwright_dir.exists():
+        for p_dir in ms_playwright_dir.iterdir():
+            if p_dir.is_dir() and p_dir.name.startswith('chromium-'):
+                chrome_mac_dir = p_dir / 'chrome-mac'
+                if chrome_mac_dir.exists():
+                    # Preserve version tag so Playwright can find it
+                    version_tag = p_dir.name
+                    datas.append((str(chrome_mac_dir), f'{version_tag}/chrome-mac'))
+                break
 # Distribution metadata for packages that read their own version via
 # importlib.metadata. Avoids ``PackageNotFoundError`` at runtime.
 for pkg in ('yt-dlp', 'mutagen', 'ytmusicapi', 'PySide6'):

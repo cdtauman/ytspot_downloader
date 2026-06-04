@@ -93,8 +93,13 @@ jobs:
 
       - name: Ad-hoc codesign the bundle
         run: |
-          codesign --force --deep --sign - dist/YTSpot.app
-          codesign --verify --deep --strict --verbose=2 dist/YTSpot.app || true
+          # Sign only the main YTSpot binaries (ytspot, ytspot-cli).
+          # Chromium binaries inside the bundle inherit the parent signature.
+          # Do not sign Chromium frameworks recursively, as they have their own
+          # signatures incompatible with ad-hoc signing.
+          codesign --force --sign - dist/YTSpot.app/Contents/MacOS/ytspot
+          codesign --force --sign - dist/YTSpot.app/Contents/MacOS/ytspot-cli
+          codesign --verify --verbose=2 dist/YTSpot.app || true
 
       # ── OPTIONAL: Developer ID signing + notarization ──────────────────────
       # Enable by adding these repo secrets and removing the `if: false`:
