@@ -75,26 +75,27 @@ datas += collect_data_files('ytmusicapi', includes=['locales/**/*'])
 # yt_dlp ships extractor data; collect_data_files handles it.
 datas += collect_data_files('yt_dlp')
 
-# Bundled Playwright Chromium browser & companion binaries (~300-400 MB).
-# Browser cache location is platform-specific:
-#   Windows : %LOCALAPPDATA%\ms-playwright
-#   macOS   : ~/Library/Caches/ms-playwright
-#   Linux   : ~/.cache/ms-playwright
-# At runtime main.py/cli.py point PLAYWRIGHT_BROWSERS_PATH at
-# sys._MEIPASS/ms-playwright, so the bundled copy is always used.
+# Bundled Playwright Chromium browser (~300-400 MB).
+# Windows ONLY: Chromium on Windows is a flat folder of DLLs/EXEs that
+# PyInstaller can collect and codesign without issues.
+#
+# macOS: Chromium is a full nested .app bundle (Google Chrome for Testing.app)
+# inside our bundle. PyInstaller 6.x tries to re-codesign every collected
+# binary, which fails on nested .app bundles with
+# "bundle format unrecognized, invalid, or unsuitable".
+# Solution: don't embed Chromium in the macOS bundle. Instead, main.py/cli.py
+# on macOS will NOT override PLAYWRIGHT_BROWSERS_PATH, so Playwright falls back
+# to the user's ~/Library/Caches/ms-playwright. The macOS workflow installs
+# Chromium there with `playwright install chromium` so it's always present.
 if IS_WIN:
     _local_app_data = os.environ.get('LOCALAPPDATA') or os.path.join(
         os.environ.get('USERPROFILE', ''), 'AppData', 'Local'
     )
     ms_playwright_dir = Path(_local_app_data) / 'ms-playwright'
-elif IS_MAC:
-    ms_playwright_dir = Path.home() / 'Library' / 'Caches' / 'ms-playwright'
-else:
-    ms_playwright_dir = Path.home() / '.cache' / 'ms-playwright'
-if ms_playwright_dir.exists():
-    for p_dir in ms_playwright_dir.iterdir():
-        if p_dir.is_dir() and p_dir.name != '.links':
-            datas.append((str(p_dir), f"ms-playwright/{p_dir.name}"))
+    if ms_playwright_dir.exists():
+        for p_dir in ms_playwright_dir.iterdir():
+            if p_dir.is_dir() and p_dir.name != '.links':
+                datas.append((str(p_dir), f"ms-playwright/{p_dir.name}"))
 # Distribution metadata for packages that read their own version via
 # importlib.metadata. Avoids ``PackageNotFoundError`` at runtime.
 for pkg in ('yt-dlp', 'mutagen', 'ytmusicapi', 'PySide6'):

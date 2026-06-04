@@ -18,8 +18,10 @@ import sys
 import os
 from pathlib import Path
 
-# If running as a bundled PyInstaller app, override PLAYWRIGHT_BROWSERS_PATH to use the bundled browser
-if getattr(sys, 'frozen', False):
+# On Windows, the Playwright browser is bundled inside the EXE folder.
+# On macOS the nested Chromium .app cannot be re-signed by PyInstaller, so
+# we don't bundle it — Playwright uses ~/Library/Caches/ms-playwright instead.
+if getattr(sys, 'frozen', False) and sys.platform == 'win32':
     os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(Path(sys._MEIPASS) / 'ms-playwright')
 
 if sys.platform == "win32":

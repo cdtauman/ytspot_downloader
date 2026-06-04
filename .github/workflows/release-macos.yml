@@ -52,9 +52,13 @@ jobs:
           python -m pip install --upgrade pip pyinstaller pytest pytest-mock
           python -m pip install -r requirements.txt
 
-      - name: Install Playwright & download Chromium
+      - name: Install Playwright Python package + download Chromium to user cache
         run: |
           python -m pip install playwright
+          # Download Chromium to ~/Library/Caches/ms-playwright (the default macOS
+          # location). We do NOT bundle it inside the PyInstaller app because
+          # Chromium on macOS is a nested .app bundle that PyInstaller cannot
+          # re-codesign. At runtime the frozen app uses this cache location.
           python -m playwright install chromium
 
       - name: Read app version
@@ -83,8 +87,6 @@ jobs:
           file packaging/ffmpeg/ffmpeg packaging/ffmpeg/ffprobe
 
       - name: Build .app with PyInstaller
-        env:
-          PYINSTALLER_SKIP_CODESIGN: "1"
         run: |
           python -m PyInstaller --noconfirm --clean packaging/ytspot.spec
           test -d dist/YTSpot.app || (echo "YTSpot.app missing" && exit 1)
