@@ -25,7 +25,10 @@ if getattr(sys, 'frozen', False):
     if sys.platform == 'win32':
         os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(Path(sys._MEIPASS) / 'ms-playwright')
     elif sys.platform == 'darwin':
-        os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(Path(sys._MEIPASS))
+        # Chromium lives in Contents/Resources/ms-playwright (not Contents/MacOS/)
+        # so codesign does not scan it when sealing our main executables.
+        _resources = Path(sys._MEIPASS).parent / 'Resources'
+        os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(_resources / 'ms-playwright')
 
 if sys.platform == "win32":
     try:

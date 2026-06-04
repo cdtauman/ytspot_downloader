@@ -93,33 +93,27 @@ jobs:
 
       - name: Copy Chromium into bundle (post-PyInstaller)
         run: |
-          # PyInstaller cannot re-codesign Chromium's nested .app framework.
-          # So we copy ms-playwright into Contents/MacOS AFTER PyInstaller
-          # finishes — it never touches it, and we skip signing it below.
-          # main.py sets PLAYWRIGHT_BROWSERS_PATH = _MEIPASS/ms-playwright at runtime.
-          MEIPASS="dist/YTSpot.app/Contents/MacOS"
+          # Place ms-playwright in Contents/Resources/ (not Contents/MacOS/).
+          # codesign seals Contents/MacOS/ when signing the main executable;
+          # files in Contents/Resources/ are treated as opaque resources and
+          # codesign does not attempt to sign binaries there.
+          # main.py reads PLAYWRIGHT_BROWSERS_PATH = Contents/Resources/ms-playwright.
+          RESOURCES="dist/YTSpot.app/Contents/Resources"
           CACHE=~/Library/Caches/ms-playwright
-          mkdir -p "$MEIPASS/ms-playwright"
+          mkdir -p "$RESOURCES/ms-playwright"
           for dir in "$CACHE"/chromium-* "$CACHE"/chromium_headless_shell-* "$CACHE"/ffmpeg-*; do
             [ -d "$dir" ] || continue
             name=$(basename "$dir")
             echo "Copying $name …"
-            cp -R "$dir" "$MEIPASS/ms-playwright/$name"
+            cp -R "$dir" "$RESOURCES/ms-playwright/$name"
           done
           echo "ms-playwright contents:"
-          ls "$MEIPASS/ms-playwright/"
+          ls "$RESOURCES/ms-playwright/"
 
       - name: Ad-hoc codesign the bundle
         run: |
-          # 1. Ad-hoc sign every Mach-O binary inside ms-playwright first.
-          #    codesign refuses to sign our ytspot binary if it finds unsigned
-          #    Mach-O files elsewhere in the same .app bundle.
-          find dist/YTSpot.app/Contents/MacOS/ms-playwright -type f | while read -r f; do
-            if file "$f" | grep -q "Mach-O"; then
-              codesign --force --sign - "$f" 2>/dev/null || true
-            fi
-          done
-          # 2. Sign our own binaries.
+          # Sign only our own executables. Chromium lives in Contents/Resources/
+          # so codesign does not scan it when sealing Contents/MacOS/.
           codesign --force --sign - dist/YTSpot.app/Contents/MacOS/ytspot
           codesign --force --sign - dist/YTSpot.app/Contents/MacOS/ytspot-cli
           codesign --verify --verbose=2 dist/YTSpot.app || true
