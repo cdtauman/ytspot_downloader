@@ -234,6 +234,10 @@ cli_exe = EXE(
 # ── COLLECT (one-folder dist with both executables) ────────────────────────
 # Windows  → dist/ytspot/   (ytspot.exe + ytspot-cli.exe)
 # macOS    → dist/ytspot/   then wrapped into dist/YTSpot.app by BUNDLE
+#
+# Note: On macOS, we use codesign_identity=None to skip code-signing binaries
+# (which would fail on Playwright Chromium bundles that are already complex).
+# We'll ad-hoc sign the final .app bundle after PyInstaller finishes instead.
 
 coll = COLLECT(
     exe,
@@ -246,6 +250,7 @@ coll = COLLECT(
     upx=False,
     upx_exclude=[],
     name='ytspot',
+    codesign_identity=None if IS_MAC else None,  # Skip signing Playwright et al.
 )
 
 # ── BUNDLE (macOS .app) ────────────────────────────────────────────────────
