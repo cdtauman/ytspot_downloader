@@ -99,14 +99,24 @@ elif IS_MAC:
     # PyInstaller doesn't codesign datas, so we avoid re-signing issues.
     ms_playwright_dir = Path.home() / 'Library' / 'Caches' / 'ms-playwright'
     if ms_playwright_dir.exists():
+        import sys as _sys
+        print(f'DEBUG: ms_playwright_dir = {ms_playwright_dir}', file=_sys.stderr)
         for p_dir in ms_playwright_dir.iterdir():
+            print(f'DEBUG: Found dir = {p_dir.name}', file=_sys.stderr)
             if p_dir.is_dir() and p_dir.name.startswith('chromium-'):
                 chrome_mac_dir = p_dir / 'chrome-mac'
+                print(f'DEBUG: chromium dir found, checking {chrome_mac_dir}', file=_sys.stderr)
                 if chrome_mac_dir.exists():
                     # Preserve version tag so Playwright can find it
                     version_tag = p_dir.name
+                    print(f'DEBUG: Adding chromium: {chrome_mac_dir} → {version_tag}/chrome-mac', file=_sys.stderr)
                     datas.append((str(chrome_mac_dir), f'{version_tag}/chrome-mac'))
+                else:
+                    print(f'DEBUG: chrome-mac dir does NOT exist at {chrome_mac_dir}', file=_sys.stderr)
                 break
+    else:
+        import sys as _sys
+        print(f'DEBUG: ms_playwright_dir does NOT exist: {ms_playwright_dir}', file=_sys.stderr)
 # Distribution metadata for packages that read their own version via
 # importlib.metadata. Avoids ``PackageNotFoundError`` at runtime.
 for pkg in ('yt-dlp', 'mutagen', 'ytmusicapi', 'PySide6'):
