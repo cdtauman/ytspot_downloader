@@ -111,10 +111,15 @@ jobs:
 
       - name: Ad-hoc codesign the bundle
         run: |
-          # Sign only the main YTSpot binaries (ytspot, ytspot-cli).
-          # Chromium binaries inside the bundle inherit the parent signature.
-          # Do not sign Chromium frameworks recursively, as they have their own
-          # signatures incompatible with ad-hoc signing.
+          # 1. Ad-hoc sign every Mach-O binary inside ms-playwright first.
+          #    codesign refuses to sign our ytspot binary if it finds unsigned
+          #    Mach-O files elsewhere in the same .app bundle.
+          find dist/YTSpot.app/Contents/MacOS/ms-playwright -type f | while read -r f; do
+            if file "$f" | grep -q "Mach-O"; then
+              codesign --force --sign - "$f" 2>/dev/null || true
+            fi
+          done
+          # 2. Sign our own binaries.
           codesign --force --sign - dist/YTSpot.app/Contents/MacOS/ytspot
           codesign --force --sign - dist/YTSpot.app/Contents/MacOS/ytspot-cli
           codesign --verify --verbose=2 dist/YTSpot.app || true
