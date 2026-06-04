@@ -149,11 +149,11 @@ _DEFAULTS: dict[str, Any] = {
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _config_path() -> Path:
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", Path.home()))
-    else:
-        base = Path.home()
-    return base / ".ytspot" / "config.json"
+    # Single source of truth for the app-data dir lives in utils.paths so
+    # the config file, log dir, and history DB never drift across platforms
+    # (Windows %APPDATA%, macOS ~/Library/Application Support, Linux XDG).
+    from utils.paths import get_app_data_dir
+    return get_app_data_dir() / "config.json"
 
 
 def _default_db_path() -> str:

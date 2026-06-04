@@ -41,13 +41,17 @@ Built with Python and PySide6 (Qt6), using **yt-dlp** as its download engine, a 
    pip install -r requirements.txt
    ```
 
-2. **Install browser binaries (Windows):**
-   Run the following script to install the Chromium browser required for Spotify scraping:
+2. **Install browser binaries (required for Spotify / channel scraping):**
+
+   **Windows:**
    ```bash
    install_playwright.bat
    ```
 
-*(For Linux/Mac, run `python3 -m playwright install chromium` manually)*
+   **macOS / Linux:**
+   ```bash
+   python3 -m playwright install chromium
+   ```
 
 ### Install FFmpeg
 
@@ -57,6 +61,43 @@ choco install ffmpeg
 ```
 
 **Windows (manual):** Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to `PATH`.
+
+**macOS (via Homebrew):**
+```bash
+brew install ffmpeg
+```
+*(The packaged macOS `.app` already bundles FFmpeg, so this is only needed when running from source.)*
+
+---
+
+## Building Distributable Apps
+
+The app ships as a self-contained bundle for each OS, with FFmpeg and the
+Playwright Chromium browser included — end users need **no Python install**.
+
+### Windows (`dist/ytspot/` + installer)
+```powershell
+pwsh scripts/build_windows.ps1            # portable folder + ZIP
+iscc packaging/ytspot.iss                 # optional Inno Setup installer
+```
+
+### macOS (`dist/YTSpot.app` + DMG)
+Must be run **on macOS** (Apple Silicon / arm64):
+```bash
+chmod +x scripts/build_macos.sh
+./scripts/build_macos.sh                  # → dist/YTSpot.app + dist/ytspot-<ver>-macos-arm64.dmg
+```
+Both builds are also produced automatically by GitHub Actions on a `vX.Y.Z`
+tag (`.github/workflows/release-windows.yml` and `release-macos.yml`).
+
+> **macOS Gatekeeper (unsigned build):** This project is not notarized
+> (no paid Apple Developer account), so the first launch is blocked by
+> Gatekeeper. To open it:
+> 1. **Right-click** (or Control-click) `YTSpot.app` → **Open**.
+> 2. Click **Open** again in the dialog.
+> macOS remembers the choice; subsequent launches work normally. If the
+> app was downloaded via a browser you can also clear the quarantine flag:
+> `xattr -dr com.apple.quarantine /Applications/YTSpot.app`.
 
 ---
 
@@ -284,7 +325,9 @@ To authenticate downloads of age-restricted or members-only content:
 
 1. Go to **Settings → Authentication → Open Login Wizard**.
 2. A browser window opens. Log into YouTube normally.
-3. Close the browser. Cookies are saved to `%APPDATA%\.ytspot\app_cookies.txt`.
+3. Close the browser. Cookies are saved into the app-data directory as
+   `app_cookies.txt` (`%APPDATA%\.ytspot\` on Windows,
+   `~/Library/Application Support/YTSpot/` on macOS).
 4. The app picks up cookies automatically on the next download — no restart required.
 
 > **Note:** Cookies expire after browser session rotation. If downloads fail with "Sign in" errors, re-run the wizard.
@@ -318,7 +361,8 @@ Terminal warnings like `Signature solving failed` and `n challenge solving faile
 
 All settings are stored in:
 - **Windows**: `%APPDATA%\.ytspot\config.json`
-- **macOS/Linux**: `~/.ytspot/config.json`
+- **macOS**: `~/Library/Application Support/YTSpot/config.json`
+- **Linux**: `$XDG_CONFIG_HOME/ytspot/config.json` (falls back to `~/.ytspot/config.json`)
 
 ### General Settings
 
@@ -381,7 +425,9 @@ Default SponsorBlock categories: `music_offtopic`, `sponsor`, `intro`, `outro`, 
 
 ## Download History
 
-Every completed download is recorded in `%APPDATA%\.ytspot\downloads.db` (SQLite).
+Every completed download is recorded in the SQLite database inside the app-data
+directory (`%APPDATA%\.ytspot\downloads.db` on Windows,
+`~/Library/Application Support/YTSpot/downloads.db` on macOS).
 
 **History Panel features:**
 - View the last 500 downloads (newest first)
@@ -494,7 +540,7 @@ Utils (yt_dlp_opts.py, spotify_resolver.py, logger.py, …)
 | `utils/logger.py` | `SilentLogger` class for yt-dlp (suppresses noise) |
 | `utils/cookie_validator.py` | Detect expired or malformed cookies.txt files |
 | `utils/artwork_cleaner.py` | Normalise and upgrade thumbnail/cover URLs per platform |
-| `utils/paths.py` | App data directory helpers (`~/.ytspot/`) |
+| `utils/paths.py` | Cross-platform app-data dir + bundled-FFmpeg discovery (single source of truth) |
 | `utils/time_format.py` | `seconds_to_str()` — convert raw seconds to `"M:SS"` / `"H:MM:SS"` |
 | `utils/network_probe.py` | Lightweight connectivity check |
 | `utils/impersonate.py` | curl-cffi impersonation target detection |

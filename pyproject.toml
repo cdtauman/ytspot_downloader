@@ -30,7 +30,10 @@ dependencies = [
     "Pillow>=10.3.0",
     "python-dotenv>=1.0.1",
     "certifi>=2025.1.1",
-    "keyboard>=0.13.5",
+    # Global hotkeys. Windows-only: on macOS/Linux the `keyboard` library
+    # needs root privileges, so we omit it there and the app falls back to
+    # "hotkeys disabled" gracefully (see ui/app_window._register_hotkeys).
+    "keyboard>=0.13.5; sys_platform == 'win32'",
     "playwright>=1.42.0",
 ]
 

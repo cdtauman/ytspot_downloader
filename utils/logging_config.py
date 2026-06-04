@@ -81,20 +81,20 @@ def setup_logging(
         loggers (yt-dlp, urllib3, etc.) are left at their default level.
         When False the console is WARNING-only and noisy libs are muted.
     log_dir :
-        Override the log directory.  Defaults to ``~/.ytspot/logs/``.
+        Override the log directory.  Defaults to the per-platform
+        app-data ``logs/`` dir resolved by ``utils.paths.get_log_dir``.
 
     Returns
     -------
     Path
         The directory where log files are written.
     """
-    # Resolve log directory
+    # Resolve log directory. The app-data location is owned by
+    # utils.paths (single source of truth) so Windows %APPDATA%, macOS
+    # ~/Library/Application Support, and Linux XDG all resolve correctly.
     if log_dir is None:
-        if os.name == "nt":
-            base = Path(os.environ.get("APPDATA", Path.home()))
-        else:
-            base = Path.home()
-        resolved_dir = base / ".ytspot" / _LOG_DIR_NAME
+        from utils.paths import get_log_dir
+        resolved_dir = get_log_dir()
     else:
         resolved_dir = Path(log_dir)
 

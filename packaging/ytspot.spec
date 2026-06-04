@@ -1,16 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for the YTSpot Downloader Windows EXE.
+"""Cross-platform PyInstaller spec for YTSpot Downloader.
 
+Windows
+-------
 Builds a one-folder distribution at ``dist/ytspot/`` containing
-``ytspot.exe`` (GUI) plus every Qt/PySide6/qfluentwidgets resource
-needed to run on a clean Windows machine with no Python installed.
+``ytspot.exe`` (GUI) + ``ytspot-cli.exe`` plus every Qt/PySide6/
+qfluentwidgets resource needed to run on a clean Windows machine.
+Driven by ``scripts/build_windows.ps1`` (regenerates
+``packaging/version_info.txt`` first).
 
-Build by running ``scripts/build_windows.ps1`` from the repo root.
-That script regenerates ``packaging/version_info.txt`` from
-``version.py`` before invoking PyInstaller. Staged FFmpeg binaries in
-``packaging/ffmpeg/`` are bundled when present.
+macOS
+-----
+Builds ``dist/YTSpot.app`` (a windowed .app bundle) with the headless
+CLI binary alongside the GUI inside ``Contents/MacOS``. Driven by
+``scripts/build_macos.sh`` (which then wraps the .app in a DMG).
+Targets the host architecture (arm64 on Apple Silicon runners).
 
-This spec bundles Playwright Chromium browser binaries (~400 MB) for full
+Both platforms
+--------------
+Staged FFmpeg binaries in ``packaging/ffmpeg/`` are bundled when
+present, and Playwright Chromium (~300-400 MB) is bundled for fully
 offline execution.
 """
 
@@ -25,6 +34,10 @@ from PyInstaller.utils.hooks import (
     collect_submodules,
     copy_metadata,
 )
+
+# ── Platform ───────────────────────────────────────────────────────────────
+IS_WIN = sys.platform == "win32"
+IS_MAC = sys.platform == "darwin"
 
 # ── Paths ──────────────────────────────────────────────────────────────────
 HERE = Path(SPECPATH).resolve()                 # packaging/
@@ -63,11 +76,21 @@ datas += collect_data_files('ytmusicapi', includes=['locales/**/*'])
 datas += collect_data_files('yt_dlp')
 
 # Bundled Playwright Chromium browser & companion binaries (~300-400 MB).
-# LOCALAPPDATA is set on every Windows session including GitHub Actions runners.
-_local_app_data = os.environ.get('LOCALAPPDATA') or os.path.join(
-    os.environ.get('USERPROFILE', ''), 'AppData', 'Local'
-)
-ms_playwright_dir = Path(_local_app_data) / 'ms-playwright'
+# Browser cache location is platform-specific:
+#   Windows : %LOCALAPPDATA%\ms-playwright
+#   macOS   : ~/Library/Caches/ms-playwright
+#   Linux   : ~/.cache/ms-playwright
+# At runtime main.py/cli.py point PLAYWRIGHT_BROWSERS_PATH at
+# sys._MEIPASS/ms-playwright, so the bundled copy is always used.
+if IS_WIN:
+    _local_app_data = os.environ.get('LOCALAPPDATA') or os.path.join(
+        os.environ.get('USERPROFILE', ''), 'AppData', 'Local'
+    )
+    ms_playwright_dir = Path(_local_app_data) / 'ms-playwright'
+elif IS_MAC:
+    ms_playwright_dir = Path.home() / 'Library' / 'Caches' / 'ms-playwright'
+else:
+    ms_playwright_dir = Path.home() / '.cache' / 'ms-playwright'
 if ms_playwright_dir.exists():
     for p_dir in ms_playwright_dir.iterdir():
         if p_dir.is_dir() and p_dir.name != '.links':
@@ -86,26 +109,29 @@ for pkg in ('yt-dlp', 'mutagen', 'ytmusicapi', 'PySide6'):
 # Bundled FFmpeg / ffprobe (LGPL build). Stage them in
 # packaging/ffmpeg/ before invoking PyInstaller; if the folder is
 # absent we ship without them and the user gets the preflight warning
-# at startup.
+# at startup. Binary names differ by platform (no .exe on macOS).
+# utils.paths.get_bundled_ffmpeg_dir() knows every place PyInstaller
+# may drop them inside a .app bundle.
 FFMPEG_DIR = HERE / 'ffmpeg'
+_ffmpeg_names = ('ffmpeg.exe', 'ffprobe.exe') if IS_WIN else ('ffmpeg', 'ffprobe')
 binaries: list[tuple[str, str]] = []
 if FFMPEG_DIR.exists():
-    for name in ('ffmpeg.exe', 'ffprobe.exe'):
+    for name in _ffmpeg_names:
         src = FFMPEG_DIR / name
         if src.exists():
-            # Place the binaries inside the EXE folder so
-            # core.downloader can locate them next to ytspot.exe.
+            # Place the binaries inside the app folder so the runtime
+            # can locate them next to the executable.
             binaries.append((str(src), '.'))
 
 # Application icon — generated once by packaging/generate_icon.py and
-# committed.
-ICON = HERE / 'ytspot.ico'
+# committed. Windows uses .ico, macOS uses .icns.
+ICON = HERE / ('ytspot.ico' if IS_WIN else 'ytspot.icns')
 icon_path = str(ICON) if ICON.exists() else None
 
-# Generated VS_VERSIONINFO. The build script writes this file just
-# before PyInstaller runs.
+# Generated VS_VERSIONINFO (Windows-only). The build script writes this
+# file just before PyInstaller runs; it is meaningless on macOS.
 VERSION_FILE = HERE / 'version_info.txt'
-version_file = str(VERSION_FILE) if VERSION_FILE.exists() else None
+version_file = str(VERSION_FILE) if (IS_WIN and VERSION_FILE.exists()) else None
 
 # ── Excludes ───────────────────────────────────────────────────────────────
 # Pull these modules OUT of the bundle. They are dev-only or pulled in
@@ -205,7 +231,9 @@ cli_exe = EXE(
     version=version_file,
 )
 
-# ── COLLECT (one-folder dist with both EXEs) ───────────────────────────────
+# ── COLLECT (one-folder dist with both executables) ────────────────────────
+# Windows  → dist/ytspot/   (ytspot.exe + ytspot-cli.exe)
+# macOS    → dist/ytspot/   then wrapped into dist/YTSpot.app by BUNDLE
 
 coll = COLLECT(
     exe,
@@ -219,3 +247,31 @@ coll = COLLECT(
     upx_exclude=[],
     name='ytspot',
 )
+
+# ── BUNDLE (macOS .app) ────────────────────────────────────────────────────
+# Wrap the collected folder into a proper .app. The CLI binary travels
+# inside Contents/MacOS so power users can still invoke
+# ``YTSpot.app/Contents/MacOS/ytspot-cli``.
+if IS_MAC:
+    app = BUNDLE(
+        coll,
+        name='YTSpot.app',
+        icon=icon_path,
+        bundle_identifier='com.taumansoftware.ytspot',
+        version=__version__,
+        info_plist={
+            'CFBundleName': PRODUCT_NAME,
+            'CFBundleDisplayName': PRODUCT_NAME,
+            'CFBundleShortVersionString': __version__,
+            'CFBundleVersion': __version__,
+            'NSHighResolutionCapable': True,
+            # The app uses Qt's own dark/light handling, so allow the
+            # system appearance instead of forcing legacy Aqua.
+            'NSRequiresAquaSystemAppearance': False,
+            # Minimum supported macOS (Big Sur — first Apple Silicon OS).
+            'LSMinimumSystemVersion': '11.0',
+            # No special hardware/entitlement claims; this is a plain
+            # GUI download utility.
+            'LSApplicationCategoryType': 'public.app-category.utilities',
+        },
+    )

@@ -1,9 +1,14 @@
-"""Generate the YTSpot Downloader application icon.
+"""Generate the YTSpot Downloader application icons.
 
-Produces ``packaging/ytspot.ico`` containing every standard Windows
-icon size (16, 24, 32, 48, 64, 128, 256). Run once and commit the
-resulting .ico; the build script does not regenerate it on every
-release because the artwork is stable.
+Produces:
+  * ``packaging/ytspot.ico``  — Windows multi-resolution icon
+    (16, 24, 32, 48, 64, 128, 256).
+  * ``packaging/ytspot.icns`` — macOS icon set (16…1024) for the .app
+    bundle. Written via Pillow's ICNS encoder, so no macOS-only
+    ``iconutil`` is required — this can be regenerated on any OS.
+
+Run once and commit the results; the build scripts do not regenerate
+them on every release because the artwork is stable.
 
 Usage:
     python packaging/generate_icon.py
@@ -17,6 +22,12 @@ from typing import Iterable
 from PIL import Image, ImageDraw, ImageFont
 
 OUT = Path(__file__).resolve().parent / "ytspot.ico"
+OUT_ICNS = Path(__file__).resolve().parent / "ytspot.icns"
+
+# Sizes Apple's ICNS format expects. Pillow's ICNS writer derives the
+# required members from the supplied image; we render a high-res master
+# and let it downscale.
+ICNS_SIZES: tuple[int, ...] = (16, 32, 64, 128, 256, 512, 1024)
 
 # Sizes Windows Explorer and the taskbar expect in a multi-resolution
 # ICO. Match the standard PyInstaller --icon set.
@@ -87,6 +98,25 @@ def build(out_path: Path = OUT, sizes: Iterable[int] = SIZES) -> Path:
     return out_path
 
 
+def build_icns(out_path: Path = OUT_ICNS, sizes: Iterable[int] = ICNS_SIZES) -> Path:
+    """Write a macOS .icns icon set and return its path.
+
+    Pillow's ICNS encoder needs the largest member to be at least
+    1024×1024; it then downsamples to produce every required size.
+    """
+    largest = max(sizes)
+    master = _draw_one(largest)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    master.save(
+        out_path,
+        format="ICNS",
+        sizes=[(s, s) for s in sorted(set(sizes))],
+    )
+    return out_path
+
+
 if __name__ == "__main__":
     p = build()
     print(f"Wrote {p}  ({p.stat().st_size} bytes)")
+    pm = build_icns()
+    print(f"Wrote {pm}  ({pm.stat().st_size} bytes)")

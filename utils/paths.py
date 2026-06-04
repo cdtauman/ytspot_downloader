@@ -19,14 +19,24 @@ def get_app_data_dir() -> Path:
     """
     Return the platform-specific YTSpot app-data directory.
 
-    Windows : %APPDATA%\\.ytspot   (falls back to home/.ytspot)
-    Other   : ~/.ytspot
+    This is the single source of truth for the app-data location.
+    ``config.py`` and ``utils.logging_config`` delegate here so all
+    three never drift.
+
+    Windows : %APPDATA%\\.ytspot              (falls back to ~/.ytspot)
+    macOS   : ~/Library/Application Support/YTSpot
+    Linux   : $XDG_CONFIG_HOME/ytspot         (falls back to ~/.ytspot)
     """
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", Path.home()))
-    else:
-        base = Path.home()
-    return base / ".ytspot"
+        return base / ".ytspot"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "YTSpot"
+    # Linux / other POSIX: honour XDG when set, else hidden home dir.
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return Path(xdg) / "ytspot"
+    return Path.home() / ".ytspot"
 
 
 def get_app_cookies_path() -> Path:
@@ -74,6 +84,16 @@ def get_bundled_ffmpeg_dir() -> Optional[Path]:
         install / "ffmpeg",       # nested folder (alternative layout)
         install / "packaging" / "ffmpeg",  # source checkout dev layout
     ]
+    # macOS .app bundle: PyInstaller may place binaries under
+    # Contents/MacOS (== install), Contents/Frameworks, or
+    # Contents/Resources, with symlinks between them. Add all three so
+    # discovery succeeds regardless of where PyInstaller dropped them.
+    if sys.platform == "darwin" and install.name == "MacOS":
+        contents = install.parent
+        candidates += [
+            contents / "Frameworks",
+            contents / "Resources",
+        ]
     suffix = ".exe" if os.name == "nt" else ""
     for d in candidates:
         ff = d / f"ffmpeg{suffix}"

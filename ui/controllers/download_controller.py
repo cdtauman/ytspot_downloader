@@ -148,8 +148,12 @@ class DownloadController(QObject):
             self._fatal_error_triggered = False
         
         # Simple User Pre-flight Check: is Chrome locking our cookies?
+        # Chrome holds an open handle on its cookie DB while running, which
+        # makes yt-dlp's cookie extraction fail ("database is locked") on
+        # every desktop OS — so the check applies cross-platform; only the
+        # OS-level process name differs.
         if self._cfg.cookies_browser == "chrome":
-            if self._is_process_running("chrome.exe"):
+            if self._is_process_running("chrome"):
                 self.browser_lock_warning.emit("Chrome")
                 return
 
@@ -579,13 +583,49 @@ class DownloadController(QObject):
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _is_process_running(self, process_name: str) -> bool:
-        """Check if a process is running on Windows using tasklist."""
+    # Logical browser key → per-platform OS process name.
+    _BROWSER_PROCESS_NAMES = {
+        "chrome": {
+            "win32":  "chrome.exe",
+            "darwin": "Google Chrome",
+            "linux":  "chrome",
+        },
+    }
+
+    def _is_process_running(self, browser_key: str) -> bool:
+        """Return True if the named browser process is currently running.
+
+        Cross-platform: Windows uses ``tasklist``, macOS/Linux use
+        ``pgrep``. ``browser_key`` is a logical name ("chrome") mapped to
+        the correct OS process name per platform. Any failure (tool
+        missing, permission denied) is swallowed and reported as "not
+        running" so a diagnostic check can never block a download.
+        """
         import subprocess
+        import sys
+
+        names = self._BROWSER_PROCESS_NAMES.get(browser_key, {})
+        proc_name = names.get(sys.platform)
+        if proc_name is None:
+            # Fall back to the raw key on unknown platforms.
+            proc_name = names.get("linux", browser_key)
+
         try:
-            output = subprocess.check_output('tasklist /FI "IMAGENAME eq ' + process_name + '" /NH', 
-                                            shell=True, stderr=subprocess.DEVNULL).decode('utf-8', errors='ignore')
-            return process_name.lower() in output.lower()
+            if sys.platform == "win32":
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                output = subprocess.check_output(
+                    ["tasklist", "/FI", f"IMAGENAME eq {proc_name}", "/NH"],
+                    stderr=subprocess.DEVNULL,
+                    creationflags=creationflags,
+                ).decode("utf-8", errors="ignore")
+                return proc_name.lower() in output.lower()
+            # macOS / Linux: pgrep returns exit code 0 when a match exists.
+            result = subprocess.run(
+                ["pgrep", "-x", proc_name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return result.returncode == 0
         except Exception:
             return False
 

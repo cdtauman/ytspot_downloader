@@ -1,0 +1,138 @@
+name: Build macOS release
+
+# Runs only on:
+#   * Manual dispatch from the Actions tab.
+#   * Tags matching v*.*.* (e.g. v1.0.0).
+#
+# Targets Apple Silicon (arm64) via the macos-14 runner. On a tag push
+# this workflow:
+#   1. Installs all Python deps + Playwright Chromium (bundled into .app)
+#   2. Runs tests
+#   3. Stages LGPL FFmpeg (arm64) into packaging/ffmpeg/
+#   4. Builds dist/YTSpot.app with PyInstaller
+#   5. Ad-hoc codesigns the bundle (no Apple Developer ID)
+#   6. Wraps the .app in a DMG + SHA-256 checksum
+#   7. Publishes / updates the GitHub Release with the DMG attached.
+#
+# NOTE: builds are unsigned/un-notarized. To enable Developer ID signing
+# + notarization later, add the secrets referenced in the (disabled)
+# "Notarize" step and replace the ad-hoc identity.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_ffmpeg:
+        description: "Bundle LGPL FFmpeg (arm64) downloaded at build time"
+        required: false
+        default: "true"
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: PyInstaller .app on macos-14 (arm64)
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install runtime + build dependencies
+        run: |
+          python -m pip install --upgrade pip pyinstaller pytest pytest-mock
+          python -m pip install -r requirements.txt
+
+      - name: Install Playwright & download Chromium
+        run: |
+          python -m pip install playwright
+          python -m playwright install chromium
+
+      - name: Read app version
+        id: ver
+        run: |
+          v=$(python -c "from version import __version__; print(__version__)")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "App version: $v"
+
+      - name: Run unit tests (Qt offscreen)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          python -m pytest tests/ -q --tb=line
+
+      - name: Stage LGPL FFmpeg (arm64) for bundling
+        if: ${{ github.event_name == 'push' || github.event.inputs.bundle_ffmpeg == 'true' }}
+        run: |
+          mkdir -p packaging/ffmpeg
+          for tool in ffmpeg ffprobe; do
+            echo "Downloading $tool…"
+            curl -fsSL "https://evermeet.cx/ffmpeg/getrelease/$tool/zip" -o "$tool.zip"
+            unzip -oq "$tool.zip" -d packaging/ffmpeg
+            chmod +x "packaging/ffmpeg/$tool"
+          done
+          file packaging/ffmpeg/ffmpeg packaging/ffmpeg/ffprobe
+
+      - name: Build .app with PyInstaller
+        run: |
+          python -m PyInstaller --noconfirm --clean packaging/ytspot.spec
+          test -d dist/YTSpot.app || (echo "YTSpot.app missing" && exit 1)
+
+      - name: Ad-hoc codesign the bundle
+        run: |
+          codesign --force --deep --sign - dist/YTSpot.app
+          codesign --verify --deep --strict --verbose=2 dist/YTSpot.app || true
+
+      # ── OPTIONAL: Developer ID signing + notarization ──────────────────────
+      # Enable by adding these repo secrets and removing the `if: false`:
+      #   MACOS_CERT_P12_BASE64, MACOS_CERT_PASSWORD, MACOS_SIGN_IDENTITY,
+      #   AC_API_KEY_ID, AC_API_ISSUER_ID, AC_API_KEY_BASE64
+      - name: Developer ID sign + notarize (disabled)
+        if: false
+        run: |
+          echo "See README macOS section for the full notarization recipe."
+
+      - name: Verify CLI smoke
+        run: |
+          dist/YTSpot.app/Contents/MacOS/ytspot-cli --version
+
+      - name: Create DMG + checksum
+        run: |
+          v="${{ steps.ver.outputs.version }}"
+          dmg="ytspot-$v-macos-arm64.dmg"
+          staging="$(mktemp -d)"
+          cp -R dist/YTSpot.app "$staging/"
+          ln -s /Applications "$staging/Applications"
+          hdiutil create -volname "YTSpot Downloader" \
+            -srcfolder "$staging" -ov -format UDZO "dist/$dmg"
+          rm -rf "$staging"
+          ( cd dist && shasum -a 256 "$dmg" > SHA256SUMS-macos.txt )
+          cat dist/SHA256SUMS-macos.txt
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ytspot-${{ steps.ver.outputs.version }}-macos-arm64
+          path: |
+            dist/ytspot-*-macos-arm64.dmg
+            dist/SHA256SUMS-macos.txt
+          if-no-files-found: error
+          retention-days: 60
+
+      - name: Create / update GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/ytspot-*-macos-arm64.dmg
+            dist/SHA256SUMS-macos.txt
+          generate_release_notes: true

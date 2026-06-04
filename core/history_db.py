@@ -486,12 +486,14 @@ class HistoryDB:
 
     @staticmethod
     def _default_path() -> str:
-        """Return ~/.ytspot/downloads.db as the canonical default path."""
-        if __import__("os").name == "nt":
-            base = Path(__import__("os").environ.get("APPDATA", Path.home()))
-        else:
-            base = Path.home()
-        return str(base / ".ytspot" / "downloads.db")
+        """Return the canonical default DB path inside the app-data dir.
+
+        Delegates to ``utils.paths.get_app_data_dir`` so the location is
+        correct on every platform (Windows %APPDATA%, macOS
+        ~/Library/Application Support, Linux XDG).
+        """
+        from utils.paths import get_app_data_dir
+        return str(get_app_data_dir() / "downloads.db")
 
     def __repr__(self) -> str:
         return f"HistoryDB(path={self._path!r}, records={self.count()})"

@@ -27,5 +27,5 @@ ytmusicapi>=1.7.0          # Already added in Phase 1
 Pillow>=10.3.0             # Image handling for high-res thumbnails
 python-dotenv>=1.0.1       # Environment variables (.env)
 certifi>=2025.1.1          # Ensure SSL certificates are up to date
-keyboard>=0.13.5           # Global hotkeys (optional, graceful fallback)
+keyboard>=0.13.5; sys_platform == "win32"   # Global hotkeys — Windows only (needs root on macOS/Linux); app degrades gracefully
 playwright>=1.42.0         # Headless browser for scraping platform logic
